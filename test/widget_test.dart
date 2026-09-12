@@ -125,6 +125,10 @@ void main() {
       expect(find.text('VERDE'), findsOneWidget);
       expect(find.text('AMARELO'), findsOneWidget);
       expect(find.text('AZUL'), findsOneWidget);
+
+      // Verifica botões de entrada ao lado do D-Pad
+      expect(find.text('HDMI 1'), findsOneWidget);
+      expect(find.text('TV Digital'), findsOneWidget);
     });
 
     testWidgets('Alterna entre Tema Escuro e Claro pelo botão do cabeçalho', (WidgetTester tester) async {

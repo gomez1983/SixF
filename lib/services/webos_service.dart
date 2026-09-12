@@ -448,6 +448,19 @@ class WebOsService {
     sendCommand('ssap://system.launcher/close');
   }
 
+  /// Alterna a entrada da TV para uma porta específica (ex: 'HDMI_1')
+  void switchToInput(String inputId) {
+    sendCommand('ssap://tv/switchInput', {'inputId': inputId});
+    // Fallback via launcher caso a TV use o app de entrada
+    sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.hdmi1'});
+  }
+
+  /// Sintoniza/abre a TV Digital (Live TV aberta/antena)
+  void launchLiveTv() {
+    sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.livetv'});
+    sendButton('LIVE_TV');
+  }
+
   void pressOk() => sendButton('ENTER');
   void dpadUp() => sendButton('UP');
   void dpadDown() => sendButton('DOWN');

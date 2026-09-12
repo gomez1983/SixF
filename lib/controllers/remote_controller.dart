@@ -390,6 +390,16 @@ class RemoteController extends ChangeNotifier {
     _logAction('Nav Input / Source');
   }
 
+  void switchHdmi1() {
+    webOsService.switchToInput('HDMI_1');
+    _logAction('Entrada: HDMI 1');
+  }
+
+  void switchTvDigital() {
+    webOsService.launchLiveTv();
+    _logAction('Entrada: TV Digital');
+  }
+
   // --- Controles Multimídia ---
 
   void mediaPlay() {
