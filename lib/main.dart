@@ -1,0 +1,107 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+import 'controllers/remote_controller.dart';
+import 'services/tray_service.dart';
+import 'services/volume_key_service.dart';
+import 'ui/theme/app_theme.dart';
+import 'ui/views/remote_view.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    await windowManager.ensureInitialized();
+
+    const windowOptions = WindowOptions(
+      size: Size(440, 800),
+      minimumSize: Size(340, 540),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      title: 'LG Smart TV Remote',
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
+  runApp(const LGRemoteApp());
+}
+
+/// Aplicação Desktop de controle remoto para Smart TV LG.
+class LGRemoteApp extends StatefulWidget {
+  const LGRemoteApp({super.key});
+
+  @override
+  State<LGRemoteApp> createState() => _LGRemoteAppState();
+}
+
+class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener {
+  late final RemoteController _remoteController;
+
+  @override
+  void initState() {
+    super.initState();
+    _remoteController = RemoteController();
+    _remoteController.addListener(_onControllerChanged);
+    VolumeKeyService().init(_remoteController);
+    _initDesktopFeatures();
+  }
+
+  void _initDesktopFeatures() async {
+    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      windowManager.addListener(this);
+      await windowManager.setPreventClose(true);
+    }
+    await TrayService().init(_remoteController);
+  }
+
+  @override
+  void onWindowClose() async {
+    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      final isPreventClose = await windowManager.isPreventClose();
+      if (isPreventClose) {
+        await windowManager.hide();
+      }
+    }
+  }
+
+  void _onControllerChanged() {
+    TrayService().updateContextMenu();
+  }
+
+  @override
+  void dispose() {
+    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      windowManager.removeListener(this);
+    }
+    VolumeKeyService().dispose();
+    _remoteController.removeListener(_onControllerChanged);
+    _remoteController.dispose();
+    TrayService().dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: _remoteController,
+      child: Consumer<RemoteController>(
+        builder: (context, controller, _) {
+          return MaterialApp(
+            title: 'LG Smart TV Remote',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: controller.themeMode,
+            home: const RemoteView(),
+          );
+        },
+      ),
+    );
+  }
+}
