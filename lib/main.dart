@@ -40,16 +40,24 @@ class LGRemoteApp extends StatefulWidget {
   State<LGRemoteApp> createState() => _LGRemoteAppState();
 }
 
-class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener {
+class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener, WidgetsBindingObserver {
   late final RemoteController _remoteController;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _remoteController = RemoteController();
     _remoteController.addListener(_onControllerChanged);
     VolumeKeyService().init(_remoteController);
     _initDesktopFeatures();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _remoteController.autoReconnectIfNeeded();
+    }
   }
 
   void _initDesktopFeatures() async {
@@ -76,6 +84,7 @@ class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
       windowManager.removeListener(this);
     }

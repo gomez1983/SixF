@@ -120,15 +120,18 @@ void main() {
       expect(find.text('MUTE'), findsOneWidget);
       expect(find.text('OK'), findsOneWidget);
 
-      // Verifica botões coloridos
+      // Verifica botões de entrada ao lado do D-Pad (Aba 1)
+      expect(find.text('HDMI 1'), findsOneWidget);
+      expect(find.text('TV Digital'), findsOneWidget);
+
+      // Alterna para a Aba 2 (Teclas & Mídia) e verifica botões coloridos
+      await tester.tap(find.text('Teclas & Mídia'));
+      await tester.pumpAndSettle();
+
       expect(find.text('VERMELHO'), findsOneWidget);
       expect(find.text('VERDE'), findsOneWidget);
       expect(find.text('AMARELO'), findsOneWidget);
       expect(find.text('AZUL'), findsOneWidget);
-
-      // Verifica botões de entrada ao lado do D-Pad
-      expect(find.text('HDMI 1'), findsOneWidget);
-      expect(find.text('TV Digital'), findsOneWidget);
     });
 
     testWidgets('Alterna entre Tema Escuro e Claro pelo botão do cabeçalho', (WidgetTester tester) async {
@@ -183,8 +186,13 @@ void main() {
       await tester.pumpWidget(const LGRemoteApp());
       await tester.pumpAndSettle();
 
-      // O controle inteiro deve estar presente na tela sem rolagem e sem erros
+      // O controle deve estar presente na tela com as abas e sem erros
       expect(find.text('LG'), findsOneWidget);
+      expect(find.text('HDMI 1'), findsOneWidget);
+      expect(find.text('TV Digital'), findsOneWidget);
+
+      await tester.tap(find.text('Teclas & Mídia'));
+      await tester.pumpAndSettle();
       expect(find.text('VERMELHO'), findsOneWidget);
       expect(find.text('AZUL'), findsOneWidget);
     });

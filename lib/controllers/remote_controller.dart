@@ -26,6 +26,7 @@ class RemoteController extends ChangeNotifier {
   bool _isMuted = false;
   bool _isWaitingPairing = false;
   bool _isScanningTvs = false;
+  bool _shouldMaintainConnection = false;
 
   // Valores e identificação da TV
   int _volumeLevel = 18;
@@ -195,6 +196,7 @@ class RemoteController extends ChangeNotifier {
       _isConnected = success;
       if (success) {
         _isPoweredOn = true;
+        _shouldMaintainConnection = true;
         _logAction('Conexão estabelecida com sucesso', {
           'ip': _ipAddress,
           'nome': ?_connectedTvName,
@@ -211,12 +213,26 @@ class RemoteController extends ChangeNotifier {
   }
 
   void disconnect() {
+    _shouldMaintainConnection = false;
     webOsService.disconnect();
     _isConnected = false;
     _isConnecting = false;
     _isWaitingPairing = false;
     _logAction('Desconectado da TV LG');
     notifyListeners();
+  }
+
+  /// Reconecta de forma transparente quando o usuário retorna ao aplicativo
+  Future<void> autoReconnectIfNeeded() async {
+    if (!_shouldMaintainConnection) return;
+    if (_isConnected || _isConnecting) return;
+    if (_ipAddress.isEmpty) return;
+
+    await connect(
+      ip: _ipAddress,
+      mac: _macAddress,
+      tvName: _connectedTvName,
+    );
   }
 
   // --- Descoberta Automática de TVs na Rede (SSDP e Probes) ---

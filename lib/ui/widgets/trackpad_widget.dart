@@ -9,11 +9,11 @@ import '../theme/app_colors.dart';
 /// Utiliza [GestureDetector] para capturar eventos de arrasto (deltas dx, dy)
 /// e toques/cliques rápidos de confirmação na tela da Smart TV.
 class TrackpadWidget extends StatefulWidget {
-  final double height;
+  final double? height;
 
   const TrackpadWidget({
     super.key,
-    this.height = 180,
+    this.height,
   });
 
   @override

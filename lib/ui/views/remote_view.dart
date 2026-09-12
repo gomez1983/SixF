@@ -11,6 +11,7 @@ import '../widgets/header_bar.dart';
 import '../widgets/multimedia_controls.dart';
 import '../widgets/network_drawer.dart';
 import '../widgets/numeric_keypad.dart';
+import '../widgets/remote_button.dart';
 import '../widgets/system_navigation_controls.dart';
 import '../widgets/trackpad_widget.dart';
 import '../widgets/volume_channel_controls.dart';
@@ -29,7 +30,7 @@ class RemoteView extends StatefulWidget {
 class _RemoteViewState extends State<RemoteView> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _focusNode = FocusNode();
-  int _directionalModeIndex = 0; // 0: D-Pad, 1: Magic Trackpad
+  int _selectedTabIndex = 0; // 0: Controle, 1: Teclas & Mídia, 2: Magic Trackpad
 
   @override
   void dispose() {
@@ -183,7 +184,7 @@ class _RemoteViewState extends State<RemoteView> {
                 height: constraints.maxHeight,
                 child: isWideScreen
                     ? _buildDualPaneLayout(constraints)
-                    : _buildSingleChassisLayout(constraints),
+                    : _buildMobileTabLayout(constraints),
               );
             },
           ),
@@ -209,7 +210,7 @@ class _RemoteViewState extends State<RemoteView> {
                 // Coluna 1: Chassi do Controle Remoto
                 SizedBox(
                   width: 400,
-                  child: _buildRemoteChassis(showTrackpadInChassis: false),
+                  child: _buildRemoteChassis(),
                 ),
 
                 const SizedBox(width: 20),
@@ -235,34 +236,280 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Layout para formato de controle clássico:
-  /// Utiliza FittedBox para que o controle SEMPRE caiba 100% na altura e largura
-  /// da janela sem precisar de barra de rolagem.
-  Widget _buildSingleChassisLayout(BoxConstraints constraints) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Center(
-        child: FittedBox(
-          fit: BoxFit.contain,
-          alignment: Alignment.center,
-          child: SizedBox(
-            width: 420,
+  /// Layout em 3 Abas Responsivo para Mobile (Galaxy S23 Ultra e telas verticais):
+  /// Aproveita 100% da largura e altura da tela sem compressão ou caixas fixas.
+  Widget _buildMobileTabLayout(BoxConstraints constraints) {
+    return Column(
+      children: [
+        // 1. Cabeçalho persistente no topo (Status, Cast, Power, Tema, Menu)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: HeaderBar(
+            onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
+          ),
+        ),
+
+        // 2. Conteúdo das 3 Abas
+        Expanded(
+          child: IndexedStack(
+            index: _selectedTabIndex,
+            children: [
+              // Aba 1: Controle Principal
+              _buildTab1Control(),
+
+              // Aba 2: Teclas Numéricas & Demais Botões
+              _buildTab2KeypadAndMedia(),
+
+              // Aba 3: Magic Trackpad em Tela Cheia
+              _buildTab3Trackpad(),
+            ],
+          ),
+        ),
+
+        // 3. Barra de Navegação Inferior das 3 Abas
+        _buildBottomTabBar(),
+      ],
+    );
+  }
+
+  /// Aba 1: Apenas Volume, Canais, D-Pad, HDMI 1, TV Digital, Home, Menu, Voltar e Exit
+  Widget _buildTab1Control() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 16),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildRemoteChassis(showTrackpadInChassis: true),
-                const SizedBox(height: 8),
+                // 1. Navegação do Sistema: Home, Menu, Voltar, Exit
+                const SystemNavigationControls(),
+
+                const SizedBox(height: 16),
+
+                // 2. Controles de Volume, Canal e Mudo
+                const VolumeChannelControls(),
+
+                const SizedBox(height: 16),
+
+                // 3. Roda D-Pad com HDMI 1 à esquerda e TV Digital à direita
+                const DPadWidget(size: 210),
+
+                const SizedBox(height: 12),
+
+                // Feedback da última ação discreto
                 _buildConsoleFeedbackCard(),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Aba 2: Teclas numéricas de canais e os demais botões já existentes
+  Widget _buildTab2KeypadAndMedia() {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Teclado Numérico
+          const NumericKeypad(),
+
+          const SizedBox(height: 16),
+
+          // 2. Controles Multimídia (Play, Pause, Stop, Rewind, Fast Forward)
+          const MultimediaControls(),
+
+          const SizedBox(height: 16),
+
+          // 3. Botões Coloridos WebOS (Vermelho, Verde, Amarelo, Azul)
+          const ColorButtonsRow(),
+
+          const SizedBox(height: 14),
+
+          // Feedback da última ação discreto
+          _buildConsoleFeedbackCard(),
+        ],
+      ),
+    );
+  }
+
+  /// Aba 3: Magic Trackpad aproveitando ao MÁXIMO o tamanho da tela
+  Widget _buildTab3Trackpad() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. O Trackpad ocupa TODO o espaço disponível
+          const Expanded(
+            child: TrackpadWidget(),
+          ),
+
+          const SizedBox(height: 12),
+
+          // 2. Barra de Ações Rápidas no Rodapé do Trackpad para máxima agilidade
+          Row(
+            children: [
+              Expanded(
+                child: RemoteButton(
+                  height: 50,
+                  borderRadius: 14,
+                  backgroundColor: AppColors.surfaceInteractiveOf(context),
+                  foregroundColor: AppColors.textPrimaryOf(context),
+                  icon: Icons.undo_rounded,
+                  label: 'VOLTAR',
+                  iconSize: 18,
+                  tooltip: 'Voltar',
+                  onPressed: () => context.read<RemoteController>().pressBack(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: RemoteButton(
+                  height: 50,
+                  borderRadius: 14,
+                  backgroundColor: AppColors.iconHighlightOf(context).withValues(alpha: 0.22),
+                  borderColor: AppColors.iconHighlightOf(context),
+                  foregroundColor: AppColors.iconHighlightOf(context),
+                  icon: Icons.mouse_rounded,
+                  label: 'CLIQUE / OK',
+                  iconSize: 20,
+                  tooltip: 'Clique do Mouse / Confirmar',
+                  onPressed: () => context.read<RemoteController>().sendTrackpadClick(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: RemoteButton(
+                  height: 50,
+                  borderRadius: 14,
+                  backgroundColor: AppColors.surfaceInteractiveOf(context),
+                  foregroundColor: AppColors.textPrimaryOf(context),
+                  icon: Icons.home_rounded,
+                  label: 'HOME',
+                  iconSize: 18,
+                  tooltip: 'Página Inicial',
+                  onPressed: () => context.read<RemoteController>().pressHome(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Barra de Navegação Inferior das 3 Abas
+  Widget _buildBottomTabBar() {
+    final isDark = AppColors.isDark(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCardOf(context),
+        border: Border(
+          top: BorderSide(
+            color: AppColors.borderSubtleOf(context),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black38 : Colors.black12,
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: [
+              _buildBottomNavItem(
+                index: 0,
+                title: 'Controle',
+                icon: Icons.tv_rounded,
+              ),
+              _buildBottomNavItem(
+                index: 1,
+                title: 'Teclas & Mídia',
+                icon: Icons.dialpad_rounded,
+              ),
+              _buildBottomNavItem(
+                index: 2,
+                title: 'Magic Trackpad',
+                icon: Icons.touch_app_rounded,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// Estrutura física estilizada do controle remoto
-  Widget _buildRemoteChassis({required bool showTrackpadInChassis}) {
+  Widget _buildBottomNavItem({
+    required int index,
+    required String title,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedTabIndex == index;
+    final activeColor = AppColors.iconHighlightOf(context);
+    final inactiveColor = AppColors.textSecondaryOf(context);
+
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _selectedTabIndex = index);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? activeColor.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? activeColor : inactiveColor,
+                size: 24,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? activeColor : inactiveColor,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  letterSpacing: 0.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Estrutura física estilizada para coluna do controle no modo dual pane (Desktop)
+  Widget _buildRemoteChassis() {
     final isDark = AppColors.isDark(context);
 
     return Container(
@@ -299,22 +546,8 @@ class _RemoteViewState extends State<RemoteView> {
 
           const SizedBox(height: 14),
 
-          // 4. Seletor Direcional / Magic Remote (se em modo de chassi único)
-          if (showTrackpadInChassis) ...[
-            _buildModeSelector(),
-            const SizedBox(height: 12),
-            AnimatedCrossFade(
-              firstChild: const DPadWidget(size: 190),
-              secondChild: const TrackpadWidget(height: 190),
-              crossFadeState: _directionalModeIndex == 0
-                  ? CrossFadeState.showFirst
-                  : CrossFadeState.showSecond,
-              duration: const Duration(milliseconds: 250),
-            ),
-          ] else ...[
-            // Em modo dual pane, o D-Pad fica sempre visível no chassi
-            const DPadWidget(size: 195),
-          ],
+          // 4. D-Pad com HDMI 1 e TV Digital
+          const DPadWidget(size: 195),
 
           const SizedBox(height: 14),
 
@@ -335,87 +568,6 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Alternador entre D-Pad Clássico e Magic Trackpad
-  Widget _buildModeSelector() {
-    return Container(
-      height: 38,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSelectorTab(
-              title: 'D-Pad',
-              icon: Icons.gamepad_rounded,
-              isSelected: _directionalModeIndex == 0,
-              onTap: () => setState(() => _directionalModeIndex = 0),
-            ),
-          ),
-          Expanded(
-            child: _buildSelectorTab(
-              title: 'Magic Trackpad',
-              icon: Icons.touch_app_rounded,
-              isSelected: _directionalModeIndex == 1,
-              onTap: () => setState(() => _directionalModeIndex = 1),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSelectorTab({
-    required String title,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.surfaceElevatedOf(context) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected
-              ? Border.all(color: AppColors.borderActiveOf(context), width: 1)
-              : null,
-        ),
-        alignment: Alignment.center,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: isSelected
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.textSecondaryOf(context),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.textPrimaryOf(context)
-                      : AppColors.textMutedOf(context),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   /// Card dedicado de Magic Trackpad expandido (modo tela ampla)
   Widget _buildTrackpadExpandedCard() {

@@ -115,6 +115,9 @@ class WebOsService {
         customClient: isSecure ? client : null,
       ).timeout(timeout);
 
+      // Keepalive automático (Heartbeat) para manter o socket ativo em segundo plano
+      _mainSocket!.pingInterval = const Duration(seconds: 8);
+
       // Escuta mensagens da TV
       _mainSocket!.listen(
         _handleMainSocketMessage,
@@ -440,7 +443,6 @@ class WebOsService {
 
   void pressMenu() {
     sendButton('MENU');
-    sendCommand('ssap://system.launcher/open', {'id': 'com.palm.app.settings'});
   }
 
   void pressExit() {

@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "C:/Projetos/controle_LG/windows"
+    "cmake.sourceDirectory": "C:/Projetos/controle_LG/windows",
+    "java.compile.nullAnalysis.mode": "automatic"
 }

@@ -131,7 +131,9 @@ class TrayService with TrayListener {
   }
 
   void dispose() {
-    trayManager.removeListener(this);
-    trayManager.destroy();
+    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      trayManager.removeListener(this);
+      trayManager.destroy();
+    }
   }
 }
