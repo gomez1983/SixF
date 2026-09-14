@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
+import '../services/drivers/driver_factory.dart';
+import '../services/drivers/lg_webos_driver.dart';
+import '../services/drivers/tv_driver.dart';
 import '../services/ssdp_discovery_service.dart';
 import '../services/storage_service.dart';
 import '../services/wake_on_lan_service.dart';
 import '../services/webos_service.dart';
 
-/// Controlador de estado do controle remoto para Smart TV LG.
+/// Controlador de estado do controle remoto universal SixF.
 ///
-/// Integra a interface gráfica com os serviços de back-end:
-/// - [WebOsService]: Comunicação WebSocket SSAP, Pointer Socket (Magic Remote), handshake e SSL.
+/// Integra a interface gráfica com os serviços de back-end por meio
+/// do padrão Driver / Adapter ([TvDriver]):
+/// - [TvDriver]: Interface agnóstica para comandos padronizados, ciclo de vida e estado.
+/// - [LgWebOsDriver]: Driver concreto para TVs LG webOS (SSAP / Pointer Socket).
 /// - [WakeOnLanService]: Ligar TV via broadcast UDP Magic Packet.
-/// - [SsdpDiscoveryService]: Descoberta automática de TVs na rede local com extração do friendlyName.
-/// - [StorageService]: Persistência de parâmetros e chaves de pareamento.
+/// - [SsdpDiscoveryService]: Descoberta automática de dispositivos na rede local.
+/// - [StorageService]: Persistência de parâmetros, marca e chaves de pareamento.
 class RemoteController extends ChangeNotifier {
   // Serviços de Back-End
   final StorageService storageService = StorageService();
-  final WebOsService webOsService = WebOsService();
+  final WebOsService _webOsService = WebOsService();
+  late TvDriver _driver;
 
   // Estado de tema
   ThemeMode _themeMode = ThemeMode.dark;
@@ -34,10 +40,27 @@ class RemoteController extends ChangeNotifier {
   String _ipAddress = '192.168.1.150';
   String _macAddress = 'A4:77:33:B2:9C:10';
   String? _connectedTvName;
-  String _lastActionMessage = 'Aguardando conexão com a TV LG';
+  String _lastActionMessage = 'Aguardando conexão com o dispositivo';
   List<DiscoveredTv> _discoveredTvs = [];
 
-  RemoteController() {
+  /// Expõe o [WebOsService] para compatibilidade com código existente e testes unitários.
+  WebOsService get webOsService => _webOsService;
+
+  /// Driver ativo no momento.
+  TvDriver get driver => _driver;
+
+  /// Marca/ecossistema do dispositivo atualmente selecionado.
+  TvBrand get currentBrand => _driver.brand;
+
+  /// Se o dispositivo ativo suporta Magic Pointer / Trackpad livre.
+  bool get supportsTrackpad => _driver.supportsTrackpad;
+
+  /// Se o dispositivo ativo exige pareamento com código PIN de 4 a 6 dígitos na tela.
+  bool get supportsPairingPin => _driver.supportsPairingPin;
+
+  RemoteController({TvDriver? initialDriver}) {
+    _driver = initialDriver ?? LgWebOsDriver(webOsService: _webOsService);
+    _bindDriverCallbacks();
     _initServices();
   }
 
@@ -48,6 +71,11 @@ class RemoteController extends ChangeNotifier {
       _macAddress = storageService.getMacAddress(defaultValue: _macAddress);
       _connectedTvName = storageService.getTvName();
 
+      final savedBrand = storageService.getBrand();
+      if (savedBrand != _driver.brand) {
+        selectBrand(savedBrand, notify: false);
+      }
+
       final savedTheme = storageService.getThemeMode();
       if (savedTheme == 'light') {
         _themeMode = ThemeMode.light;
@@ -55,67 +83,87 @@ class RemoteController extends ChangeNotifier {
         _themeMode = ThemeMode.dark;
       }
       notifyListeners();
-
-      // Configuração dos callbacks do WebOsService
-      webOsService.onStateChanged = (state) {
-        _isConnecting = state == WebOsConnectionState.connecting;
-        _isConnected = state == WebOsConnectionState.connected;
-        _isWaitingPairing = state == WebOsConnectionState.pairingPrompt;
-
-        if (_isConnected) {
-          _isPoweredOn = true;
-          _logAction('TV LG Conectada e Autenticada', {
-            'ip': _ipAddress,
-            'nome': ?_connectedTvName,
-          });
-        } else if (_isWaitingPairing) {
-          _logAction('Confirmação pendente na tela da TV LG');
-        }
-        notifyListeners();
-      };
-
-      webOsService.onClientKeyReceived = (key) {
-        storageService.setClientKey(key);
-        _logAction('Chave client-key salva com sucesso');
-      };
-
-      webOsService.onError = (err) {
-        _logAction('Erro de conexão', {'msg': err});
-      };
-
-      // Resolução automática do nome amigável da TV (ex: "André TV")
-      webOsService.onDeviceNameResolved = (name, model) {
-        _connectedTvName = name;
-        storageService.setTvName(name);
-        _logAction('Nome da TV identificado', {
-          'nome': name,
-          'modelo': ?model,
-        });
-
-        // Adiciona ou atualiza na lista de descobertos
-        final idx = _discoveredTvs.indexWhere((t) => t.ip == _ipAddress);
-        final item = DiscoveredTv(ip: _ipAddress, name: name, modelName: model);
-        if (idx >= 0) {
-          _discoveredTvs[idx] = item;
-        } else {
-          _discoveredTvs.add(item);
-        }
-        notifyListeners();
-      };
-
-      // Sincronização em tempo real do volume real da TV LG
-      webOsService.onVolumeStatusChanged = (volume, isMuted) {
-        _volumeLevel = volume;
-        _isMuted = isMuted;
-        _logAction('Volume da TV sincronizado', {
-          'volume': volume,
-          'mudo': isMuted,
-        });
-        notifyListeners();
-      };
     } catch (e) {
       debugPrint('[RemoteController] Erro ao inicializar serviços: $e');
     }
+  }
+
+  /// Vincula os callbacks de ciclo de vida do [_driver] ao estado do [RemoteController].
+  void _bindDriverCallbacks() {
+    _driver.onStateChanged = (state) {
+      _isConnecting = state == DeviceConnectionState.connecting;
+      _isConnected = state == DeviceConnectionState.connected;
+      _isWaitingPairing = state == DeviceConnectionState.pairingPrompt;
+
+      if (_isConnected) {
+        _isPoweredOn = true;
+        _logAction('${_driver.brandDisplayName} Conectada e Autenticada', {
+          'ip': _ipAddress,
+          'nome': _connectedTvName,
+        });
+      } else if (_isWaitingPairing) {
+        _logAction('Confirmação pendente na tela da TV LG');
+      }
+      notifyListeners();
+    };
+
+    _driver.onAuthTokenReceived = (key) {
+      storageService.setClientKey(key);
+      _logAction('Chave de autenticação salva com sucesso');
+    };
+
+    _driver.onError = (err) {
+      _logAction('Erro de conexão', {'msg': err});
+    };
+
+    _driver.onDeviceNameResolved = (name, model) {
+      _connectedTvName = name;
+      storageService.setTvName(name);
+      _logAction('Nome da TV identificado', {
+        'nome': name,
+        'modelo': model,
+      });
+
+      final idx = _discoveredTvs.indexWhere((t) => t.ip == _ipAddress);
+      final item = DiscoveredTv(
+        ip: _ipAddress,
+        name: name,
+        modelName: model,
+        brand: _driver.brand,
+      );
+      if (idx >= 0) {
+        _discoveredTvs[idx] = item;
+      } else {
+        _discoveredTvs.add(item);
+      }
+      notifyListeners();
+    };
+
+    _driver.onVolumeStatusChanged = (volume, isMuted) {
+      _volumeLevel = volume;
+      _isMuted = isMuted;
+      _logAction('Volume da TV sincronizado', {
+        'volume': volume,
+        'mudo': isMuted,
+      });
+      notifyListeners();
+    };
+  }
+
+  /// Alterna a marca ativa do dispositivo e inicializa o driver correspondente.
+  void selectBrand(TvBrand brand, {bool notify = true}) {
+    if (_driver.brand == brand) return;
+    _driver.disconnect();
+
+    if (brand == TvBrand.lgWebOs) {
+      _driver = LgWebOsDriver(webOsService: _webOsService);
+    } else {
+      _driver = DriverFactory.create(brand);
+    }
+    _bindDriverCallbacks();
+    storageService.setBrand(brand);
+    _logAction('Marca selecionada', {'marca': brand.displayName});
+    if (notify) notifyListeners();
   }
 
   // Getters
@@ -160,8 +208,17 @@ class RemoteController extends ChangeNotifier {
 
   // --- Gerenciamento de Conexão e Rede ---
 
-  Future<void> connect({String? ip, String? mac, String? tvName}) async {
+  Future<void> connect({
+    String? ip,
+    String? mac,
+    String? tvName,
+    TvBrand? brand,
+  }) async {
     if (_isConnecting) return;
+
+    if (brand != null && brand != _driver.brand) {
+      selectBrand(brand, notify: false);
+    }
     if (ip != null && ip.trim().isNotEmpty) {
       _ipAddress = ip.trim();
       await storageService.setIpAddress(_ipAddress);
@@ -180,15 +237,15 @@ class RemoteController extends ChangeNotifier {
     _isWaitingPairing = false;
     _logAction('Conectando à TV LG', {
       'ip': _ipAddress,
-      'nome': ?_connectedTvName,
+      'nome': _connectedTvName,
     });
     notifyListeners();
 
     try {
       final savedKey = storageService.getClientKey();
-      final success = await webOsService.connect(
+      final success = await _driver.connect(
         ipAddress: _ipAddress,
-        savedClientKey: savedKey,
+        authToken: savedKey,
         timeout: const Duration(seconds: 4),
       );
 
@@ -199,7 +256,7 @@ class RemoteController extends ChangeNotifier {
         _shouldMaintainConnection = true;
         _logAction('Conexão estabelecida com sucesso', {
           'ip': _ipAddress,
-          'nome': ?_connectedTvName,
+          'nome': _connectedTvName,
         });
       } else {
         _logAction('Falha ao conectar à TV', {'ip': _ipAddress});
@@ -214,7 +271,7 @@ class RemoteController extends ChangeNotifier {
 
   void disconnect() {
     _shouldMaintainConnection = false;
-    webOsService.disconnect();
+    _driver.disconnect();
     _isConnected = false;
     _isConnecting = false;
     _isWaitingPairing = false;
@@ -255,6 +312,7 @@ class RemoteController extends ChangeNotifier {
           _discoveredTvs.add(DiscoveredTv(
             ip: _ipAddress,
             name: _connectedTvName!,
+            brand: _driver.brand,
           ));
         }
       }
@@ -271,6 +329,9 @@ class RemoteController extends ChangeNotifier {
   }
 
   void selectDiscoveredTv(DiscoveredTv tv) {
+    if (tv.brand != _driver.brand) {
+      selectBrand(tv.brand, notify: false);
+    }
     _ipAddress = tv.ip;
     _connectedTvName = tv.name;
     storageService.setIpAddress(_ipAddress);
@@ -281,7 +342,7 @@ class RemoteController extends ChangeNotifier {
 
   Future<void> connectToTv(DiscoveredTv tv) async {
     selectDiscoveredTv(tv);
-    await connect(ip: tv.ip, tvName: tv.name);
+    await connect(ip: tv.ip, tvName: tv.name, brand: tv.brand);
   }
 
   // --- Controle de Energia ---
@@ -292,7 +353,7 @@ class RemoteController extends ChangeNotifier {
       _logAction('Enviando Wake-on-LAN para ligar a TV', {'mac': _macAddress});
       WakeOnLanService.wake(_macAddress);
     } else {
-      webOsService.turnOff();
+      _driver.sendKey(RemoteKey.power);
       _isConnected = false;
     }
     _logAction('Power Toggle', {'isPoweredOn': _isPoweredOn});
@@ -306,7 +367,7 @@ class RemoteController extends ChangeNotifier {
       _volumeLevel++;
       if (_isMuted) _isMuted = false;
     }
-    webOsService.volumeUp();
+    _driver.sendKey(RemoteKey.volumeUp);
     _logAction('Volume Up', {'level': _volumeLevel, 'muted': _isMuted});
     notifyListeners();
   }
@@ -316,14 +377,14 @@ class RemoteController extends ChangeNotifier {
       _volumeLevel--;
       if (_isMuted) _isMuted = false;
     }
-    webOsService.volumeDown();
+    _driver.sendKey(RemoteKey.volumeDown);
     _logAction('Volume Down', {'level': _volumeLevel, 'muted': _isMuted});
     notifyListeners();
   }
 
   void toggleMute() {
     _isMuted = !_isMuted;
-    webOsService.setMute(_isMuted);
+    _driver.setMute(_isMuted);
     _logAction('Mute Toggle', {'isMuted': _isMuted});
     notifyListeners();
   }
@@ -332,7 +393,7 @@ class RemoteController extends ChangeNotifier {
 
   void channelUp() {
     _currentChannel++;
-    webOsService.channelUp();
+    _driver.sendKey(RemoteKey.channelUp);
     _logAction('Channel Up', {'channel': _currentChannel});
     notifyListeners();
   }
@@ -341,7 +402,7 @@ class RemoteController extends ChangeNotifier {
     if (_currentChannel > 1) {
       _currentChannel--;
     }
-    webOsService.channelDown();
+    _driver.sendKey(RemoteKey.channelDown);
     _logAction('Channel Down', {'channel': _currentChannel});
     notifyListeners();
   }
@@ -349,125 +410,129 @@ class RemoteController extends ChangeNotifier {
   // --- Navegação D-Pad ---
 
   void dpadUp() {
-    webOsService.dpadUp();
+    _driver.sendKey(RemoteKey.dpadUp);
     _logAction('D-Pad UP');
   }
 
   void dpadDown() {
-    webOsService.dpadDown();
+    _driver.sendKey(RemoteKey.dpadDown);
     _logAction('D-Pad DOWN');
   }
 
   void dpadLeft() {
-    webOsService.dpadLeft();
+    _driver.sendKey(RemoteKey.dpadLeft);
     _logAction('D-Pad LEFT');
   }
 
   void dpadRight() {
-    webOsService.dpadRight();
+    _driver.sendKey(RemoteKey.dpadRight);
     _logAction('D-Pad RIGHT');
   }
 
   void dpadOk() {
-    webOsService.pressOk();
+    _driver.sendKey(RemoteKey.dpadOk);
     _logAction('D-Pad OK / Enter');
   }
 
   // --- Navegação de Sistema ---
 
   void pressHome() {
-    webOsService.pressHome();
+    _driver.sendKey(RemoteKey.home);
     _logAction('Nav Home');
   }
 
   void navHome() => pressHome();
 
   void pressMenu() {
-    webOsService.pressMenu();
+    _driver.sendKey(RemoteKey.menu);
     _logAction('Nav Settings (Menu)');
   }
 
   void navSettings() => pressMenu();
 
   void pressBack() {
-    webOsService.pressBack();
+    _driver.sendKey(RemoteKey.back);
     _logAction('Nav Back');
   }
 
   void navBack() => pressBack();
 
   void pressExit() {
-    webOsService.pressExit();
+    _driver.sendKey(RemoteKey.exit);
     _logAction('Nav Exit');
   }
 
   void navInput() {
-    webOsService.sendButton('INPUT');
+    _driver.sendKey(RemoteKey.input);
     _logAction('Nav Input / Source');
   }
 
   void switchHdmi1() {
-    webOsService.switchToInput('HDMI_1');
+    if (_driver is LgWebOsDriver) {
+      (_driver as LgWebOsDriver).webOsService.switchToInput('HDMI_1');
+    }
     _logAction('Entrada: HDMI 1');
   }
 
   void switchTvDigital() {
-    webOsService.launchLiveTv();
+    if (_driver is LgWebOsDriver) {
+      (_driver as LgWebOsDriver).webOsService.launchLiveTv();
+    }
     _logAction('Entrada: TV Digital');
   }
 
   // --- Controles Multimídia ---
 
   void mediaPlay() {
-    webOsService.mediaPlay();
+    _driver.sendKey(RemoteKey.play);
     _logAction('Media Play');
   }
 
   void mediaPause() {
-    webOsService.mediaPause();
+    _driver.sendKey(RemoteKey.pause);
     _logAction('Media Pause');
   }
 
   void mediaStop() {
-    webOsService.mediaStop();
+    _driver.sendKey(RemoteKey.stop);
     _logAction('Media Stop');
   }
 
   void mediaRewind() {
-    webOsService.mediaRewind();
+    _driver.sendKey(RemoteKey.rewind);
     _logAction('Media Rewind');
   }
 
   void mediaFastForward() {
-    webOsService.mediaFastForward();
+    _driver.sendKey(RemoteKey.fastForward);
     _logAction('Media Fast Forward');
   }
 
   // --- Botões de Cores WebOS ---
 
   void pressColorRed() {
-    webOsService.pressColorRed();
+    _driver.sendKey(RemoteKey.colorRed);
     _logAction('Color RED');
   }
 
   void colorRed() => pressColorRed();
 
   void pressColorGreen() {
-    webOsService.pressColorGreen();
+    _driver.sendKey(RemoteKey.colorGreen);
     _logAction('Color GREEN');
   }
 
   void colorGreen() => pressColorGreen();
 
   void pressColorYellow() {
-    webOsService.pressColorYellow();
+    _driver.sendKey(RemoteKey.colorYellow);
     _logAction('Color YELLOW');
   }
 
   void colorYellow() => pressColorYellow();
 
   void pressColorBlue() {
-    webOsService.pressColorBlue();
+    _driver.sendKey(RemoteKey.colorBlue);
     _logAction('Color BLUE');
   }
 
@@ -476,35 +541,49 @@ class RemoteController extends ChangeNotifier {
   // --- Teclado Numérico ---
 
   void sendDigit(int digit) {
-    webOsService.pressDigit(digit);
+    _driver.sendDigit(digit);
     _logAction('Keypad Digit', {'digit': digit});
   }
 
   void inputDigit(int digit) => sendDigit(digit);
 
   void sendDash() {
-    webOsService.pressDash();
+    _driver.sendKey(RemoteKey.dash);
     _logAction('Keypad Dash (-)');
   }
 
   void sendBackspace() {
-    webOsService.pressBack();
+    _driver.sendKey(RemoteKey.back);
     _logAction('Keypad Backspace');
   }
 
   // --- Magic Remote: Trackpad e Ponteiro ---
 
   void sendTrackpadDelta(double dx, double dy) {
-    webOsService.sendTrackpadDelta(dx, dy);
+    _driver.sendTrackpadDelta(dx, dy);
     _logAction('Trackpad Move', {'dx': dx, 'dy': dy});
   }
 
   void onTrackpadPan(double dx, double dy) => sendTrackpadDelta(dx, dy);
 
   void sendTrackpadClick() {
-    webOsService.sendTrackpadClick();
+    _driver.sendTrackpadClick();
     _logAction('Trackpad Click / Confirmação');
   }
 
   void onTrackpadTap() => sendTrackpadClick();
+
+  // --- Entrada de Texto Remota ---
+
+  void sendText(String text) {
+    _driver.sendText(text);
+    _logAction('Texto enviado', {'text': text});
+  }
+
+  // --- Pareamento com PIN (Android TV) ---
+
+  Future<void> sendPairingPin(String pin) async {
+    await _driver.sendPairingPin(pin);
+    _logAction('PIN enviado', {'pin': pin});
+  }
 }

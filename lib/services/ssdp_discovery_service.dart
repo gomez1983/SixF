@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'drivers/tv_driver.dart';
 
 /// Informações de uma TV descoberta na rede local.
 class DiscoveredTv {
@@ -8,16 +9,18 @@ class DiscoveredTv {
   final String name;
   final String? modelName;
   final String? location;
+  final TvBrand brand;
 
   const DiscoveredTv({
     required this.ip,
     required this.name,
     this.modelName,
     this.location,
+    this.brand = TvBrand.lgWebOs,
   });
 
   @override
-  String toString() => '$name ($ip)';
+  String toString() => '$name ($ip - ${brand.displayName})';
 }
 
 /// Serviço de Descoberta Automática de Smart TVs LG na rede local via SSDP (UPnP/UDP) e Probe Direto.

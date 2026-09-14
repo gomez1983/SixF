@@ -5,26 +5,27 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 ---
 
 ## 📌 Status Atual: v0.9.0 (Estágio Beta / Base LG webOS Estável)
-- [x] Suporte Multiplataforma (Windows com bandeja do sistema e Android).
-- [x] Layout mobile otimizado em 3 abas (Essenciais, Teclado/Mídia e Magic Trackpad).
-- [x] Suporte a Ícone Adaptativo / Material You / Themed Icons no Android.
-- [x] Descoberta de TVs via SSDP e pareamento seguro via WebSocket (webOS SSAP).
-- [x] Wake-on-LAN (WoL) para ligar a TV via rede local.
-- [x] Reconexão inteligente e ping keep-alive em segundo plano.
-- [x] Temas Claro (Light) e Escuro (Dark).
+- [x] [Suporte Multiplataforma (Windows com bandeja do sistema e Android)](#)
+- [x] [Layout mobile otimizado em 3 abas (Essenciais, Teclado/Mídia e Magic Trackpad)](#)
+- [x] [Suporte a Ícone Adaptativo / Material You / Themed Icons no Android](#)
+- [x] [Descoberta de TVs via SSDP e pareamento seguro via WebSocket (webOS SSAP)](#)
+- [x] [Wake-on-LAN (WoL) para ligar a TV via rede local](#)
+- [x] [Reconexão inteligente e ping keep-alive em segundo plano](#)
+- [x] [Temas Claro (Light) e Escuro (Dark)](#)
 
 ---
 
 ## 🚀 Fases Planejadas
 
 ### 🌟 Fase 1: Rebranding SixF & Expansão de Marcas (v0.9.5 Beta) — *PRIORIDADE IMEDIATA*
-- [x] **Rebranding & Nova Identidade Visual (SixF)**:
+- [x] [Rebranding & Nova Identidade Visual (SixF)](#):
   - Oficialização do nome **SixF** (*Six Finger* — todos os seus controles na ponta dos dedos).
   - Criação de novo logotipo/ícone moderno estilizado com a marca **SixF** (neutro e tecnológico) compatível com Windows e Android (Adaptive Icons / Material You / Themed Icons).
   - Atualização dos metadados de projeto (`pubspec.yaml`, manifests Android/Windows, títulos de janela e strings de UI).
-- [ ] **Refatoração da Camada de Abstração (Driver / Adapter Pattern)**:
-  - Criação de uma interface base agnóstica (`TvDeviceInterface` / `TvServiceBase`) para comandos padronizados (`sendKey`, `volumeUp`, `openApp`, `mouseMove`).
+- [x] [Refatoração da Camada de Abstração (Driver / Adapter Pattern)](#):
+  - Criação de uma interface base agnóstica (`TvDriver`) para comandos padronizados (`sendKey`, `volumeUp`, `openApp`, `mouseMove`).
   - Isolamento do driver atual da LG em um módulo específico (`LgWebOsDriver`).
+  - Criação de `DriverFactory`, `AndroidTvDriver` e `SamsungTizenDriver` desacoplando o `RemoteController`.
 - [ ] **Expansão de Marcas e Protocolos (Um dispositivo conectado por vez)**:
   - **Chromecast & Google TV / Android TV (Sony, TCL, Philips, Xiaomi)**:
     - Suporte a Chromecast com Google TV (4K / HD) via *Android TV Remote Service v2* (pareamento com código PIN na tela, D-Pad, atalhos e volume).

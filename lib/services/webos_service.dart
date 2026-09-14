@@ -457,6 +457,11 @@ class WebOsService {
     sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.hdmi1'});
   }
 
+  /// Abre um aplicativo específico pelo seu ID (ex: 'netflix', 'youtube', etc.)
+  void launchApp(String appId) {
+    sendCommand('ssap://system.launcher/launch', {'id': appId});
+  }
+
   /// Sintoniza/abre a TV Digital (Live TV aberta/antena)
   void launchLiveTv() {
     sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.livetv'});

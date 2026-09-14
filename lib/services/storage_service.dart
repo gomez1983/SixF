@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'drivers/tv_driver.dart';
 
 /// Serviço de persistência local para salvar parâmetros de conexão e chave de pareamento.
 class StorageService {
@@ -7,6 +8,7 @@ class StorageService {
   static const String _keyClientKey = 'pref_tv_client_key';
   static const String _keyThemeMode = 'pref_app_theme_mode';
   static const String _keyTvName = 'pref_tv_name';
+  static const String _keyBrand = 'pref_tv_brand';
 
   SharedPreferences? _prefs;
 
@@ -63,5 +65,23 @@ class StorageService {
   Future<bool> setThemeMode(String mode) async {
     await init();
     return await _prefs?.setString(_keyThemeMode, mode) ?? false;
+  }
+
+  TvBrand? _cachedBrand;
+
+  TvBrand getBrand({TvBrand defaultValue = TvBrand.lgWebOs}) {
+    if (_cachedBrand != null) return _cachedBrand!;
+    final raw = _prefs?.getString(_keyBrand);
+    if (raw == null) return defaultValue;
+    return TvBrand.values.firstWhere(
+      (b) => b.name == raw || b.id == raw,
+      orElse: () => defaultValue,
+    );
+  }
+
+  Future<bool> setBrand(TvBrand brand) async {
+    _cachedBrand = brand;
+    await init();
+    return await _prefs?.setString(_keyBrand, brand.name) ?? false;
   }
 }
