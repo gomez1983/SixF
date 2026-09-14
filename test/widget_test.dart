@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:controle_lg/controllers/remote_controller.dart';
-import 'package:controle_lg/main.dart';
-import 'package:controle_lg/ui/widgets/trackpad_widget.dart';
+import 'package:sixf_remote/controllers/remote_controller.dart';
+import 'package:sixf_remote/main.dart';
+import 'package:sixf_remote/ui/widgets/trackpad_widget.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -102,12 +102,12 @@ void main() {
 
   group('Widget Tests & Responsividade', () {
     testWidgets('Carrega a interface do controle remoto LG sem erros em tela padrão', (WidgetTester tester) async {
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // Verifica presença dos textos da marca e cabeçalho
-      expect(find.text('LG'), findsOneWidget);
-      expect(find.text('Smart Remote'), findsOneWidget);
+      expect(find.text('SixF'), findsOneWidget);
+      expect(find.text('Remote'), findsOneWidget);
       expect(find.text('Desconectado'), findsOneWidget);
 
       // Verifica presença de botões essenciais
@@ -135,7 +135,7 @@ void main() {
     });
 
     testWidgets('Alterna entre Tema Escuro e Claro pelo botão do cabeçalho', (WidgetTester tester) async {
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // Encontra o botão de alternar tema no cabeçalho
@@ -157,7 +157,7 @@ void main() {
     });
 
     testWidgets('Abre o modal de busca de dispositivos pelo botão Cast do cabeçalho', (WidgetTester tester) async {
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       final castBtn = find.byTooltip('Desconectado - Clique para Buscar e Conectar TVs LG');
@@ -183,11 +183,11 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // O controle deve estar presente na tela com as abas e sem erros
-      expect(find.text('LG'), findsOneWidget);
+      expect(find.text('SixF'), findsOneWidget);
       expect(find.text('HDMI 1'), findsOneWidget);
       expect(find.text('TV Digital'), findsOneWidget);
 
@@ -202,7 +202,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       expect(find.text('LG Magic Pointer (Trackpad Virtual)'), findsOneWidget);
@@ -211,7 +211,7 @@ void main() {
     });
 
     testWidgets('Abre e interage com o NetworkDrawer e switch de tema', (WidgetTester tester) async {
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // Clica no botão de configurações da barra superior
@@ -242,7 +242,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // Clica no seletor "Magic Trackpad"
@@ -261,7 +261,7 @@ void main() {
     });
 
     testWidgets('Responde a atalhos do teclado físico', (WidgetTester tester) async {
-      await tester.pumpWidget(const LGRemoteApp());
+      await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
       // Dispara seta para cima

@@ -77,29 +77,29 @@ class HeaderBar extends StatelessWidget {
                     Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(6),
                           child: Image.asset(
-                            'assets/icons/lg-icon.png',
-                            width: 22,
-                            height: 22,
+                            'assets/icons/SixF_Logo_01.png',
+                            width: 24,
+                            height: 24,
                             fit: BoxFit.contain,
                             errorBuilder: (_, _, _) => const SizedBox.shrink(),
                           ),
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          'LG',
+                          'SixF',
                           style: TextStyle(
-                            color: AppColors.lgRed,
-                            fontSize: 14,
+                            color: Color(0xFF00E5FF),
+                            fontSize: 15,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 1.2,
+                            letterSpacing: 0.8,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            'Smart Remote',
+                            'Remote',
                             style: TextStyle(
                               color: AppColors.textPrimaryOf(context),
                               fontSize: 13,

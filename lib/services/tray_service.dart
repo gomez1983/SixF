@@ -32,10 +32,10 @@ class TrayService with TrayListener {
       // Define o ícone da bandeja
       final iconPath = Platform.isWindows
           ? 'assets/icons/app_icon.ico'
-          : 'assets/icons/lg-icon.png';
+          : 'assets/icons/SixF_Logo_01.png';
 
       await trayManager.setIcon(iconPath);
-      await trayManager.setToolTip('Controle Remoto Smart TV LG');
+      await trayManager.setToolTip('SixF Smart Remote');
 
       await updateContextMenu();
       _initialized = true;

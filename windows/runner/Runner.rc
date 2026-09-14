@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "controle_lg" "\0"
+            VALUE "CompanyName", "SixF" "\0"
+            VALUE "FileDescription", "SixF Remote - Smart Universal Controller" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "controle_lg" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "controle_lg.exe" "\0"
-            VALUE "ProductName", "controle_lg" "\0"
+            VALUE "InternalName", "sixf_remote" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 SixF. All rights reserved." "\0"
+            VALUE "OriginalFilename", "sixf_remote.exe" "\0"
+            VALUE "ProductName", "SixF Remote" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

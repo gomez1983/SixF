@@ -21,7 +21,7 @@ void main() async {
       center: true,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
-      title: 'LG Smart TV Remote',
+      title: 'SixF Remote',
     );
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
@@ -29,18 +29,18 @@ void main() async {
     });
   }
 
-  runApp(const LGRemoteApp());
+  runApp(const SixFRemoteApp());
 }
 
-/// Aplicação Desktop de controle remoto para Smart TV LG.
-class LGRemoteApp extends StatefulWidget {
-  const LGRemoteApp({super.key});
+/// Aplicação de controle remoto universal inteligente SixF.
+class SixFRemoteApp extends StatefulWidget {
+  const SixFRemoteApp({super.key});
 
   @override
-  State<LGRemoteApp> createState() => _LGRemoteAppState();
+  State<SixFRemoteApp> createState() => _SixFRemoteAppState();
 }
 
-class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener, WidgetsBindingObserver {
+class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, WidgetsBindingObserver {
   late final RemoteController _remoteController;
 
   @override
@@ -102,7 +102,7 @@ class _LGRemoteAppState extends State<LGRemoteApp> with WindowListener, WidgetsB
       child: Consumer<RemoteController>(
         builder: (context, controller, _) {
           return MaterialApp(
-            title: 'LG Smart TV Remote',
+            title: 'SixF Remote',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:controle_lg/services/ssdp_discovery_service.dart';
-import 'package:controle_lg/services/storage_service.dart';
-import 'package:controle_lg/services/wake_on_lan_service.dart';
-import 'package:controle_lg/services/webos_service.dart';
+import 'package:sixf_remote/services/ssdp_discovery_service.dart';
+import 'package:sixf_remote/services/storage_service.dart';
+import 'package:sixf_remote/services/wake_on_lan_service.dart';
+import 'package:sixf_remote/services/webos_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
