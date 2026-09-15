@@ -66,12 +66,10 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
   @override
   void onWindowClose() async {
     if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
-      try {
-        await windowManager.setPreventClose(false);
-        TrayService().dispose();
-        await windowManager.destroy();
-      } catch (_) {}
-      exit(0);
+      final isPreventClose = await windowManager.isPreventClose();
+      if (isPreventClose) {
+        await windowManager.hide();
+      }
     }
   }
 
