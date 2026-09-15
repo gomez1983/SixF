@@ -88,6 +88,9 @@ class RemoteController extends ChangeNotifier {
     }
   }
 
+  /// Callback disparado quando um dispositivo (Android TV) exige digitação de PIN
+  Function(bool prompt)? onPinPromptRequested;
+
   /// Vincula os callbacks de ciclo de vida do [_driver] ao estado do [RemoteController].
   void _bindDriverCallbacks() {
     _driver.onStateChanged = (state) {
@@ -102,8 +105,14 @@ class RemoteController extends ChangeNotifier {
           'nome': _connectedTvName,
         });
       } else if (_isWaitingPairing) {
-        _logAction('Confirmação pendente na tela da TV LG');
+        _logAction('Confirmação pendente na tela do dispositivo ou código PIN');
       }
+      notifyListeners();
+    };
+
+    _driver.onPinPromptRequested = (prompt) {
+      _isWaitingPairing = true;
+      onPinPromptRequested?.call(prompt);
       notifyListeners();
     };
 
@@ -250,8 +259,16 @@ class RemoteController extends ChangeNotifier {
       );
 
       _isConnecting = false;
-      _isConnected = success;
-      if (success) {
+      if (_driver.connectionState == DeviceConnectionState.pairingPrompt) {
+        _isConnected = false;
+        _isWaitingPairing = true;
+        _logAction('Aguardando inserção de PIN para pareamento', {
+          'ip': _ipAddress,
+          'nome': _connectedTvName,
+        });
+      } else if (success && _driver.connectionState == DeviceConnectionState.connected) {
+        _isConnected = true;
+        _isWaitingPairing = false;
         _isPoweredOn = true;
         _shouldMaintainConnection = true;
         _logAction('Conexão estabelecida com sucesso', {
@@ -259,11 +276,14 @@ class RemoteController extends ChangeNotifier {
           'nome': _connectedTvName,
         });
       } else {
-        _logAction('Falha ao conectar à TV', {'ip': _ipAddress});
+        _isConnected = false;
+        _isWaitingPairing = false;
+        _logAction('Falha ao conectar ao dispositivo', {'ip': _ipAddress});
       }
     } catch (e) {
       _isConnecting = false;
       _isConnected = false;
+      _isWaitingPairing = false;
       _logAction('Erro de conexão', {'ip': _ipAddress, 'erro': '$e'});
     }
     notifyListeners();

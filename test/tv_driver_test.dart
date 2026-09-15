@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sixf_remote/controllers/remote_controller.dart';
+import 'package:sixf_remote/services/drivers/android_tv_driver.dart';
 import 'package:sixf_remote/services/drivers/driver_factory.dart';
 import 'package:sixf_remote/services/drivers/lg_webos_driver.dart';
+import 'package:sixf_remote/services/drivers/samsung_tizen_driver.dart';
 import 'package:sixf_remote/services/drivers/tv_driver.dart';
 
 void main() {
@@ -24,14 +26,24 @@ void main() {
       expect(TvBrand.samsungTizen.id, 'samsung_tizen');
     });
 
-    test('DriverFactory instancia LgWebOsDriver corretamente', () {
-      final driver = DriverFactory.create(TvBrand.lgWebOs);
-      expect(driver, isA<LgWebOsDriver>());
-      expect(driver.brand, TvBrand.lgWebOs);
-      expect(driver.supportsTrackpad, isTrue);
-      expect(driver.supportsPairingPin, isFalse);
-      expect(driver.connectionState, DeviceConnectionState.disconnected);
-      expect(driver.isConnected, isFalse);
+    test('DriverFactory instancia cada driver correspondente à marca', () {
+      final lg = DriverFactory.create(TvBrand.lgWebOs);
+      expect(lg, isA<LgWebOsDriver>());
+      expect(lg.brand, TvBrand.lgWebOs);
+      expect(lg.supportsTrackpad, isTrue);
+      expect(lg.supportsPairingPin, isFalse);
+
+      final atv = DriverFactory.create(TvBrand.androidTv);
+      expect(atv, isA<AndroidTvDriver>());
+      expect(atv.brand, TvBrand.androidTv);
+      expect(atv.supportsTrackpad, isFalse);
+      expect(atv.supportsPairingPin, isTrue);
+
+      final samsung = DriverFactory.create(TvBrand.samsungTizen);
+      expect(samsung, isA<SamsungTizenDriver>());
+      expect(samsung.brand, TvBrand.samsungTizen);
+      expect(samsung.supportsTrackpad, isFalse);
+      expect(samsung.supportsPairingPin, isFalse);
     });
   });
 
@@ -56,7 +68,6 @@ void main() {
     });
 
     test('Envio de comandos RemoteKey não dispara exceções', () {
-      // Dispara todas as teclas em estado desconectado de forma segura
       for (final key in RemoteKey.values) {
         expect(() => driver.sendKey(key), returnsNormally);
       }
@@ -67,6 +78,68 @@ void main() {
       expect(() => driver.sendTrackpadDelta(10, -5), returnsNormally);
       expect(() => driver.sendTrackpadClick(), returnsNormally);
       expect(() => driver.sendText('teste'), returnsNormally);
+    });
+  });
+
+  group('SamsungTizenDriver Unit Tests', () {
+    late SamsungTizenDriver driver;
+
+    setUp(() {
+      driver = SamsungTizenDriver();
+    });
+
+    tearDown(() {
+      driver.disconnect();
+    });
+
+    test('Propriedades e estados iniciais Samsung', () {
+      expect(driver.brand, TvBrand.samsungTizen);
+      expect(driver.brandDisplayName, 'Samsung Tizen');
+      expect(driver.supportsTrackpad, isFalse);
+      expect(driver.supportsPairingPin, isFalse);
+      expect(driver.connectionState, DeviceConnectionState.disconnected);
+      expect(driver.isConnected, isFalse);
+    });
+
+    test('Comandos Samsung são despachados sem exceções', () {
+      for (final key in RemoteKey.values) {
+        expect(() => driver.sendKey(key), returnsNormally);
+      }
+      expect(() => driver.sendDigit(3), returnsNormally);
+      expect(() => driver.setMute(true), returnsNormally);
+      expect(() => driver.sendText('Samsung TV'), returnsNormally);
+      expect(() => driver.disconnect(), returnsNormally);
+    });
+  });
+
+  group('AndroidTvDriver Unit Tests', () {
+    late AndroidTvDriver driver;
+
+    setUp(() {
+      driver = AndroidTvDriver();
+    });
+
+    tearDown(() {
+      driver.disconnect();
+    });
+
+    test('Propriedades e suporte a PIN Android TV', () {
+      expect(driver.brand, TvBrand.androidTv);
+      expect(driver.brandDisplayName, 'Google TV / Android TV');
+      expect(driver.supportsTrackpad, isFalse);
+      expect(driver.supportsPairingPin, isTrue);
+      expect(driver.connectionState, DeviceConnectionState.disconnected);
+      expect(driver.isConnected, isFalse);
+    });
+
+    test('Comandos e PIN são despachados sem exceções', () async {
+      for (final key in RemoteKey.values) {
+        expect(() => driver.sendKey(key), returnsNormally);
+      }
+      expect(() => driver.sendDigit(9), returnsNormally);
+      expect(() => driver.sendText('Chromecast'), returnsNormally);
+      await expectLater(driver.sendPairingPin('1234'), completes);
+      expect(() => driver.disconnect(), returnsNormally);
     });
   });
 
@@ -94,14 +167,19 @@ void main() {
 
       controller.selectBrand(TvBrand.androidTv);
       expect(controller.currentBrand, TvBrand.androidTv);
+      expect(controller.driver, isA<AndroidTvDriver>());
+      expect(controller.supportsPairingPin, isTrue);
       expect(controller.storageService.getBrand(), TvBrand.androidTv);
 
       controller.selectBrand(TvBrand.samsungTizen);
       expect(controller.currentBrand, TvBrand.samsungTizen);
+      expect(controller.driver, isA<SamsungTizenDriver>());
+      expect(controller.supportsPairingPin, isFalse);
       expect(controller.storageService.getBrand(), TvBrand.samsungTizen);
 
       controller.selectBrand(TvBrand.lgWebOs);
       expect(controller.currentBrand, TvBrand.lgWebOs);
+      expect(controller.driver, isA<LgWebOsDriver>());
       expect(controller.storageService.getBrand(), TvBrand.lgWebOs);
     });
 

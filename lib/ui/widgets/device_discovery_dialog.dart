@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
+import '../../services/drivers/tv_driver.dart';
 import '../theme/app_colors.dart';
+import 'pairing_pin_dialog.dart';
 
 /// Modal para busca e seleção de TVs LG na rede local.
 ///
@@ -26,11 +28,16 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
   late final TextEditingController _manualIpController;
   bool _showManualIp = false;
 
+  RemoteController? _controllerRef;
+
   @override
   void initState() {
     super.initState();
     final controller = context.read<RemoteController>();
+    _controllerRef = controller;
     _manualIpController = TextEditingController(text: controller.ipAddress);
+
+    controller.addListener(_handleControllerState);
 
     // Inicia a varredura automaticamente ao abrir o diálogo
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -40,8 +47,18 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
     });
   }
 
+  void _handleControllerState() {
+    if (!mounted) return;
+    final controller = _controllerRef;
+    if (controller != null && controller.isWaitingPairing) {
+      Navigator.of(context).pop();
+      PairingPinDialog.show(context);
+    }
+  }
+
   @override
   void dispose() {
+    _controllerRef?.removeListener(_handleControllerState);
     _manualIpController.dispose();
     super.dispose();
   }
@@ -99,7 +116,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                           ),
                         ),
                         Text(
-                          'Smart TVs LG compatíveis',
+                          'Aparelhos compatíveis',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondaryOf(context),
@@ -197,8 +214,8 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                               const SizedBox(height: 14),
                               Text(
                                 isScanning
-                                    ? 'Buscando sua Smart TV LG...'
-                                    : 'Nenhuma TV LG localizada automaticamente.',
+                                    ? 'Buscando dispositivos na rede local...'
+                                    : 'Nenhum dispositivo localizado automaticamente.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 14,
@@ -208,7 +225,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Certifique-se de que a TV esteja ligada e conectada na mesma rede Wi-Fi.',
+                                'Certifique-se de que o aparelho esteja ligado e conectado na mesma rede Wi-Fi.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 12,
@@ -268,13 +285,38 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        tv.name,
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimaryOf(context),
-                                        ),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              tv.name,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.textPrimaryOf(context),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surfaceElevatedOf(context),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: AppColors.borderSubtleOf(context)),
+                                            ),
+                                            child: Text(
+                                              tv.brand.displayName,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.iconHighlightOf(context),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
@@ -322,9 +364,13 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                     ),
                                     onPressed: () async {
                                       await controller.connectToTv(tv);
-                                      if (context.mounted &&
-                                          controller.isConnected) {
-                                        Navigator.of(context).pop();
+                                      if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
+                                        if (controller.isConnected) {
+                                          Navigator.of(context).pop();
+                                        } else if (controller.isWaitingPairing) {
+                                          Navigator.of(context).pop();
+                                          PairingPinDialog.show(context);
+                                        }
                                       }
                                     },
                                     child: const Text('Conectar',

@@ -9,26 +9,8 @@ import 'services/volume_key_service.dart';
 import 'ui/theme/app_theme.dart';
 import 'ui/views/remote_view.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
-    await windowManager.ensureInitialized();
-
-    const windowOptions = WindowOptions(
-      size: Size(440, 800),
-      minimumSize: Size(340, 540),
-      center: true,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      title: 'SixF Remote',
-    );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
-  }
-
   runApp(const SixFRemoteApp());
 }
 
@@ -62,10 +44,20 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
 
   void _initDesktopFeatures() async {
     if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
-      windowManager.addListener(this);
-      await windowManager.setPreventClose(true);
+      try {
+        windowManager.addListener(this);
+        await windowManager.setPreventClose(true);
+        await windowManager.show();
+        await windowManager.focus();
+      } catch (e) {
+        debugPrint('[Desktop] Erro windowManager: $e');
+      }
     }
-    await TrayService().init(_remoteController);
+    try {
+      await TrayService().init(_remoteController);
+    } catch (e) {
+      debugPrint('[Desktop] Erro TrayService: $e');
+    }
   }
 
   @override

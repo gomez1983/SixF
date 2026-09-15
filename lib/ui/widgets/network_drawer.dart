@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
+import '../../services/drivers/tv_driver.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
+import 'pairing_pin_dialog.dart';
 
 /// Gaveta Lateral (Drawer) para configuração dos parâmetros de rede e preferências da Smart TV LG.
 ///
@@ -80,7 +82,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                             ),
                           ),
                           Text(
-                            'LG webOS Smart TV',
+                            controller.currentBrand.displayName,
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondaryOf(context),
@@ -145,6 +147,76 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
 
                         const SizedBox(height: 12),
 
+                        // Card de Seleção de Marca
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceCardOf(context),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderSubtleOf(context)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Marca / Plataforma da TV',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondaryOf(context),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: TvBrand.values.map((brand) {
+                                  final isSelected = controller.currentBrand == brand;
+                                  return Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                                      child: InkWell(
+                                        onTap: () => controller.selectBrand(brand),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? AppColors.surfaceElevatedOf(context)
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isSelected ? AppColors.iconHighlightOf(context) : AppColors.borderSubtleOf(context),
+                                              width: isSelected ? 1.5 : 1,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              brand == TvBrand.lgWebOs
+                                                  ? 'LG webOS'
+                                                  : brand == TvBrand.androidTv
+                                                      ? 'Google TV'
+                                                      : 'Samsung',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                color: isSelected
+                                                    ? AppColors.textPrimaryOf(context)
+                                                    : AppColors.textSecondaryOf(context),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
                         // Aviso de Pareamento na TV quando aplicável
                         if (isWaitingPairing) ...[
                           Container(
@@ -156,21 +228,41 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                 color: AppColors.buttonYellow.withValues(alpha: 0.6),
                               ),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                const Icon(Icons.tv_rounded,
-                                    color: AppColors.buttonYellow, size: 22),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Aviso na tela da TV: por favor, clique em "Permitir" na sua TV LG para autorizar o controle.',
-                                    style: TextStyle(
-                                      color: AppColors.textPrimaryOf(context),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                                Row(
+                                  children: [
+                                    const Icon(Icons.tv_rounded,
+                                        color: AppColors.buttonYellow, size: 22),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        controller.supportsPairingPin
+                                            ? 'A TV está exibindo um código PIN. Digite o código para parear:'
+                                            : 'Aviso na tela da TV: por favor, clique em "Permitir" na sua TV para autorizar o controle.',
+                                        style: TextStyle(
+                                          color: AppColors.textPrimaryOf(context),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (controller.supportsPairingPin) ...[
+                                  const SizedBox(height: 8),
+                                  ElevatedButton.icon(
+                                    onPressed: () => PairingPinDialog.show(context),
+                                    icon: const Icon(Icons.pin_outlined, size: 16),
+                                    label: const Text('Digitar Código PIN'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.iconHighlightOf(context),
+                                      foregroundColor: Colors.black,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),

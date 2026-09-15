@@ -11,6 +11,7 @@ import '../widgets/header_bar.dart';
 import '../widgets/multimedia_controls.dart';
 import '../widgets/network_drawer.dart';
 import '../widgets/numeric_keypad.dart';
+import '../widgets/pairing_pin_dialog.dart';
 import '../widgets/remote_button.dart';
 import '../widgets/system_navigation_controls.dart';
 import '../widgets/trackpad_widget.dart';
@@ -31,6 +32,19 @@ class _RemoteViewState extends State<RemoteView> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _focusNode = FocusNode();
   int _selectedTabIndex = 0; // 0: Controle, 1: Teclas & Mídia, 2: Magic Trackpad
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = context.read<RemoteController>();
+      controller.onPinPromptRequested = (prompt) {
+        if (prompt && mounted) {
+          PairingPinDialog.show(context);
+        }
+      };
+    });
+  }
 
   @override
   void dispose() {

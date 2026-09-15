@@ -168,7 +168,7 @@ void main() {
 
       // Modal de descoberta aberto
       expect(find.text('Dispositivos na Rede'), findsOneWidget);
-      expect(find.text('Smart TVs LG compatíveis'), findsOneWidget);
+      expect(find.text('Aparelhos compatíveis'), findsOneWidget);
       expect(find.text('Buscar'), findsOneWidget);
 
       // Fecha o modal

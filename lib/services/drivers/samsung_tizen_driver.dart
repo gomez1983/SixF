@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'tv_driver.dart';
 
 /// Driver de comunicação para Smart TVs Samsung rodando Tizen OS
-/// via protocolo WebSocket (portas 8001/8002).
+/// via protocolo WebSocket (portas 8001/8002) e consulta REST.
 class SamsungTizenDriver implements TvDriver {
+  WebSocket? _socket;
   DeviceConnectionState _state = DeviceConnectionState.disconnected;
+  String? _currentIp;
+  String? _token;
 
   @override
   final TvBrand brand = TvBrand.samsungTizen;
@@ -56,39 +61,181 @@ class SamsungTizenDriver implements TvDriver {
     String? authToken,
     Duration timeout = const Duration(seconds: 4),
   }) async {
+    disconnect();
+    _currentIp = ipAddress.trim();
+    _token = authToken;
     _setState(DeviceConnectionState.connecting);
-    debugPrint('[Samsung] Conectando à TV Samsung Tizen em $ipAddress...');
-    // A implementação completa de WebSocket porta 8001/8002 será adicionada na expansão de marcas.
-    return false;
+
+    if (kIsWeb) {
+      debugPrint('[Samsung] WebSocket nativo não é suportado no navegador Web.');
+      _setState(DeviceConnectionState.disconnected);
+      return false;
+    }
+
+    // 1. Tenta obter metadados do aparelho via REST em background
+    _fetchDeviceInfo(_currentIp!);
+
+    final appNameBase64 = base64Encode(utf8.encode('SixF'));
+
+    try {
+      // 2. Tenta porta segura 8002 (Tizen moderno 2016+)
+      String secureUrl = 'wss://$_currentIp:8002/api/v2/channels/samsung.remote.control?name=$appNameBase64';
+      if (_token != null && _token!.isNotEmpty) {
+        secureUrl += '&token=$_token';
+      }
+
+      bool connected = await _tryConnect(secureUrl, isSecure: true, timeout: timeout);
+
+      // 3. Fallback para porta 8001 (Tizen legado/HTTP)
+      if (!connected) {
+        debugPrint('[Samsung] Tentando fallback para porta 8001 (ws://)...');
+        final legacyUrl = 'ws://$_currentIp:8001/api/v2/channels/samsung.remote.control?name=$appNameBase64';
+        connected = await _tryConnect(legacyUrl, isSecure: false, timeout: timeout);
+      }
+
+      if (!connected) {
+        debugPrint('[Samsung] Não foi possível conectar à TV Samsung em $_currentIp.');
+        _setState(DeviceConnectionState.disconnected);
+        onError?.call('Não foi possível conectar à TV Samsung em $_currentIp.');
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('[Samsung] Erro ao conectar: $e');
+      _setState(DeviceConnectionState.disconnected);
+      onError?.call('Erro de conexão Samsung: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _tryConnect(String url, {required bool isSecure, required Duration timeout}) async {
+    try {
+      if (Platform.environment.containsKey('FLUTTER_TEST')) {
+        return false;
+      }
+
+      final client = HttpClient()
+        ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+
+      _socket = await WebSocket.connect(
+        url,
+        customClient: isSecure ? client : null,
+      ).timeout(timeout);
+
+      _socket!.listen(
+        _onMessageReceived,
+        onDone: _onSocketClosed,
+        onError: (err) {
+          debugPrint('[Samsung] Erro no socket: $err');
+          disconnect();
+        },
+      );
+
+      _setState(DeviceConnectionState.connected);
+      debugPrint('[Samsung] Conectado com sucesso em $url');
+      return true;
+    } catch (e) {
+      debugPrint('[Samsung] Falha ao tentar $url: $e');
+      return false;
+    }
+  }
+
+  void _onMessageReceived(dynamic data) {
+    try {
+      final msg = jsonDecode(data as String) as Map<String, dynamic>;
+      final event = msg['event'];
+
+      if (event == 'ms.channel.connect') {
+        _setState(DeviceConnectionState.connected);
+        final payload = msg['data'] as Map<String, dynamic>?;
+        if (payload != null && payload.containsKey('token')) {
+          final token = payload['token'] as String;
+          _token = token;
+          onAuthTokenReceived?.call(token);
+          debugPrint('[Samsung] Token de autorização recebido: $token');
+        }
+      } else if (event == 'ms.channel.clientConnect') {
+        _setState(DeviceConnectionState.connected);
+      } else if (event == 'ms.channel.unauthorized') {
+        _setState(DeviceConnectionState.pairingPrompt);
+        debugPrint('[Samsung] Confirmação pendente na tela da TV Samsung...');
+      }
+    } catch (e) {
+      debugPrint('[Samsung] Erro ao decodificar mensagem: $e');
+    }
+  }
+
+  void _onSocketClosed() {
+    debugPrint('[Samsung] Conexão com TV Samsung encerrada.');
+    _socket = null;
+    _setState(DeviceConnectionState.disconnected);
+  }
+
+  /// Consulta os metadados da TV Samsung via REST na porta 8001
+  Future<void> _fetchDeviceInfo(String ip) async {
+    try {
+      if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 2);
+      final request = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/'));
+      final response = await request.close().timeout(const Duration(seconds: 2));
+
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final device = json['device'] as Map<String, dynamic>?;
+        if (device != null) {
+          final name = device['name'] as String? ?? 'Samsung Smart TV';
+          final model = device['modelName'] as String?;
+          onDeviceNameResolved?.call(name, model);
+          debugPrint('[Samsung] Informações resolvidas: $name ($model)');
+        }
+      }
+    } catch (_) {
+      // Falha silenciosa de probe REST
+    }
   }
 
   @override
-  Future<void> sendPairingPin(String pin) async {}
+  Future<void> sendPairingPin(String pin) async {
+    // Samsung Tizen exibe prompt "Permitir" na tela, sem PIN.
+  }
 
   @override
   void disconnect() {
+    try {
+      _socket?.close();
+    } catch (_) {}
+    _socket = null;
     _setState(DeviceConnectionState.disconnected);
-    debugPrint('[Samsung] Desconectado da TV Samsung.');
   }
 
   @override
   void sendKey(RemoteKey key) {
-    debugPrint('[Samsung] Comando enviado: $key');
+    final tizenKey = _mapKeyToTizen(key);
+    if (tizenKey != null) {
+      _sendTizenKey(tizenKey);
+    }
   }
 
   @override
   void sendDigit(int digit) {
-    debugPrint('[Samsung] Dígito enviado: $digit');
+    if (digit >= 0 && digit <= 9) {
+      _sendTizenKey('KEY_$digit');
+    }
   }
 
   @override
   void setMute(bool mute) {
-    debugPrint('[Samsung] Mudo: $mute');
+    _sendTizenKey('KEY_MUTE');
   }
 
   @override
   void setVolume(int volume) {
-    debugPrint('[Samsung] Volume: $volume');
+    // Samsung Tizen não possui comando REST/WS direto de volume absoluto sem SmartThings; usa VOLUP/VOLDOWN
+    _sendTizenKey('KEY_VOLUP');
   }
 
   @override
@@ -101,11 +248,108 @@ class SamsungTizenDriver implements TvDriver {
 
   @override
   void sendText(String text) {
-    debugPrint('[Samsung] Digitando texto: $text');
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
+      _sendTizenKey('KEY_${char.toUpperCase()}');
+    }
   }
 
   @override
   void openApp(String appId) {
-    debugPrint('[Samsung] Abrindo app: $appId');
+    // Abre aplicativo via REST API
+    if (_currentIp != null && _currentIp!.isNotEmpty) {
+      _launchAppRest(_currentIp!, appId);
+    }
+  }
+
+  Future<void> _launchAppRest(String ip, String appId) async {
+    try {
+      final client = HttpClient();
+      final request = await client.postUrl(Uri.parse('http://$ip:8001/api/v2/applications/$appId'));
+      await request.close();
+    } catch (e) {
+      debugPrint('[Samsung] Erro ao abrir app $appId: $e');
+    }
+  }
+
+  void _sendTizenKey(String keyName) {
+    if (!isConnected || _socket == null) {
+      debugPrint('[Samsung] Tecla não enviada: TV desconectada ($keyName)');
+      return;
+    }
+
+    final payload = {
+      'method': 'ms.remote.control',
+      'params': {
+        'Cmd': 'Click',
+        'DataOfCmd': keyName,
+        'Option': 'false',
+        'TypeOfRemote': 'SendRemoteKey',
+      }
+    };
+
+    try {
+      _socket!.add(jsonEncode(payload));
+      debugPrint('[Samsung] Tecla enviada: $keyName');
+    } catch (e) {
+      debugPrint('[Samsung] Erro ao enviar comando: $e');
+    }
+  }
+
+  String? _mapKeyToTizen(RemoteKey key) {
+    switch (key) {
+      case RemoteKey.power:
+        return 'KEY_POWER';
+      case RemoteKey.volumeUp:
+        return 'KEY_VOLUP';
+      case RemoteKey.volumeDown:
+        return 'KEY_VOLDOWN';
+      case RemoteKey.mute:
+        return 'KEY_MUTE';
+      case RemoteKey.channelUp:
+        return 'KEY_CHUP';
+      case RemoteKey.channelDown:
+        return 'KEY_CHDOWN';
+      case RemoteKey.dpadUp:
+        return 'KEY_UP';
+      case RemoteKey.dpadDown:
+        return 'KEY_DOWN';
+      case RemoteKey.dpadLeft:
+        return 'KEY_LEFT';
+      case RemoteKey.dpadRight:
+        return 'KEY_RIGHT';
+      case RemoteKey.dpadOk:
+        return 'KEY_ENTER';
+      case RemoteKey.back:
+        return 'KEY_RETURN';
+      case RemoteKey.home:
+        return 'KEY_HOME';
+      case RemoteKey.menu:
+        return 'KEY_MENU';
+      case RemoteKey.exit:
+        return 'KEY_EXIT';
+      case RemoteKey.input:
+        return 'KEY_SOURCE';
+      case RemoteKey.play:
+        return 'KEY_PLAY';
+      case RemoteKey.pause:
+        return 'KEY_PAUSE';
+      case RemoteKey.stop:
+        return 'KEY_STOP';
+      case RemoteKey.rewind:
+        return 'KEY_REWIND';
+      case RemoteKey.fastForward:
+        return 'KEY_FF';
+      case RemoteKey.colorRed:
+        return 'KEY_RED';
+      case RemoteKey.colorGreen:
+        return 'KEY_GREEN';
+      case RemoteKey.colorYellow:
+        return 'KEY_YELLOW';
+      case RemoteKey.colorBlue:
+        return 'KEY_CYAN';
+      case RemoteKey.dash:
+        return 'KEY_DASH';
+    }
   }
 }
