@@ -149,46 +149,7 @@ class SsdpDiscoveryService {
         });
       }
 
-      // 4. Configura ouvintes dos sockets mDNS ANTES de enviar pacotes
-      for (final s in mdnsSockets) {
-        s.listen((event) {
-          if (event == RawSocketEvent.read) {
-            final dg = s.receive();
-            if (dg == null) return;
-            final senderIp = dg.address.address;
-            final str = utf8.decode(dg.data, allowMalformed: true);
-
-            if (str.contains('googlecast') ||
-                str.contains('androidtvremote') ||
-                str.contains('Chromecast')) {
-              String name = 'Google Chromecast ($senderIp)';
-              final fnMatch = RegExp(r'fn=([^\x00\r\n]+)').firstMatch(str);
-              if (fnMatch != null) {
-                name = fnMatch.group(1)!.trim();
-              }
-
-              if (!discoveredMap.containsKey(senderIp) ||
-                  discoveredMap[senderIp]?.brand != TvBrand.androidTv) {
-                discoveredMap[senderIp] = DiscoveredTv(
-                  ip: senderIp,
-                  name: name,
-                  brand: TvBrand.androidTv,
-                  modelName: 'Chromecast / Google TV',
-                );
-
-                // Consulta eureka_info em background para refinar nome e modelo
-                _probeGoogleCast(senderIp).then((castDev) {
-                  if (castDev != null) {
-                    discoveredMap[senderIp] = castDev;
-                  }
-                }).catchError((_) {});
-              }
-            }
-          }
-        });
-      }
-
-      // 5. Envia consultas SSDP
+      // 4. Envia consultas SSDP
       final ssdpQueries = [
         'M-SEARCH * HTTP/1.1\r\n'
             'HOST: $_ssdpMulticastAddress:$_ssdpPort\r\n'
@@ -223,19 +184,7 @@ class SsdpDiscoveryService {
         }
       }
 
-      // 6. Envia consultas mDNS (duplo disparo para resiliência de rede)
-      final mdnsQueries = [
-        _buildMdnsQuery('_googlecast._tcp.local'),
-        _buildMdnsQuery('_androidtvremote2._tcp.local'),
-      ];
-
-      for (final s in mdnsSockets) {
-        for (final q in mdnsQueries) {
-          s.send(q, mdnsTarget, _mdnsPort);
-        }
-      }
-
-      // 7. Varredura direta e probes paralelos (knownIp e varredura TCP na sub-rede física)
+      // 5. Varredura direta e probes paralelos (knownIp e varredura TCP na sub-rede física)
       final probeFutures = <Future<void>>[];
 
       if (knownIp != null && knownIp.trim().isNotEmpty && knownIp != '192.168.1.150') {
@@ -244,19 +193,8 @@ class SsdpDiscoveryService {
         }));
       }
 
-      // Dispara varredura rápida de portas conhecidas (8008 Cast / 8001 Samsung) na sub-rede
+      // Dispara varredura rápida de portas conhecidas (8001 Samsung / 3000 LG) na sub-rede
       probeFutures.add(_sweepLocalSubnet(interfaces, discoveredMap));
-
-      // Re-dispara mDNS após 500ms
-      Future.delayed(const Duration(milliseconds: 500), () {
-        for (final s in mdnsSockets) {
-          for (final q in mdnsQueries) {
-            try {
-              s.send(q, mdnsTarget, _mdnsPort);
-            } catch (_) {}
-          }
-        }
-      });
 
       // Aguarda a janela de timeout configurada
       await Future.delayed(timeout);
@@ -307,11 +245,7 @@ class SsdpDiscoveryService {
     String ip, {
     Duration timeout = const Duration(seconds: 2),
   }) async {
-    // 1. Testa Google Chromecast / Google TV (porta 8008)
-    final castDev = await _probeGoogleCast(ip, timeout: timeout);
-    if (castDev != null) return castDev;
-
-    // 2. Testa Samsung Tizen (porta 8001)
+    // 1. Testa Samsung Tizen (porta 8001)
     final samsungDev = await _probeSamsungTizen(ip, timeout: timeout);
     if (samsungDev != null) return samsungDev;
 
@@ -319,32 +253,6 @@ class SsdpDiscoveryService {
     final lgDev = await _probeLgWebOs(ip, timeout: timeout);
     if (lgDev != null) return lgDev;
 
-    return null;
-  }
-
-  static Future<DiscoveredTv?> _probeGoogleCast(
-    String ip, {
-    Duration timeout = const Duration(milliseconds: 1200),
-  }) async {
-    final client = HttpClient()..connectionTimeout = timeout;
-    try {
-      final req = await client.getUrl(Uri.parse('http://$ip:8008/setup/eureka_info')).timeout(timeout);
-      final res = await req.close().timeout(timeout);
-      if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        final name = json['name'] as String? ?? 'Google Chromecast';
-        final model = json['model_name'] as String? ?? 'Chromecast';
-        return DiscoveredTv(
-          ip: ip,
-          name: name,
-          brand: TvBrand.androidTv,
-          modelName: model,
-        );
-      }
-    } catch (_) {} finally {
-      client.close(force: true);
-    }
     return null;
   }
 
@@ -444,24 +352,24 @@ class SsdpDiscoveryService {
         await Future.wait(chunk.map((ip) async {
           if (discoveredMap.containsKey(ip)) return;
 
-          // 1. Testa porta 8008 (Google Cast)
-          try {
-            final sCast = await Socket.connect(ip, 8008, timeout: const Duration(milliseconds: 300));
-            sCast.destroy();
-            final castDev = await _probeGoogleCast(ip);
-            if (castDev != null) {
-              discoveredMap[ip] = castDev;
-              return;
-            }
-          } catch (_) {}
-
-          // 2. Testa porta 8001 (Samsung Tizen)
+          // 1. Testa porta 8001 (Samsung Tizen)
           try {
             final sSam = await Socket.connect(ip, 8001, timeout: const Duration(milliseconds: 300));
             sSam.destroy();
             final samDev = await _probeSamsungTizen(ip);
             if (samDev != null) {
               discoveredMap[ip] = samDev;
+              return;
+            }
+          } catch (_) {}
+
+          // 2. Testa porta 3000 (LG webOS fallback)
+          try {
+            final sLg = await Socket.connect(ip, 3000, timeout: const Duration(milliseconds: 300));
+            sLg.destroy();
+            final lgDev = await _probeLgWebOs(ip);
+            if (lgDev != null) {
+              discoveredMap[ip] = lgDev;
               return;
             }
           } catch (_) {}

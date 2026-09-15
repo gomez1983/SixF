@@ -4,7 +4,6 @@ import '../../controllers/remote_controller.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
-import 'pairing_pin_dialog.dart';
 
 /// Gaveta Lateral (Drawer) para configuração dos parâmetros de rede e preferências da Smart TV LG.
 ///
@@ -193,9 +192,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                             child: Text(
                                               brand == TvBrand.lgWebOs
                                                   ? 'LG webOS'
-                                                  : brand == TvBrand.androidTv
-                                                      ? 'Google TV'
-                                                      : 'Samsung',
+                                                  : 'Samsung Tizen',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -249,20 +246,6 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                     ),
                                   ],
                                 ),
-                                if (controller.supportsPairingPin) ...[
-                                  const SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: () => PairingPinDialog.show(context),
-                                    icon: const Icon(Icons.pin_outlined, size: 16),
-                                    label: const Text('Digitar Código PIN'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.iconHighlightOf(context),
-                                      foregroundColor: Colors.black,
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
                           ),

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../theme/app_colors.dart';
-import 'pairing_pin_dialog.dart';
 
 /// Modal para busca e seleção de TVs LG na rede local.
 ///
@@ -28,16 +27,11 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
   late final TextEditingController _manualIpController;
   bool _showManualIp = false;
 
-  RemoteController? _controllerRef;
-
   @override
   void initState() {
     super.initState();
     final controller = context.read<RemoteController>();
-    _controllerRef = controller;
     _manualIpController = TextEditingController(text: controller.ipAddress);
-
-    controller.addListener(_handleControllerState);
 
     // Inicia a varredura automaticamente ao abrir o diálogo
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -47,18 +41,8 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
     });
   }
 
-  void _handleControllerState() {
-    if (!mounted) return;
-    final controller = _controllerRef;
-    if (controller != null && controller.isWaitingPairing) {
-      Navigator.of(context).pop();
-      PairingPinDialog.show(context);
-    }
-  }
-
   @override
   void dispose() {
-    _controllerRef?.removeListener(_handleControllerState);
     _manualIpController.dispose();
     super.dispose();
   }
@@ -367,9 +351,6 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                       if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
                                         if (controller.isConnected) {
                                           Navigator.of(context).pop();
-                                        } else if (controller.isWaitingPairing) {
-                                          Navigator.of(context).pop();
-                                          PairingPinDialog.show(context);
                                         }
                                       }
                                     },

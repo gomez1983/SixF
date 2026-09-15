@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sixf_remote/controllers/remote_controller.dart';
-import 'package:sixf_remote/services/drivers/android_tv_driver.dart';
 import 'package:sixf_remote/services/drivers/driver_factory.dart';
 import 'package:sixf_remote/services/drivers/lg_webos_driver.dart';
 import 'package:sixf_remote/services/drivers/samsung_tizen_driver.dart';
@@ -19,9 +18,6 @@ void main() {
       expect(TvBrand.lgWebOs.displayName, 'LG webOS');
       expect(TvBrand.lgWebOs.id, 'lg_webos');
 
-      expect(TvBrand.androidTv.displayName, 'Google TV / Android TV');
-      expect(TvBrand.androidTv.id, 'android_tv');
-
       expect(TvBrand.samsungTizen.displayName, 'Samsung Tizen');
       expect(TvBrand.samsungTizen.id, 'samsung_tizen');
     });
@@ -32,12 +28,6 @@ void main() {
       expect(lg.brand, TvBrand.lgWebOs);
       expect(lg.supportsTrackpad, isTrue);
       expect(lg.supportsPairingPin, isFalse);
-
-      final atv = DriverFactory.create(TvBrand.androidTv);
-      expect(atv, isA<AndroidTvDriver>());
-      expect(atv.brand, TvBrand.androidTv);
-      expect(atv.supportsTrackpad, isFalse);
-      expect(atv.supportsPairingPin, isTrue);
 
       final samsung = DriverFactory.create(TvBrand.samsungTizen);
       expect(samsung, isA<SamsungTizenDriver>());
@@ -112,37 +102,6 @@ void main() {
     });
   });
 
-  group('AndroidTvDriver Unit Tests', () {
-    late AndroidTvDriver driver;
-
-    setUp(() {
-      driver = AndroidTvDriver();
-    });
-
-    tearDown(() {
-      driver.disconnect();
-    });
-
-    test('Propriedades e suporte a PIN Android TV', () {
-      expect(driver.brand, TvBrand.androidTv);
-      expect(driver.brandDisplayName, 'Google TV / Android TV');
-      expect(driver.supportsTrackpad, isFalse);
-      expect(driver.supportsPairingPin, isTrue);
-      expect(driver.connectionState, DeviceConnectionState.disconnected);
-      expect(driver.isConnected, isFalse);
-    });
-
-    test('Comandos e PIN são despachados sem exceções', () async {
-      for (final key in RemoteKey.values) {
-        expect(() => driver.sendKey(key), returnsNormally);
-      }
-      expect(() => driver.sendDigit(9), returnsNormally);
-      expect(() => driver.sendText('Chromecast'), returnsNormally);
-      await expectLater(driver.sendPairingPin('1234'), completes);
-      expect(() => driver.disconnect(), returnsNormally);
-    });
-  });
-
   group('RemoteController com TvDriver Unit Tests', () {
     late RemoteController controller;
 
@@ -164,12 +123,6 @@ void main() {
 
     test('Alternância de marca atualiza o driver e persiste no storage', () {
       expect(controller.currentBrand, TvBrand.lgWebOs);
-
-      controller.selectBrand(TvBrand.androidTv);
-      expect(controller.currentBrand, TvBrand.androidTv);
-      expect(controller.driver, isA<AndroidTvDriver>());
-      expect(controller.supportsPairingPin, isTrue);
-      expect(controller.storageService.getBrand(), TvBrand.androidTv);
 
       controller.selectBrand(TvBrand.samsungTizen);
       expect(controller.currentBrand, TvBrand.samsungTizen);

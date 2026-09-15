@@ -11,7 +11,6 @@ import '../widgets/header_bar.dart';
 import '../widgets/multimedia_controls.dart';
 import '../widgets/network_drawer.dart';
 import '../widgets/numeric_keypad.dart';
-import '../widgets/pairing_pin_dialog.dart';
 import '../widgets/remote_button.dart';
 import '../widgets/system_navigation_controls.dart';
 import '../widgets/trackpad_widget.dart';
@@ -36,14 +35,6 @@ class _RemoteViewState extends State<RemoteView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final controller = context.read<RemoteController>();
-      controller.onPinPromptRequested = (prompt) {
-        if (prompt && mounted) {
-          PairingPinDialog.show(context);
-        }
-      };
-    });
   }
 
   @override

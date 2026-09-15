@@ -3,7 +3,6 @@ import 'dart:async';
 /// Marcas e plataformas de Smart TVs e dispositivos suportados pelo SixF.
 enum TvBrand {
   lgWebOs,
-  androidTv, // Chromecast com Google TV, Sony, TCL, Philips, Xiaomi
   samsungTizen,
 }
 
@@ -12,8 +11,6 @@ extension TvBrandExtension on TvBrand {
     switch (this) {
       case TvBrand.lgWebOs:
         return 'LG webOS';
-      case TvBrand.androidTv:
-        return 'Google TV / Android TV';
       case TvBrand.samsungTizen:
         return 'Samsung Tizen';
     }
@@ -23,8 +20,6 @@ extension TvBrandExtension on TvBrand {
     switch (this) {
       case TvBrand.lgWebOs:
         return 'lg_webos';
-      case TvBrand.androidTv:
-        return 'android_tv';
       case TvBrand.samsungTizen:
         return 'samsung_tizen';
     }

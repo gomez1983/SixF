@@ -1,4 +1,3 @@
-import 'android_tv_driver.dart';
 import 'lg_webos_driver.dart';
 import 'samsung_tizen_driver.dart';
 import 'tv_driver.dart';
@@ -10,8 +9,6 @@ class DriverFactory {
     switch (brand) {
       case TvBrand.lgWebOs:
         return LgWebOsDriver();
-      case TvBrand.androidTv:
-        return AndroidTvDriver();
       case TvBrand.samsungTizen:
         return SamsungTizenDriver();
     }

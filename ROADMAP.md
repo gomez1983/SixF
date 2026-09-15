@@ -1,6 +1,6 @@
 # 🗺️ Roadmap de Atualizações - SixF Smart Remote (Antigo controle_LG)
 
-Este documento centraliza o planejamento estratégico e a evolução do aplicativo, marcando a transição de um controle exclusivo para webOS (LG) em direção ao SixF (abreviação de Six Finger — múltiplos controles e dispositivos na ponta dos dedos), um controle universal inteligente para Windows e Android (LG, Chromecast / Google TV, Samsung Tizen, Sony e TCL).
+Este documento centraliza o planejamento estratégico e a evolução do aplicativo, marcando a transição de um controle exclusivo para webOS (LG) em direção ao SixF (abreviação de Six Finger — múltiplos controles e dispositivos na ponta dos dedos), um controle universal inteligente para Windows e Android focado nas plataformas líderes (LG webOS e Samsung Tizen).
 
 ---
 
@@ -33,15 +33,14 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
   - Criação de uma interface base agnóstica (TvDriver) para comandos padronizados (sendKey, volumeUp, openApp, mouseMove).
   - Isolamento do driver atual da LG em um módulo específico (LgWebOsDriver).
   - Criação de DriverFactory, AndroidTvDriver e SamsungTizenDriver desacoplando o RemoteController.
-- [x] [Expansão de Marcas e Protocolos (Android TV / Google TV / Chromecast e Samsung Tizen)](#):
-  - Chromecast e Google TV / Android TV (Sony, TCL, Philips, Xiaomi):
-    - Suporte a Chromecast com Google TV (4K / HD) via Android TV Remote Service v2 (pareamento com código PIN na tela, D-Pad, atalhos e volume).
-    - Suporte a Chromecast Clássico (Cast v2) para controle de mídia e volume.
+- [x] [Expansão de Marcas e Protocolos (Samsung Tizen e LG webOS Estável)](#):
+  - ~~Chromecast e Google TV / Android TV (Sony, TCL, Philips, Xiaomi)~~ [DESCONTINUADO / ABANDONADO]:
+    - *Desvio de rota:* As especificações recentes do protocolo Google Cast / Android TV Remote v2 apresentaram instabilidades frequentes de handshake TLS e expiração forçada de sessão pelo ecossistema Google. A funcionalidade foi abandonada para manter a confiabilidade e robustez do app.
   - Samsung Smart TV (Tizen OS):
     - Protocolo WebSocket Tizen (portas 8001/8002 com chave/token e handshake na tela).
 - [x] [Seletor de Marca & Detecção Automática no Escaneamento](#):
-  - Descoberta unificada na rede local (SSDP para LG e Samsung, mDNS para Chromecast/Google TV e varredura de portas) permitindo selecionar e parear com qualquer marca suportada.
-  - Seletor rápido de marcas na barra lateral e crachás de identificação visual no popup de busca.
+  - Descoberta unificada na rede local (SSDP para LG e Samsung, e varredura de portas 8001/3000) permitindo selecionar e parear com as marcas suportadas.
+  - Seletor rápido de marcas (LG webOS e Samsung Tizen) na barra lateral e crachás de identificação visual no popup de busca.
 
 ---
 
