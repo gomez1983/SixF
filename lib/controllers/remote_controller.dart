@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/drivers/driver_factory.dart';
 import '../services/drivers/lg_webos_driver.dart';
 import '../services/drivers/tv_driver.dart';
+import '../services/haptic_service.dart';
 import '../services/ssdp_discovery_service.dart';
 import '../services/storage_service.dart';
 import '../services/wake_on_lan_service.dart';
@@ -16,14 +17,16 @@ import '../services/webos_service.dart';
 /// - [WakeOnLanService]: Ligar TV via broadcast UDP Magic Packet.
 /// - [SsdpDiscoveryService]: Descoberta automática de dispositivos na rede local.
 /// - [StorageService]: Persistência de parâmetros, marca e chaves de pareamento.
+/// - [HapticService]: Gerenciamento de resposta tátil por vibração nos botões.
 class RemoteController extends ChangeNotifier {
   // Serviços de Back-End
   final StorageService storageService = StorageService();
   final WebOsService _webOsService = WebOsService();
   late TvDriver _driver;
 
-  // Estado de tema
+  // Estado de tema e preferências
   ThemeMode _themeMode = ThemeMode.dark;
+  bool _isHapticEnabled = true;
 
   // Estado de conexão e energia - Inicializado estritamente como DESCONECTADO
   bool _isConnected = false;
@@ -82,6 +85,11 @@ class RemoteController extends ChangeNotifier {
       } else {
         _themeMode = ThemeMode.dark;
       }
+
+      final savedHaptic = storageService.getHapticFeedbackEnabled();
+      _isHapticEnabled = savedHaptic;
+      HapticService.isEnabled = savedHaptic;
+
       notifyListeners();
     } catch (e) {
       debugPrint('[RemoteController] Erro ao inicializar serviços: $e');
@@ -207,6 +215,26 @@ class RemoteController extends ChangeNotifier {
     _logAction('Tema definido', {'modo': _themeMode.name});
   }
 
+  // --- Feedback Háptico (Vibração Tátil) ---
+
+  bool get isHapticEnabled => _isHapticEnabled;
+
+  void toggleHapticFeedback() {
+    setHapticFeedback(!_isHapticEnabled);
+  }
+
+  void setHapticFeedback(bool enabled) {
+    if (_isHapticEnabled == enabled) return;
+    _isHapticEnabled = enabled;
+    HapticService.isEnabled = enabled;
+    storageService.setHapticFeedbackEnabled(enabled);
+    if (enabled) {
+      HapticService.buttonPress();
+    }
+    _logAction('Feedback háptico alterado', {'ativo': enabled});
+    notifyListeners();
+  }
+
   void _logAction(String action, [Map<String, dynamic>? params]) {
     final timestamp = DateTime.now().toIso8601String().substring(11, 19);
     final paramsStr = (params != null && params.isNotEmpty) ? ' -> $params' : '';
@@ -262,11 +290,11 @@ class RemoteController extends ChangeNotifier {
       if (_driver.connectionState == DeviceConnectionState.pairingPrompt) {
         _isConnected = false;
         _isWaitingPairing = true;
-        _logAction('Aguardando inserção de PIN para pareamento', {
+        _logAction('Aguardando confirmação na tela da TV', {
           'ip': _ipAddress,
           'nome': _connectedTvName,
         });
-      } else if (success && _driver.connectionState == DeviceConnectionState.connected) {
+      } else if (success) {
         _isConnected = true;
         _isWaitingPairing = false;
         _isPoweredOn = true;
@@ -368,6 +396,7 @@ class RemoteController extends ChangeNotifier {
   // --- Controle de Energia ---
 
   void powerToggle() {
+    HapticService.heavyPress();
     _isPoweredOn = !_isPoweredOn;
     if (_isPoweredOn) {
       _logAction('Enviando Wake-on-LAN para ligar a TV', {'mac': _macAddress});

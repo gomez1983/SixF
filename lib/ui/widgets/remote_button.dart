@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
 
-/// Botão modular estilizado para o controle remoto desktop.
+/// Intensidade e padrão do feedback háptico (vibração) ao pressionar um botão.
+enum HapticType {
+  /// Clique leve de impacto mecânico (padrão ergonômico para teclas).
+  light,
+
+  /// Impacto médio com pulso mais firme (ações primárias como Power).
+  medium,
+
+  /// Clique sutil e discreto (seleções secundárias ou abas).
+  selection,
+
+  /// Sem vibração.
+  none,
+}
+
+/// Botão modular estilizado para o controle remoto universal SixF.
 ///
 /// Oferece suporte a feedback visual imediato (highlight e splash sutil),
-/// acionamento de [HapticFeedback.selectionClick] e estados de hover desktop.
+/// resposta tátil de vibração via [HapticService] e estados de hover desktop.
 class RemoteButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget? child;
@@ -23,6 +38,7 @@ class RemoteButton extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final bool isSelected;
   final bool isCircular;
+  final HapticType hapticType;
 
   const RemoteButton({
     super.key,
@@ -42,11 +58,23 @@ class RemoteButton extends StatelessWidget {
     this.padding,
     this.isSelected = false,
     this.isCircular = false,
+    this.hapticType = HapticType.light,
   });
 
   void _handlePress() {
-    // Chamada nativa estruturada para resposta tátil multiplataforma
-    HapticFeedback.selectionClick();
+    switch (hapticType) {
+      case HapticType.light:
+        HapticService.buttonPress();
+        break;
+      case HapticType.medium:
+        HapticService.heavyPress();
+        break;
+      case HapticType.selection:
+        HapticService.selectionClick();
+        break;
+      case HapticType.none:
+        break;
+    }
     onPressed?.call();
   }
 

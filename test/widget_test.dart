@@ -226,9 +226,10 @@ void main() {
       expect(find.text('MAC Address'), findsOneWidget);
       expect(find.text('Conectar'), findsOneWidget);
       expect(find.text('Desconectar'), findsOneWidget);
+      expect(find.text('Vibração nos Botões'), findsOneWidget);
 
       // Alterna tema pelo switch do drawer
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byKey(const Key('drawer_theme_switch')));
       await tester.pumpAndSettle();
       expect(find.text('Modo Claro (Light)'), findsOneWidget);
 

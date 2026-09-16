@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
+import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
 
 /// Área dedicada de Trackpad virtual que simula o Magic Remote da LG.
@@ -48,7 +48,7 @@ class _TrackpadWidgetState extends State<TrackpadWidget> {
   }
 
   void _onTap(RemoteController controller) {
-    HapticFeedback.selectionClick();
+    HapticService.selectionClick();
     controller.sendTrackpadClick();
   }
 

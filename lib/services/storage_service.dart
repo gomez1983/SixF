@@ -9,6 +9,7 @@ class StorageService {
   static const String _keyThemeMode = 'pref_app_theme_mode';
   static const String _keyTvName = 'pref_tv_name';
   static const String _keyBrand = 'pref_tv_brand';
+  static const String _keyHapticFeedback = 'pref_haptic_feedback_enabled';
 
   SharedPreferences? _prefs;
 
@@ -65,6 +66,15 @@ class StorageService {
   Future<bool> setThemeMode(String mode) async {
     await init();
     return await _prefs?.setString(_keyThemeMode, mode) ?? false;
+  }
+
+  bool getHapticFeedbackEnabled({bool defaultValue = true}) {
+    return _prefs?.getBool(_keyHapticFeedback) ?? defaultValue;
+  }
+
+  Future<bool> setHapticFeedbackEnabled(bool enabled) async {
+    await init();
+    return await _prefs?.setBool(_keyHapticFeedback, enabled) ?? false;
   }
 
   TvBrand? _cachedBrand;

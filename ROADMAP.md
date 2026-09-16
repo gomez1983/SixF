@@ -45,8 +45,10 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 ---
 
 ### 🌐 Fase 2: Experiência Móvel & Conexões Simultâneas (v0.9.8 Beta)
-- [ ] **Feedback Háptico (Vibração)**:
-  - Resposta tátil sutil ao tocar nos botões no Android.
+- [x] [Feedback Háptico (Vibração)](#):
+  - Resposta tátil com impacto físico suave ao tocar nos botões no Android.
+  - Pulso firme de impacto médio dedicado para alternar energia (Power) e cliques discretos no trackpad e abas.
+  - Chave de ativação/desativação no menu de configurações com persistência local.
 - [ ] **Gaveta / Atalhos de Aplicativos**:
   - Listar apps instalados no dispositivo conectado para abertura direta.
 - [ ] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:

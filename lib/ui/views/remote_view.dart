@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
+import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/color_buttons_row.dart';
 import '../widgets/dpad_widget.dart';
@@ -473,7 +474,7 @@ class _RemoteViewState extends State<RemoteView> {
     return Expanded(
       child: InkWell(
         onTap: () {
-          HapticFeedback.selectionClick();
+          HapticService.selectionClick();
           setState(() => _selectedTabIndex = index);
         },
         borderRadius: BorderRadius.circular(14),

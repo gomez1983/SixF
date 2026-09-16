@@ -31,8 +31,6 @@ class DiscoveredTv {
 class SsdpDiscoveryService {
   static const String _ssdpMulticastAddress = '239.255.255.250';
   static const int _ssdpPort = 1900;
-  static const String _mdnsMulticastAddress = '224.0.0.251';
-  static const int _mdnsPort = 5353;
 
   /// Realiza uma varredura unificada na rede local durante [timeout].
   static Future<List<DiscoveredTv>> discoverTvs({
@@ -46,9 +44,7 @@ class SsdpDiscoveryService {
 
     final discoveredMap = <String, DiscoveredTv>{};
     final ssdpSockets = <RawDatagramSocket>[];
-    final mdnsSockets = <RawDatagramSocket>[];
     final ssdpTarget = InternetAddress(_ssdpMulticastAddress);
-    final mdnsTarget = InternetAddress(_mdnsMulticastAddress);
     final pendingLocations = <String, Map<String, dynamic>>{};
 
     try {
@@ -73,16 +69,6 @@ class SsdpDiscoveryService {
             sSsdp.multicastLoopback = false;
             ssdpSockets.add(sSsdp);
           } catch (_) {}
-
-          try {
-            final sMdns = await RawDatagramSocket.bind(addr, 0, reuseAddress: true);
-            sMdns.broadcastEnabled = true;
-            sMdns.multicastLoopback = false;
-            try {
-              sMdns.joinMulticast(mdnsTarget, iface);
-            } catch (_) {}
-            mdnsSockets.add(sMdns);
-          } catch (_) {}
         }
       }
 
@@ -91,15 +77,6 @@ class SsdpDiscoveryService {
         final sAnySsdp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0, reuseAddress: true);
         sAnySsdp.broadcastEnabled = true;
         ssdpSockets.add(sAnySsdp);
-      } catch (_) {}
-
-      try {
-        final sAnyMdns = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0, reuseAddress: true);
-        sAnyMdns.broadcastEnabled = true;
-        try {
-          sAnyMdns.joinMulticast(mdnsTarget);
-        } catch (_) {}
-        mdnsSockets.add(sAnyMdns);
       } catch (_) {}
 
       // 3. Configura ouvintes dos sockets SSDP ANTES de enviar pacotes
@@ -230,9 +207,6 @@ class SsdpDiscoveryService {
       debugPrint('[Discovery] Erro durante a varredura unificada: $e');
     } finally {
       for (final s in ssdpSockets) {
-        s.close();
-      }
-      for (final s in mdnsSockets) {
         s.close();
       }
     }
@@ -428,26 +402,5 @@ class SsdpDiscoveryService {
     );
     final match = pattern.firstMatch(xml);
     return match?.group(1)?.trim() ?? '';
-  }
-
-  /// Monta um pacote de consulta DNS mDNS do tipo PTR para busca de serviços
-  static List<int> _buildMdnsQuery(String serviceName) {
-    final parts = serviceName.split('.');
-    final bytes = <int>[
-      0x00, 0x00, // Transaction ID
-      0x00, 0x00, // Flags (standard query)
-      0x00, 0x01, // Questions: 1
-      0x00, 0x00, // Answer RRs: 0
-      0x00, 0x00, // Authority RRs: 0
-      0x00, 0x00, // Additional RRs: 0
-    ];
-    for (final p in parts) {
-      bytes.add(p.length);
-      bytes.addAll(utf8.encode(p));
-    }
-    bytes.add(0x00); // End of name
-    bytes.addAll([0x00, 0x0C]); // Type PTR (12)
-    bytes.addAll([0x00, 0x01]); // Class IN (1)
-    return bytes;
   }
 }

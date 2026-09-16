@@ -136,6 +136,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                 ),
                               ),
                               Switch(
+                                key: const Key('drawer_theme_switch'),
                                 value: isDarkMode,
                                 activeThumbColor: AppColors.lgRed,
                                 onChanged: (_) => controller.toggleTheme(),
@@ -602,6 +603,67 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                               ),
                             ),
                           ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Preferência de Feedback Háptico / Vibração
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevatedOf(context).withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderSubtleOf(context)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: controller.isHapticEnabled
+                                      ? AppColors.iconHighlightOf(context).withValues(alpha: 0.15)
+                                      : AppColors.surfaceInteractiveOf(context),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.vibration_rounded,
+                                  size: 18,
+                                  color: controller.isHapticEnabled
+                                      ? AppColors.iconHighlightOf(context)
+                                      : AppColors.textSecondaryOf(context),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Vibração nos Botões',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimaryOf(context),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Feedback tátil ao pressionar (Android)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondaryOf(context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                key: const Key('drawer_haptic_switch'),
+                                value: controller.isHapticEnabled,
+                                activeThumbColor: AppColors.iconHighlightOf(context),
+                                onChanged: (val) => controller.setHapticFeedback(val),
+                              ),
+                            ],
+                          ),
                         ),
 
                         const SizedBox(height: 16),

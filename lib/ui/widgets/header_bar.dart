@@ -23,18 +23,23 @@ class HeaderBar extends StatelessWidget {
 
     final isConnected = controller.isConnected;
     final isConnecting = controller.isConnecting;
+    final isWaitingPairing = controller.isWaitingPairing;
     final isPoweredOn = controller.isPoweredOn;
     final isDarkMode = controller.isDarkMode;
 
     final statusColor = isConnecting
         ? AppColors.statusConnecting
-        : (isConnected ? AppColors.statusConnected : AppColors.statusDisconnected);
+        : (isWaitingPairing
+            ? AppColors.buttonYellow
+            : (isConnected ? AppColors.statusConnected : AppColors.statusDisconnected));
 
     final statusText = isConnecting
         ? 'Conectando...'
-        : (isConnected
-            ? (controller.connectedTvName ?? 'Conectado (WebOS)')
-            : 'Desconectado');
+        : (isWaitingPairing
+            ? 'Confirme na tela da TV'
+            : (isConnected
+                ? (controller.connectedTvName ?? 'Conectado (WebOS)')
+                : 'Desconectado'));
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -50,6 +55,7 @@ class HeaderBar extends StatelessWidget {
             width: 42,
             height: 42,
             isCircular: true,
+            hapticType: HapticType.medium,
             backgroundColor: isPoweredOn
                 ? AppColors.powerRed.withValues(alpha: 0.15)
                 : AppColors.surfaceInteractiveOf(context),
