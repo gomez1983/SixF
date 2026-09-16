@@ -49,8 +49,10 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
   - Resposta tátil com impacto físico suave ao tocar nos botões no Android.
   - Pulso firme de impacto médio dedicado para alternar energia (Power) e cliques discretos no trackpad e abas.
   - Chave de ativação/desativação no menu de configurações com persistência local.
-- [ ] **Gaveta / Atalhos de Aplicativos**:
-  - Listar apps instalados no dispositivo conectado para abertura direta.
+- [x] [Gaveta / Atalhos de Aplicativos](#):
+  - Listar apps instalados no dispositivo conectado para abertura direta com busca instantânea e grade interativa.
+  - Suporte dinâmico em tempo real via SSAP na LG webOS (`listLaunchPoints`) e catálogo curado dos principais streamings na Samsung Tizen.
+  - 4ª aba dedicada no layout mobile ("Apps"), card integrado no painel Desktop dual-pane e feedback háptico ao abrir.
 - [ ] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
   - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG + Chromecast 4K na mesma sala).
   - Aba/Pills de alternância rápida no topo da tela para trocar o controle ativo com 1 clique.

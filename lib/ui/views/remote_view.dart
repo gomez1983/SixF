@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_drawer_widget.dart';
 import '../widgets/color_buttons_row.dart';
 import '../widgets/dpad_widget.dart';
 import '../widgets/header_bar.dart';
@@ -221,12 +222,14 @@ class _RemoteViewState extends State<RemoteView> {
 
                 const SizedBox(width: 20),
 
-                // Coluna 2: Painel Magic Remote & Telemetria
+                // Coluna 2: Painel Magic Remote, Aplicativos & Telemetria
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildTrackpadExpandedCard(),
+                      const SizedBox(height: 14),
+                      _buildDesktopAppsCard(),
                       const SizedBox(height: 14),
                       _buildConsoleFeedbackCard(),
                       const SizedBox(height: 14),
@@ -242,7 +245,7 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Layout em 3 Abas Responsivo para Mobile (Galaxy S23 Ultra e telas verticais):
+  /// Layout em 4 Abas Responsivo para Mobile (Galaxy S23 Ultra e telas verticais):
   /// Aproveita 100% da largura e altura da tela sem compressão ou caixas fixas.
   Widget _buildMobileTabLayout(BoxConstraints constraints) {
     return Column(
@@ -255,7 +258,7 @@ class _RemoteViewState extends State<RemoteView> {
           ),
         ),
 
-        // 2. Conteúdo das 3 Abas
+        // 2. Conteúdo das 4 Abas
         Expanded(
           child: IndexedStack(
             index: _selectedTabIndex,
@@ -268,11 +271,14 @@ class _RemoteViewState extends State<RemoteView> {
 
               // Aba 3: Magic Trackpad em Tela Cheia
               _buildTab3Trackpad(),
+
+              // Aba 4: Gaveta e Atalhos de Aplicativos
+              const AppDrawerWidget(),
             ],
           ),
         ),
 
-        // 3. Barra de Navegação Inferior das 3 Abas
+        // 3. Barra de Navegação Inferior das 4 Abas
         _buildBottomTabBar(),
       ],
     );
@@ -455,6 +461,11 @@ class _RemoteViewState extends State<RemoteView> {
                 title: 'Magic Trackpad',
                 icon: Icons.touch_app_rounded,
               ),
+              _buildBottomNavItem(
+                index: 3,
+                title: 'Apps',
+                icon: Icons.apps_rounded,
+              ),
             ],
           ),
         ),
@@ -616,6 +627,31 @@ class _RemoteViewState extends State<RemoteView> {
           const SizedBox(height: 12),
           const TrackpadWidget(height: 260),
         ],
+      ),
+    );
+  }
+
+  /// Card dedicado para exibição e acionamento de aplicativos instalados no layout Desktop
+  Widget _buildDesktopAppsCard() {
+    final isDark = AppColors.isDark(context);
+
+    return Container(
+      height: 295,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCardOf(context),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderSubtleOf(context)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black26 : Colors.black12,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const ClipRRect(
+        borderRadius: BorderRadius.all(Radius.circular(24)),
+        child: AppDrawerWidget(isEmbeddedInDesktop: true),
       ),
     );
   }

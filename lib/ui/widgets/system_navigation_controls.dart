@@ -26,10 +26,10 @@ class SystemNavigationControls extends StatelessWidget {
         onPressed: () => controller.pressMenu(),
       ),
       _NavAction(
-        icon: Icons.undo_rounded,
-        label: 'VOLTAR',
-        tooltip: 'Voltar à tela anterior (Esc ou Backspace)',
-        onPressed: () => controller.pressBack(),
+        icon: Icons.input_rounded,
+        label: 'INPUT',
+        tooltip: 'Alternar Entrada / Fonte (HDMI, AV, TV)',
+        onPressed: () => controller.navInput(),
       ),
       _NavAction(
         icon: Icons.exit_to_app_rounded,

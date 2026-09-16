@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'drivers/tv_app_info.dart';
 
 /// Estados possíveis da conexão WebOS com a TV LG.
 enum WebOsConnectionState {
@@ -24,6 +25,7 @@ class WebOsService {
   int _requestId = 1;
   String? _clientKey;
   String? _currentIp;
+  final Map<String, Completer<Map<String, dynamic>>> _pendingRequests = {};
 
   // Callbacks de eventos
   Function(WebOsConnectionState state)? onStateChanged;
@@ -216,6 +218,14 @@ class WebOsService {
 
       debugPrint('[WebOS] Resposta recebida ($type / $id): $payload');
 
+      // 0. Resolução de requisições pendentes correlacionadas por ID
+      if (id != null && _pendingRequests.containsKey(id)) {
+        final completer = _pendingRequests.remove(id);
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(payload ?? json);
+        }
+      }
+
       // 1. Mensagem de prompt para autorizar na tela da TV
       if (type == 'response' && payload?['pairingType'] == 'PROMPT') {
         _setState(WebOsConnectionState.pairingPrompt);
@@ -370,6 +380,93 @@ class WebOsService {
     };
 
     _sendJson(_mainSocket, request);
+  }
+
+  /// Envia uma requisição SSAP e aguarda a resposta associada por [id].
+  Future<Map<String, dynamic>?> sendRequestWithResponse(
+    String uri, [
+    Map<String, dynamic>? params,
+    Duration timeout = const Duration(seconds: 4),
+  ]) async {
+    if (!isConnected || _mainSocket == null) {
+      debugPrint('[WebOS] Requisição não enviada: TV não conectada ($uri)');
+      return null;
+    }
+
+    final id = 'req_${_nextId()}';
+    final completer = Completer<Map<String, dynamic>>();
+    _pendingRequests[id] = completer;
+
+    final request = {
+      'id': id,
+      'type': 'request',
+      'uri': uri,
+      if (params != null && params.isNotEmpty) 'payload': params,
+    };
+
+    _sendJson(_mainSocket, request);
+
+    try {
+      return await completer.future.timeout(
+        timeout,
+        onTimeout: () {
+          _pendingRequests.remove(id);
+          debugPrint('[WebOS] Timeout aguardando resposta para $uri ($id)');
+          return <String, dynamic>{};
+        },
+      );
+    } catch (e) {
+      _pendingRequests.remove(id);
+      debugPrint('[WebOS] Erro na requisição $uri: $e');
+      return null;
+    }
+  }
+
+  /// Consulta e retorna os aplicativos instalados na TV LG webOS via SSAP.
+  Future<List<TvAppInfo>> getInstalledApps() async {
+    if (!isConnected) return [];
+
+    try {
+      // 1. Tenta listLaunchPoints (retorna todos os pontos de inicialização de apps com ícones)
+      var response = await sendRequestWithResponse('ssap://com.webos.applicationManager/listLaunchPoints');
+      var rawList = response?['launchPoints'];
+
+      // 2. Fallback para listApps caso listLaunchPoints não retorne itens
+      if (rawList == null || rawList is! List || rawList.isEmpty) {
+        response = await sendRequestWithResponse('ssap://com.webos.applicationManager/listApps');
+        rawList = response?['apps'];
+      }
+
+      if (rawList is List) {
+        final List<TvAppInfo> apps = [];
+        for (final item in rawList) {
+          if (item is Map<String, dynamic>) {
+            final id = (item['id'] ?? item['appId']) as String? ?? '';
+            final title = (item['title'] ?? item['name'] ?? id) as String? ?? id;
+            var iconUrl = (item['icon'] ?? item['largeIcon'] ?? item['iconColor']) as String?;
+
+            if (id.isNotEmpty) {
+              if (iconUrl != null &&
+                  !iconUrl.startsWith('http://') &&
+                  !iconUrl.startsWith('https://')) {
+                // Arquivo local interno da TV não acessível externamente via HTTP
+                iconUrl = null;
+              }
+
+              apps.add(TvAppInfo.fromRaw(
+                id: id,
+                name: title,
+                iconUrl: iconUrl,
+              ));
+            }
+          }
+        }
+        return apps;
+      }
+    } catch (e) {
+      debugPrint('[WebOS] Erro ao listar aplicativos: $e');
+    }
+    return [];
   }
 
   // --- Métodos de Conveniência para Controles ---
@@ -572,6 +669,13 @@ class WebOsService {
   // --- Encerramento e Limpeza ---
 
   void disconnect() {
+    for (final completer in _pendingRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete(<String, dynamic>{});
+      }
+    }
+    _pendingRequests.clear();
+
     _mainSocket?.close();
     _mainSocket = null;
     _pointerSocket?.close();

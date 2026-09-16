@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'tv_app_info.dart';
+export 'tv_app_info.dart';
 
 /// Marcas e plataformas de Smart TVs e dispositivos suportados pelo SixF.
 enum TvBrand {
@@ -132,4 +134,7 @@ abstract class TvDriver {
 
   /// Abre um aplicativo pelo identificador de pacote ou URI.
   void openApp(String appId);
+
+  /// Retorna a lista de aplicativos instalados ou atalhos disponíveis no dispositivo.
+  Future<List<TvAppInfo>> getInstalledApps();
 }

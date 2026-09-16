@@ -232,4 +232,9 @@ class LgWebOsDriver implements TvDriver {
   void openApp(String appId) {
     _webOsService.launchApp(appId);
   }
+
+  @override
+  Future<List<TvAppInfo>> getInstalledApps() {
+    return _webOsService.getInstalledApps();
+  }
 }

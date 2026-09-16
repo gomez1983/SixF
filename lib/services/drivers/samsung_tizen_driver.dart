@@ -262,11 +262,31 @@ class SamsungTizenDriver implements TvDriver {
     }
   }
 
+  @override
+  Future<List<TvAppInfo>> getInstalledApps() async {
+    // Tizen moderno bloqueia a listagem genérica de apps instalados via porta local
+    // sem autenticação OAuth SmartThings. Entregamos a lista curada dos principais
+    // serviços e apps suportados pelo Tizen OS.
+    return [
+      TvAppInfo.fromRaw(id: '111299001912', name: 'YouTube'),
+      TvAppInfo.fromRaw(id: '11101200001', name: 'Netflix'),
+      TvAppInfo.fromRaw(id: '3201512006785', name: 'Prime Video'),
+      TvAppInfo.fromRaw(id: '3201901017640', name: 'Disney+'),
+      TvAppInfo.fromRaw(id: '3201807016597', name: 'Apple TV'),
+      TvAppInfo.fromRaw(id: '3201606009684', name: 'Spotify'),
+      TvAppInfo.fromRaw(id: '3201601007250', name: 'Max'),
+      TvAppInfo.fromRaw(id: '3201608010191', name: 'Globoplay'),
+      TvAppInfo.fromRaw(id: '3201710015037', name: 'Twitch'),
+      TvAppInfo.fromRaw(id: 'org.tizen.browser', name: 'Navegador Web'),
+    ];
+  }
+
   Future<void> _launchAppRest(String ip, String appId) async {
     try {
       final client = HttpClient();
       final request = await client.postUrl(Uri.parse('http://$ip:8001/api/v2/applications/$appId'));
       await request.close();
+      debugPrint('[Samsung] Requisição de abertura enviada para app $appId');
     } catch (e) {
       debugPrint('[Samsung] Erro ao abrir app $appId: $e');
     }

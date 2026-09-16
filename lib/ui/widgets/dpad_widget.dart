@@ -26,7 +26,7 @@ class DPadWidget extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Botão Lateral Esquerdo: HDMI 1
+          // Botão Lateral Esquerdo: VOLTAR
           RemoteButton(
             width: 58,
             height: 64,
@@ -34,11 +34,11 @@ class DPadWidget extends StatelessWidget {
             backgroundColor: AppColors.surfaceCardOf(context),
             borderColor: AppColors.borderSubtleOf(context),
             foregroundColor: AppColors.textPrimaryOf(context),
-            icon: Icons.settings_input_hdmi_rounded,
-            label: 'HDMI 1',
+            icon: Icons.undo_rounded,
+            label: 'VOLTAR',
             iconSize: 22,
-            tooltip: 'Alternar Entrada para HDMI 1',
-            onPressed: () => controller.switchHdmi1(),
+            tooltip: 'Voltar à tela anterior (Esc ou Backspace)',
+            onPressed: () => controller.pressBack(),
           ),
 
           const SizedBox(width: 12),
@@ -178,19 +178,42 @@ class DPadWidget extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Botão Lateral Direito: TV Digital
-          RemoteButton(
-            width: 58,
-            height: 64,
-            borderRadius: 16,
-            backgroundColor: AppColors.surfaceCardOf(context),
-            borderColor: AppColors.borderSubtleOf(context),
-            foregroundColor: AppColors.textPrimaryOf(context),
-            icon: Icons.live_tv_rounded,
-            label: 'TV Digital',
-            iconSize: 22,
-            tooltip: 'Sintonizar TV Digital / Antena',
-            onPressed: () => controller.switchTvDigital(),
+          // Botões Laterais Direitos: TV Digital e HDMI 1
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Botão Superior: TV Digital
+              RemoteButton(
+                width: 58,
+                height: 52,
+                borderRadius: 14,
+                backgroundColor: AppColors.surfaceCardOf(context),
+                borderColor: AppColors.borderSubtleOf(context),
+                foregroundColor: AppColors.textPrimaryOf(context),
+                icon: Icons.live_tv_rounded,
+                label: 'TV Digital',
+                iconSize: 20,
+                tooltip: 'Sintonizar TV Digital / Antena',
+                onPressed: () => controller.switchTvDigital(),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Botão Inferior: HDMI 1
+              RemoteButton(
+                width: 58,
+                height: 52,
+                borderRadius: 14,
+                backgroundColor: AppColors.surfaceCardOf(context),
+                borderColor: AppColors.borderSubtleOf(context),
+                foregroundColor: AppColors.textPrimaryOf(context),
+                icon: Icons.settings_input_hdmi_rounded,
+                label: 'HDMI 1',
+                iconSize: 20,
+                tooltip: 'Alternar Entrada para HDMI 1',
+                onPressed: () => controller.switchHdmi1(),
+              ),
+            ],
           ),
         ],
       ),

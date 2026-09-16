@@ -45,6 +45,9 @@ class RemoteController extends ChangeNotifier {
   String? _connectedTvName;
   String _lastActionMessage = 'Aguardando conexão com o dispositivo';
   List<DiscoveredTv> _discoveredTvs = [];
+  List<TvAppInfo> _installedApps = [];
+  bool _isLoadingApps = false;
+  String? _appsError;
 
   /// Expõe o [WebOsService] para compatibilidade com código existente e testes unitários.
   WebOsService get webOsService => _webOsService;
@@ -112,6 +115,7 @@ class RemoteController extends ChangeNotifier {
           'ip': _ipAddress,
           'nome': _connectedTvName,
         });
+        fetchInstalledApps();
       } else if (_isWaitingPairing) {
         _logAction('Confirmação pendente na tela do dispositivo ou código PIN');
       }
@@ -178,6 +182,7 @@ class RemoteController extends ChangeNotifier {
       _driver = DriverFactory.create(brand);
     }
     _bindDriverCallbacks();
+    _installedApps = [];
     storageService.setBrand(brand);
     _logAction('Marca selecionada', {'marca': brand.displayName});
     if (notify) notifyListeners();
@@ -199,6 +204,9 @@ class RemoteController extends ChangeNotifier {
   String? get connectedTvName => _connectedTvName;
   String get lastActionMessage => _lastActionMessage;
   List<DiscoveredTv> get discoveredTvs => _discoveredTvs;
+  List<TvAppInfo> get installedApps => _installedApps;
+  bool get isLoadingApps => _isLoadingApps;
+  String? get appsError => _appsError;
 
   // --- Gerenciamento de Tema ---
 
@@ -634,5 +642,39 @@ class RemoteController extends ChangeNotifier {
   Future<void> sendPairingPin(String pin) async {
     await _driver.sendPairingPin(pin);
     _logAction('PIN enviado', {'pin': pin});
+  }
+
+  // --- Gerenciamento e Atalhos de Aplicativos ---
+
+  /// Busca a lista de aplicativos instalados ou atalhos disponíveis no dispositivo conectado.
+  Future<void> fetchInstalledApps({bool forceRefresh = false}) async {
+    if (!forceRefresh && _installedApps.isNotEmpty && _isLoadingApps) return;
+
+    _isLoadingApps = true;
+    _appsError = null;
+    notifyListeners();
+
+    try {
+      final apps = await _driver.getInstalledApps();
+      _installedApps = apps;
+      _logAction('Aplicativos sincronizados', {'total': apps.length});
+    } catch (e) {
+      _appsError = 'Falha ao carregar aplicativos: $e';
+      _logAction('Erro ao buscar aplicativos', {'erro': e.toString()});
+    } finally {
+      _isLoadingApps = false;
+      notifyListeners();
+    }
+  }
+
+  /// Abre um aplicativo específico pelo seu identificador ou pacote.
+  void openApp(String appId, {String? appName}) {
+    HapticService.buttonPress();
+    _driver.openApp(appId);
+    final params = <String, dynamic>{'appId': appId};
+    if (appName != null) {
+      params['app'] = appName;
+    }
+    _logAction('Abrindo aplicativo', params);
   }
 }
