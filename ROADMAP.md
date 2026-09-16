@@ -45,15 +45,15 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 ---
 
 ### 🌐 Fase 2: Experiência Móvel & Conexões Simultâneas (v0.9.8 Beta)
+- [ ] **Feedback Háptico (Vibração)**:
+  - Resposta tátil sutil ao tocar nos botões no Android.
+- [ ] **Gaveta / Atalhos de Aplicativos**:
+  - Listar apps instalados no dispositivo conectado para abertura direta.
 - [ ] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
   - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG + Chromecast 4K na mesma sala).
   - Aba/Pills de alternância rápida no topo da tela para trocar o controle ativo com 1 clique.
 - [ ] **Múltiplos Dispositivos Salvos**:
   - Salvar lista de dispositivos com apelidos (ex: Sala, Quarto) para reconexão rápida.
-- [ ] **Feedback Háptico (Vibração)**:
-  - Resposta tátil sutil ao tocar nos botões no Android.
-- [ ] **Gaveta / Atalhos de Aplicativos**:
-  - Listar apps instalados no dispositivo conectado para abertura direta.
 - [ ] **Entrada de Texto Remota**:
   - Digitação via teclado do celular/PC enviada diretamente para o dispositivo ativo.
 
