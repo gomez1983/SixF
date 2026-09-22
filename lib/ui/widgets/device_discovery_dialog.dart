@@ -27,6 +27,8 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
   late final TextEditingController _manualIpController;
   bool _showManualIp = false;
 
+  bool _initiatedConnection = false;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +57,16 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
     final isConnected = controller.isConnected;
     final currentIp = controller.ipAddress;
     final isConnecting = controller.isConnecting;
+
+    if (controller.isConnecting || controller.isWaitingPairing) {
+      _initiatedConnection = true;
+    } else if (_initiatedConnection && controller.isConnected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
 
     return Dialog(
       backgroundColor: AppColors.remoteChassisOf(context),
@@ -179,6 +191,36 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
 
               const SizedBox(height: 16),
 
+              // Alerta visual caso haja falha ou erro de conexão recente
+              if (controller.lastActionMessage.contains('Falha') ||
+                  controller.lastActionMessage.contains('Erro') ||
+                  controller.lastActionMessage.contains('esgotado')) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.powerRed.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.powerRed.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.powerRed),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          controller.lastActionMessage.replaceAll(RegExp(r'^\[\d{2}:\d{2}:\d{2}\]\s*'), ''),
+                          style: const TextStyle(fontSize: 11, color: AppColors.powerRed, fontWeight: FontWeight.w500),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Lista de Dispositivos Encontrados
               Expanded(
                 child: tvs.isEmpty
@@ -229,136 +271,209 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                               isConnected && currentIp == tv.ip;
                           final isThisTvConnecting =
                               isConnecting && currentIp == tv.ip;
+                          final isThisTvPairing =
+                              controller.isWaitingPairing && currentIp == tv.ip;
 
                           return Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: isThisTvConnected
                                   ? AppColors.statusConnected.withValues(alpha: 0.12)
-                                  : AppColors.surfaceCardOf(context),
+                                  : isThisTvPairing
+                                      ? Colors.amber.withValues(alpha: 0.1)
+                                      : AppColors.surfaceCardOf(context),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: isThisTvConnected
                                     ? AppColors.statusConnected
-                                    : AppColors.borderSubtleOf(context),
-                                width: isThisTvConnected ? 1.5 : 1.0,
+                                    : isThisTvPairing
+                                        ? Colors.amber.withValues(alpha: 0.6)
+                                        : AppColors.borderSubtleOf(context),
+                                width: isThisTvConnected || isThisTvPairing ? 1.5 : 1.0,
                               ),
                             ),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: isThisTvConnected
-                                        ? AppColors.statusConnected
-                                            .withValues(alpha: 0.2)
-                                        : AppColors.surfaceInteractiveOf(context),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    Icons.tv_rounded,
-                                    color: isThisTvConnected
-                                        ? AppColors.statusConnected
-                                        : AppColors.iconHighlightOf(context),
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: isThisTvConnected
+                                            ? AppColors.statusConnected
+                                                .withValues(alpha: 0.2)
+                                            : isThisTvPairing
+                                                ? Colors.amber.withValues(alpha: 0.2)
+                                                : AppColors.surfaceInteractiveOf(context),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        Icons.tv_rounded,
+                                        color: isThisTvConnected
+                                            ? AppColors.statusConnected
+                                            : isThisTvPairing
+                                                ? Colors.amber
+                                                : AppColors.iconHighlightOf(context),
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Expanded(
-                                            child: Text(
-                                              tv.name,
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.textPrimaryOf(context),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  tv.name,
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.textPrimaryOf(context),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.surfaceElevatedOf(context),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: AppColors.borderSubtleOf(context)),
+                                                ),
+                                                child: Text(
+                                                  tv.brand.displayName,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.iconHighlightOf(context),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.surfaceElevatedOf(context),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: AppColors.borderSubtleOf(context)),
-                                            ),
-                                            child: Text(
-                                              tv.brand.displayName,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.iconHighlightOf(context),
-                                              ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            'IP: ${tv.ip}${tv.modelName != null ? ' • ${tv.modelName}' : ''}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondaryOf(context),
                                             ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        'IP: ${tv.ip}${tv.modelName != null ? ' • ${tv.modelName}' : ''}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondaryOf(context),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    if (isThisTvConnected)
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.powerRed
+                                              .withValues(alpha: 0.15),
+                                          foregroundColor: AppColors.powerRed,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 8),
                                         ),
+                                        onPressed: () => controller.disconnect(),
+                                        child: const Text('Desconectar',
+                                            style: TextStyle(fontSize: 12)),
+                                      )
+                                    else if (isThisTvConnecting)
+                                      const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.lgRed,
+                                        ),
+                                      )
+                                    else if (isThisTvPairing)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.amber,
+                                              ),
+                                            ),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Aguardando',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.lgRed,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 8),
+                                        ),
+                                        onPressed: () async {
+                                          _initiatedConnection = true;
+                                          await controller.connectToTv(tv);
+                                          if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
+                                            if (controller.isConnected) {
+                                              Navigator.of(context).pop();
+                                            }
+                                          }
+                                        },
+                                        child: const Text('Conectar',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold)),
                                       ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
-                                const SizedBox(width: 10),
-                                if (isThisTvConnected)
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.powerRed
-                                          .withValues(alpha: 0.15),
-                                      foregroundColor: AppColors.powerRed,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
+                                if (isThisTvPairing) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
                                     ),
-                                    onPressed: () => controller.disconnect(),
-                                    child: const Text('Desconectar',
-                                        style: TextStyle(fontSize: 12)),
-                                  )
-                                else if (isThisTvConnecting)
-                                  const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.lgRed,
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.touch_app_rounded, size: 16, color: Colors.amber),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            tv.brand == TvBrand.samsungTizen
+                                                ? 'Olhe para a tela da TV Samsung e selecione "Permitir" usando o controle remoto.'
+                                                : 'Confirme a permissão de conexão na tela da TV.',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.amber,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  )
-                                else
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.lgRed,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 8),
-                                    ),
-                                    onPressed: () async {
-                                      await controller.connectToTv(tv);
-                                      if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
-                                        if (controller.isConnected) {
-                                          Navigator.of(context).pop();
-                                        }
-                                      }
-                                    },
-                                    child: const Text('Conectar',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold)),
                                   ),
+                                ],
                               ],
                             ),
                           );
@@ -366,7 +481,34 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                       ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+
+              // Dica amigável de autorização Samsung
+              if (tvs.any((t) => t.brand == TvBrand.samsungTizen) || controller.currentBrand == TvBrand.samsungTizen) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevatedOf(context),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.borderSubtleOf(context)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.tips_and_updates_outlined, size: 14, color: AppColors.iconHighlightOf(context)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Dica Samsung: Se a mensagem "Permitir" não surgir na TV, acesse no menu da TV: Configurações > Geral > Gerenciador de Dispositivos Externos > Gerenciador de Conexão e certifique-se de que o dispositivo não esteja bloqueado.',
+                          style: TextStyle(fontSize: 10, color: AppColors.textMutedOf(context), height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Alternador para Conexão Manual por IP
               InkWell(
@@ -434,7 +576,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                       onPressed: () async {
                         final ip = _manualIpController.text.trim();
                         if (ip.isNotEmpty) {
-                          await controller.connect(ip: ip, tvName: 'LG Smart TV ($ip)');
+                          await controller.connect(ip: ip, tvName: 'Smart TV ($ip)');
                           if (context.mounted && controller.isConnected) {
                             Navigator.of(context).pop();
                           }

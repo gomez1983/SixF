@@ -45,25 +45,37 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 ---
 
 ### 🌐 Fase 2: Experiência Móvel & Conexões Simultâneas (v0.9.8 Beta)
-- [x] [Feedback Háptico (Vibração)](#):
+> - [x] **Feedback Háptico (Vibração)**:
   - Resposta tátil com impacto físico suave ao tocar nos botões no Android.
   - Pulso firme de impacto médio dedicado para alternar energia (Power) e cliques discretos no trackpad e abas.
   - Chave de ativação/desativação no menu de configurações com persistência local.
-- [x] [Gaveta / Atalhos de Aplicativos](#):
+> - [x] **Gaveta / Atalhos de Aplicativos**:
   - Listar apps instalados no dispositivo conectado para abertura direta com busca instantânea e grade interativa.
   - Suporte dinâmico em tempo real via SSAP na LG webOS (`listLaunchPoints`) e catálogo curado dos principais streamings na Samsung Tizen.
   - 4ª aba dedicada no layout mobile ("Apps"), card integrado no painel Desktop dual-pane e feedback háptico ao abrir.
+> - [x] **Comandos de Voz & Ditado Inteligente (Speech-to-Text)**:
+  - Reconhecimento de fala no dispositivo via `speech_to_text` em tempo real com transcrição visual instantânea.
+  - Foco em **ações diretas de alta confiabilidade** para controle da Smart TV:
+    - Volume: "Aumentar volume" / "Diminuir volume" (ajuste automático sequencial em 5 passos).
+    - Lançamento de Apps: "Abrir YouTube", "Abrir Netflix", "Abrir Globoplay", "Abrir Prime Video", "Abrir Spotify", etc.
+    - Mudo: "Mudo", "Mutar", "Tirar mudo".
+    - Energia: "Desligar TV", "Desligar".
+  - *Nota Arquitetural*: A injeção arbitrária de voz/texto em caixas de busca internas de apps de terceiros (Globoplay, Netflix, YouTube via Chromecast HDMI-CEC) foi despriorizada devido às restrições proprietárias de IME e áudio de cada aplicativo de streaming.
+  - Modos Push-to-Talk (Pressione para Falar) e Slide-to-Lock (Mãos Livres) com vibração háptica tátil no acionamento e liberação.
+  - Seletor rápido de idiomas no popup (`[🇧🇷 PT]` e `[🇺🇸 EN]`) e chips de comandos diretos sugeridos.
+> - [x] **Persistência de Conexão em Segundo Plano (Android)**:
+  - Keep-alive agressivo com ping/pong WebSocket reduzido para 5 segundos no webOS e Tizen.
+  - Reconexão transparente automática (`autoReconnectIfNeeded`) ao retomar o app da tela de início ou multitarefa (`AppLifecycleState.resumed`).
+  - Blindagem de estado para manter o flag de conexão ativo durante ciclo de minimização, desligando a sessão apenas quando o usuário explicitamente clica em Desconectar ou desliga a TV no botão Power.
 - [ ] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
   - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG + Chromecast 4K na mesma sala).
   - Aba/Pills de alternância rápida no topo da tela para trocar o controle ativo com 1 clique.
 - [ ] **Múltiplos Dispositivos Salvos**:
   - Salvar lista de dispositivos com apelidos (ex: Sala, Quarto) para reconexão rápida.
-- [ ] **Entrada de Texto Remota**:
-  - Digitação via teclado do celular/PC enviada diretamente para o dispositivo ativo.
 
 ---
 
-### ⚡ Fase 3: Recursos Avançados & Integrações (v0.9.9 Release Candidate)
+## ⚡ Fase 3: Recursos Avançados & Integrações (v0.9.9 Release Candidate)
 - [ ] **Android Quick Settings & Widgets**:
   - Bloco de Ação Rápida (Quick Settings Tile) na barra de notificações para Ligar/Desligar e Mute.
   - Widget para a tela inicial do Android.
@@ -74,12 +86,11 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 
 ---
 
-### 💡 Ideias Futuras / Backlog (Pós v1.0)
+## 💡 Ideias Futuras / Backlog (Pós v1.0)
 - [ ] **Suporte a Apple TV**:
   - Integração via protocolo companion / pyatv.
 - [ ] **Suporte a Roku OS**:
   - Protocolo ECP (External Control Protocol) via HTTP.
 - [ ] **Integração com Automações**:
   - Suporte a Home Assistant e integração MQTT.
-- [ ] **Controle por Voz**:
-  - Reconhecimento de voz integrado ao app mobile.
+- [x] ~~**Controle por Voz**~~: Promovido e unificado à *Entrada de Texto Remota* na Fase 2.

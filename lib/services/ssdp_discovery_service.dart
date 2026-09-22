@@ -234,12 +234,34 @@ class SsdpDiscoveryService {
     String ip, {
     Duration timeout = const Duration(milliseconds: 1200),
   }) async {
-    final client = HttpClient()..connectionTimeout = timeout;
+    final client = HttpClient()
+      ..connectionTimeout = timeout
+      ..badCertificateCallback = (cert, host, port) => true;
     try {
-      final req = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/')).timeout(timeout);
-      final res = await req.close().timeout(timeout);
-      if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
+      // 1. Tenta porta REST 8001
+      final req8001 = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/')).timeout(timeout);
+      final res8001 = await req8001.close().timeout(timeout);
+      if (res8001.statusCode == 200) {
+        final body = await res8001.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final dev = json['device'] as Map<String, dynamic>?;
+        final name = dev?['name'] as String? ?? 'Samsung Smart TV';
+        final model = dev?['modelName'] as String? ?? 'Tizen TV';
+        return DiscoveredTv(
+          ip: ip,
+          name: name,
+          brand: TvBrand.samsungTizen,
+          modelName: model,
+        );
+      }
+    } catch (_) {}
+
+    try {
+      // 2. Fallback para porta segura HTTPS 8002
+      final req8002 = await client.getUrl(Uri.parse('https://$ip:8002/api/v2/')).timeout(timeout);
+      final res8002 = await req8002.close().timeout(timeout);
+      if (res8002.statusCode == 200) {
+        final body = await res8002.transform(utf8.decoder).join();
         final json = jsonDecode(body) as Map<String, dynamic>;
         final dev = json['device'] as Map<String, dynamic>?;
         final name = dev?['name'] as String? ?? 'Samsung Smart TV';

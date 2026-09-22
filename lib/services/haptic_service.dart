@@ -47,4 +47,39 @@ class HapticService {
       // Ignora falhas
     }
   }
+
+  /// Acionamento de impacto forte/pesado para início de comando de voz (Push-to-Talk press).
+  /// Combina impacto pesado e pulso de vibração para simular a sensação de pressionar uma chave mecânica.
+  static Future<void> voicePress() async {
+    if (!isEnabled || !isSupportedPlatform) return;
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {
+      // Ignora falhas
+    }
+  }
+
+  /// Acionamento de impacto firme para encerramento de comando de voz (Push-to-Talk release).
+  /// Fornece o clique tátil de retorno ao soltar o botão de microfone.
+  static Future<void> voiceRelease() async {
+    if (!isEnabled || !isSupportedPlatform) return;
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {
+      // Ignora falhas
+    }
+  }
+
+  /// Acionamento tátil nítido para travamento do microfone no modo Mãos Livres (Slide-to-Lock).
+  static Future<void> voiceLock() async {
+    if (!isEnabled || !isSupportedPlatform) return;
+    try {
+      await HapticFeedback.mediumImpact();
+      await HapticFeedback.selectionClick();
+    } catch (_) {
+      // Ignora falhas
+    }
+  }
 }

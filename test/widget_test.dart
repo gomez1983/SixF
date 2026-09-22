@@ -118,6 +118,7 @@ void main() {
       expect(find.text('VOL'), findsOneWidget);
       expect(find.text('CH'), findsOneWidget);
       expect(find.text('MUTE'), findsOneWidget);
+      expect(find.text('VOZ'), findsOneWidget);
       expect(find.text('OK'), findsOneWidget);
 
       // Verifica botões de entrada ao lado do D-Pad (Aba 1)
@@ -279,6 +280,65 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(find.textContaining('D-Pad OK'), findsOneWidget);
+    });
+
+    testWidgets('Suporta Push-to-Talk no botão de microfone (abre ao pressionar, fecha ao soltar)', (WidgetTester tester) async {
+      await tester.pumpWidget(const SixFRemoteApp());
+      await tester.pumpAndSettle();
+
+      final micBtn = find.byIcon(Icons.mic_rounded);
+      expect(micBtn, findsOneWidget);
+
+      // Pressiona e segura o botão (Push-to-Talk)
+      final gesture = await tester.press(micBtn);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Verifica exibição do overlay com status Push-to-Talk
+      expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
+      expect(find.text('Ouvindo...'), findsOneWidget);
+      expect(find.textContaining('Solte para enviar'), findsOneWidget);
+
+      // Solta o botão (Release)
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // O overlay deve fechar imediatamente ao soltar o dedo/botão
+      expect(find.text('PUSH-TO-TALK ATIVO'), findsNothing);
+    });
+
+    testWidgets('Suporta Slide-to-Lock (deslizar para travar no modo Mãos Livres e parar pelo botão)', (WidgetTester tester) async {
+      await tester.pumpWidget(const SixFRemoteApp());
+      await tester.pumpAndSettle();
+
+      final micBtn = find.byIcon(Icons.mic_rounded);
+      expect(micBtn, findsOneWidget);
+
+      // Pressiona o botão
+      final gesture = await tester.press(micBtn);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
+      expect(find.textContaining('Deslize para travar'), findsOneWidget);
+
+      // Desliza 45px para a direita (arrastar para travar)
+      await gesture.moveBy(const Offset(45, 0));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Verifica transição para Modo Mãos Livres Travado
+      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
+
+      // Solta o dedo (Release) - o popup deve PERMANECER na tela!
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
+      expect(find.text('Parar Microfone'), findsOneWidget);
+      expect(find.text('Cancelar'), findsOneWidget);
+
+      // Clica no botão "Parar Microfone" para finalizar
+      await tester.tap(find.text('Parar Microfone'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsNothing);
     });
   });
 }

@@ -68,6 +68,7 @@ void main() {
       expect(() => driver.sendTrackpadDelta(10, -5), returnsNormally);
       expect(() => driver.sendTrackpadClick(), returnsNormally);
       expect(() => driver.sendText('teste'), returnsNormally);
+      expect(() => driver.triggerVoice(), returnsNormally);
     });
   });
 
@@ -91,14 +92,42 @@ void main() {
       expect(driver.isConnected, isFalse);
     });
 
-    test('Comandos Samsung são despachados sem exceções', () {
+    test('Comandos Samsung são despachados sem exceções', () async {
       for (final key in RemoteKey.values) {
         expect(() => driver.sendKey(key), returnsNormally);
       }
       expect(() => driver.sendDigit(3), returnsNormally);
       expect(() => driver.setMute(true), returnsNormally);
+      expect(() => driver.setVolume(15), returnsNormally);
       expect(() => driver.sendText('Samsung TV'), returnsNormally);
+      expect(() => driver.sendTrackpadDelta(2, -2), returnsNormally);
+      expect(() => driver.sendTrackpadClick(), returnsNormally);
+      expect(() => driver.sendPairingPin('0000'), returnsNormally);
+      expect(() => driver.openApp('111299001912'), returnsNormally);
+      expect(() => driver.triggerVoice(), returnsNormally);
       expect(() => driver.disconnect(), returnsNormally);
+
+      final apps = await driver.getInstalledApps();
+      expect(apps, isNotEmpty);
+      expect(apps.any((a) => a.name == 'YouTube'), isTrue);
+      expect(apps.any((a) => a.name == 'Netflix'), isTrue);
+    });
+
+    test('Callbacks do driver Samsung podem ser configurados', () {
+      DeviceConnectionState? state;
+      String? token;
+      String? error;
+      String? name;
+
+      driver.onStateChanged = (s) => state = s;
+      driver.onAuthTokenReceived = (t) => token = t;
+      driver.onError = (e) => error = e;
+      driver.onDeviceNameResolved = (n, m) => name = n;
+
+      expect(state, isNull);
+      expect(token, isNull);
+      expect(error, isNull);
+      expect(name, isNull);
     });
   });
 
@@ -164,6 +193,10 @@ void main() {
 
       controller.sendTrackpadClick();
       expect(controller.lastActionMessage, contains('Trackpad Click'));
+
+      // Comando de voz
+      controller.triggerVoice();
+      expect(controller.lastActionMessage, contains('Comando de Voz'));
     });
   });
 }

@@ -48,3 +48,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Root binary and test artifacts
+/*.exe
+/*.dll
+/*.pem
+/native_assets.json
+/data/

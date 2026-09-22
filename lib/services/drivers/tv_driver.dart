@@ -64,6 +64,7 @@ enum RemoteKey {
   colorYellow,
   colorBlue,
   dash,
+  voice,
 }
 
 /// Interface base agnóstica para drivers de comunicação com Smart TVs e Dongles.
@@ -137,4 +138,9 @@ abstract class TvDriver {
 
   /// Retorna a lista de aplicativos instalados ou atalhos disponíveis no dispositivo.
   Future<List<TvAppInfo>> getInstalledApps();
+
+  /// Aciona a busca ou assistente de voz nativo da TV.
+  void triggerVoice() {
+    sendKey(RemoteKey.voice);
+  }
 }

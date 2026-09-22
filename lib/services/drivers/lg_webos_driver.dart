@@ -192,7 +192,15 @@ class LgWebOsDriver implements TvDriver {
       case RemoteKey.dash:
         _webOsService.pressDash();
         break;
+      case RemoteKey.voice:
+        _webOsService.triggerVoiceSearch();
+        break;
     }
+  }
+
+  @override
+  void triggerVoice() {
+    _webOsService.triggerVoiceSearch();
   }
 
   @override

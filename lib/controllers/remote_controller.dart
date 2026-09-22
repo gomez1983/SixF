@@ -5,6 +5,7 @@ import '../services/drivers/tv_driver.dart';
 import '../services/haptic_service.dart';
 import '../services/ssdp_discovery_service.dart';
 import '../services/storage_service.dart';
+import '../services/voice_service.dart';
 import '../services/wake_on_lan_service.dart';
 import '../services/webos_service.dart';
 
@@ -22,6 +23,7 @@ class RemoteController extends ChangeNotifier {
   // Serviços de Back-End
   final StorageService storageService = StorageService();
   final WebOsService _webOsService = WebOsService();
+  final VoiceService voiceService;
   late TvDriver _driver;
 
   // Estado de tema e preferências
@@ -64,7 +66,8 @@ class RemoteController extends ChangeNotifier {
   /// Se o dispositivo ativo exige pareamento com código PIN de 4 a 6 dígitos na tela.
   bool get supportsPairingPin => _driver.supportsPairingPin;
 
-  RemoteController({TvDriver? initialDriver}) {
+  RemoteController({TvDriver? initialDriver, VoiceService? voiceService})
+      : voiceService = voiceService ?? VoiceService() {
     _driver = initialDriver ?? LgWebOsDriver(webOsService: _webOsService);
     _bindDriverCallbacks();
     _initServices();
@@ -129,8 +132,10 @@ class RemoteController extends ChangeNotifier {
     };
 
     _driver.onAuthTokenReceived = (key) {
-      storageService.setClientKey(key);
-      _logAction('Chave de autenticação salva com sucesso');
+      storageService.setClientKey(key, brand: _driver.brand, ip: _ipAddress);
+      _logAction('Chave de autenticação salva com sucesso', {
+        'marca': _driver.brandDisplayName,
+      });
     };
 
     _driver.onError = (err) {
@@ -280,29 +285,33 @@ class RemoteController extends ChangeNotifier {
     _isConnecting = true;
     _isConnected = false;
     _isWaitingPairing = false;
-    _logAction('Conectando à TV LG', {
+    _logAction('Conectando à ${_driver.brandDisplayName}', {
       'ip': _ipAddress,
       'nome': _connectedTvName,
     });
     notifyListeners();
 
     try {
-      final savedKey = storageService.getClientKey();
+      final savedKey = storageService.getClientKey(brand: _driver.brand, ip: _ipAddress);
+      final timeoutDuration = _driver.brand == TvBrand.samsungTizen
+          ? const Duration(seconds: 10)
+          : const Duration(seconds: 4);
+
       final success = await _driver.connect(
         ipAddress: _ipAddress,
         authToken: savedKey,
-        timeout: const Duration(seconds: 4),
+        timeout: timeoutDuration,
       );
 
       _isConnecting = false;
       if (_driver.connectionState == DeviceConnectionState.pairingPrompt) {
         _isConnected = false;
         _isWaitingPairing = true;
-        _logAction('Aguardando confirmação na tela da TV', {
+        _logAction('Aguardando confirmação "Permitir" na tela da TV', {
           'ip': _ipAddress,
           'nome': _connectedTvName,
         });
-      } else if (success) {
+      } else if (success && _driver.isConnected) {
         _isConnected = true;
         _isWaitingPairing = false;
         _isPoweredOn = true;
@@ -311,7 +320,7 @@ class RemoteController extends ChangeNotifier {
           'ip': _ipAddress,
           'nome': _connectedTvName,
         });
-      } else {
+      } else if (_driver.connectionState != DeviceConnectionState.pairingPrompt) {
         _isConnected = false;
         _isWaitingPairing = false;
         _logAction('Falha ao conectar ao dispositivo', {'ip': _ipAddress});
@@ -410,6 +419,7 @@ class RemoteController extends ChangeNotifier {
       _logAction('Enviando Wake-on-LAN para ligar a TV', {'mac': _macAddress});
       WakeOnLanService.wake(_macAddress);
     } else {
+      _shouldMaintainConnection = false;
       _driver.sendKey(RemoteKey.power);
       _isConnected = false;
     }
@@ -447,6 +457,18 @@ class RemoteController extends ChangeNotifier {
   }
 
   void muteToggle() => toggleMute();
+
+  /// Aciona a busca por voz ou assistente nativo na TV conectada
+  void triggerVoice() {
+    HapticService.buttonPress();
+    _driver.triggerVoice();
+    _logAction('Comando de Voz / Microfone acionado', {
+      'marca': _driver.brandDisplayName,
+    });
+    notifyListeners();
+  }
+
+  void voiceCommand() => triggerVoice();
 
   void channelUp() {
     _currentChannel++;
@@ -635,6 +657,58 @@ class RemoteController extends ChangeNotifier {
   void sendText(String text) {
     _driver.sendText(text);
     _logAction('Texto enviado', {'text': text});
+  }
+
+  /// Executa comandos de voz diretos (volume +/- 5 passos, mudo, desligar e abrir apps).
+  Future<bool> executeVoiceIntent(VoiceIntent intent) async {
+    if (!intent.isCommand) return false;
+
+    switch (intent.type) {
+      case VoiceIntentType.volumeUp:
+        HapticService.buttonPress();
+        for (var i = 0; i < 5; i++) {
+          volumeUp();
+          if (i < 4) await Future.delayed(const Duration(milliseconds: 65));
+        }
+        _logAction('Comando de Voz: Volume +5');
+        return true;
+
+      case VoiceIntentType.volumeDown:
+        HapticService.buttonPress();
+        for (var i = 0; i < 5; i++) {
+          volumeDown();
+          if (i < 4) await Future.delayed(const Duration(milliseconds: 65));
+        }
+        _logAction('Comando de Voz: Volume -5');
+        return true;
+
+      case VoiceIntentType.toggleMute:
+        HapticService.buttonPress();
+        toggleMute();
+        _logAction('Comando de Voz: Alternar Mudo');
+        return true;
+
+      case VoiceIntentType.powerOff:
+        HapticService.heavyPress();
+        if (_isPoweredOn) {
+          powerToggle();
+        }
+        _logAction('Comando de Voz: Desligar TV');
+        return true;
+
+      case VoiceIntentType.openApp:
+        HapticService.buttonPress();
+        final appId = intent.targetAppId ?? intent.targetApp ?? '';
+        if (appId.isNotEmpty) {
+          openApp(appId, appName: intent.targetApp);
+          _logAction('Comando de Voz: Abrir App', {'app': intent.targetApp, 'id': appId});
+          return true;
+        }
+        return false;
+
+      case VoiceIntentType.textSearch:
+        return false;
+    }
   }
 
   // --- Pareamento com PIN (Android TV) ---

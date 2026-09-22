@@ -11,6 +11,7 @@ class SamsungTizenDriver implements TvDriver {
   DeviceConnectionState _state = DeviceConnectionState.disconnected;
   String? _currentIp;
   String? _token;
+  String? _detectedModel;
 
   @override
   final TvBrand brand = TvBrand.samsungTizen;
@@ -48,6 +49,9 @@ class SamsungTizenDriver implements TvDriver {
   @override
   void Function(bool promptPin)? onPinPromptRequested;
 
+  Completer<bool>? _handshakeCompleter;
+  Timer? _pairingTimeoutTimer;
+
   void _setState(DeviceConnectionState newState) {
     if (_state != newState) {
       _state = newState;
@@ -55,15 +59,29 @@ class SamsungTizenDriver implements TvDriver {
     }
   }
 
+  String _buildWebSocketUrl({
+    required String ip,
+    required int port,
+    required bool isSecure,
+    String? token,
+  }) {
+    // Samsung Tizen espera "SamsungTvRemote" em Base64 (15 bytes -> exatamente 20 caracteres Base64 sem padding '=')
+    // Qualquer caractere de padding '=' ou codificado como '%3D' é rejeitado pelo router WebSocket do Tizen OS.
+    final nameBase64 = base64Encode(utf8.encode('SamsungTvRemote'));
+    final scheme = isSecure ? 'wss' : 'ws';
+    final tokenParam = (token != null && token.isNotEmpty) ? '&token=$token' : '';
+    return '$scheme://$ip:$port/api/v2/channels/samsung.remote.control?name=$nameBase64$tokenParam';
+  }
+
   @override
   Future<bool> connect({
     required String ipAddress,
     String? authToken,
-    Duration timeout = const Duration(seconds: 4),
+    Duration timeout = const Duration(seconds: 10),
   }) async {
     disconnect();
     _currentIp = ipAddress.trim();
-    _token = authToken;
+    _token = (authToken != null && authToken.trim().isNotEmpty) ? authToken.trim() : null;
     _setState(DeviceConnectionState.connecting);
 
     if (kIsWeb) {
@@ -72,35 +90,79 @@ class SamsungTizenDriver implements TvDriver {
       return false;
     }
 
-    // 1. Tenta obter metadados do aparelho via REST em background
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return false;
+    }
+
+    // 1. Tenta obter metadados do aparelho via REST em background (portas 8001 e 8002)
     _fetchDeviceInfo(_currentIp!);
 
-    final appNameBase64 = base64Encode(utf8.encode('SixF'));
-
     try {
-      // 2. Tenta porta segura 8002 (Tizen moderno 2016+)
-      String secureUrl = 'wss://$_currentIp:8002/api/v2/channels/samsung.remote.control?name=$appNameBase64';
+      // 2. Se houver token de autorização salvo, tenta porta segura 8002 (WSS) com o token
       if (_token != null && _token!.isNotEmpty) {
-        secureUrl += '&token=$_token';
+        debugPrint('[Samsung] Tentando reconectar na porta 8002 (WSS) com token salvo...');
+        final secureUrlWithToken = _buildWebSocketUrl(
+          ip: _currentIp!,
+          port: 8002,
+          isSecure: true,
+          token: _token,
+        );
+
+        final connected = await _tryConnectWithToken(secureUrlWithToken, isSecure: true);
+        if (connected && isConnected) {
+          return true;
+        }
+
+        debugPrint('[Samsung] Token salvo rejeitado ou inválido. Limpando para novo pareamento...');
+        _token = null;
+        onAuthTokenReceived?.call('');
+        disconnect();
       }
 
-      bool connected = await _tryConnect(secureUrl, isSecure: true, timeout: timeout);
+      // 3. Tenta porta segura 8002 (WSS) sem token para disparar o prompt "Permitir" na TV (Tizen 2016-2024)
+      debugPrint('[Samsung] Conectando na porta segura 8002 (WSS) para novo pareamento...');
+      _setState(DeviceConnectionState.connecting);
+      final pairingUrl = _buildWebSocketUrl(
+        ip: _currentIp!,
+        port: 8002,
+        isSecure: true,
+        token: null,
+      );
 
-      // 3. Fallback para porta 8001 (Tizen legado/HTTP)
-      if (!connected) {
-        debugPrint('[Samsung] Tentando fallback para porta 8001 (ws://)...');
-        final legacyUrl = 'ws://$_currentIp:8001/api/v2/channels/samsung.remote.control?name=$appNameBase64';
-        connected = await _tryConnect(legacyUrl, isSecure: false, timeout: timeout);
+      final socketOpened = await _tryOpenPairingSocket(pairingUrl, isSecure: true);
+      if (socketOpened) {
+        return true;
       }
 
-      if (!connected) {
-        debugPrint('[Samsung] Não foi possível conectar à TV Samsung em $_currentIp.');
-        _setState(DeviceConnectionState.disconnected);
-        onError?.call('Não foi possível conectar à TV Samsung em $_currentIp.');
-        return false;
+      // 4. Fallback para porta 8001 (ws:// legado)
+      debugPrint('[Samsung] Tentando fallback para porta 8001 (ws://)...');
+      disconnect();
+      _setState(DeviceConnectionState.connecting);
+      final legacyUrl = _buildWebSocketUrl(
+        ip: _currentIp!,
+        port: 8001,
+        isSecure: false,
+        token: null,
+      );
+      final legacySocketOpened = await _tryOpenPairingSocket(legacyUrl, isSecure: false);
+      if (legacySocketOpened) {
+        return true;
       }
 
-      return true;
+      debugPrint('[Samsung] Não foi possível conectar à TV Samsung em $_currentIp.');
+      _setState(DeviceConnectionState.disconnected);
+
+      final modelUpper = _detectedModel?.toUpperCase() ?? '';
+      if (modelUpper.contains('H4203') ||
+          modelUpper.contains('H4000') ||
+          modelUpper.contains('H6003') ||
+          modelUpper.contains('H6103') ||
+          modelUpper.contains('H6203')) {
+        onError?.call('O modelo $modelUpper (2014) não possui suporte a controle via rede pelo fabricante, operando apenas por Infravermelho.');
+      } else {
+        onError?.call('Não foi possível conectar à TV em $_currentIp. O protocolo de rede é suportado em TVs Samsung Tizen (2016+). Modelos anteriores operam apenas via Infravermelho.');
+      }
+      return false;
     } catch (e) {
       debugPrint('[Samsung] Erro ao conectar: $e');
       _setState(DeviceConnectionState.disconnected);
@@ -109,34 +171,91 @@ class SamsungTizenDriver implements TvDriver {
     }
   }
 
-  Future<bool> _tryConnect(String url, {required bool isSecure, required Duration timeout}) async {
+  /// Conecta utilizando um token pré-existente e aguarda confirmação imediata
+  Future<bool> _tryConnectWithToken(String url, {required bool isSecure}) async {
     try {
-      if (Platform.environment.containsKey('FLUTTER_TEST')) {
-        return false;
-      }
-
-      final client = HttpClient()
-        ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
 
       _socket = await WebSocket.connect(
         url,
         customClient: isSecure ? client : null,
-      ).timeout(timeout);
+      ).timeout(const Duration(seconds: 4));
+
+      _socket!.pingInterval = const Duration(seconds: 5);
+
+      final completer = Completer<bool>();
+      _handshakeCompleter = completer;
 
       _socket!.listen(
         _onMessageReceived,
         onDone: _onSocketClosed,
         onError: (err) {
-          debugPrint('[Samsung] Erro no socket: $err');
+          debugPrint('[Samsung] Erro no socket com token: $err');
+          if (!completer.isCompleted) completer.complete(false);
           disconnect();
         },
       );
 
-      _setState(DeviceConnectionState.connected);
-      debugPrint('[Samsung] Conectado com sucesso em $url');
+      // Com token válido, a TV confirma ms.channel.connect em menos de 3 segundos
+      final result = await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => false,
+      );
+      return result;
+    } catch (e) {
+      debugPrint('[Samsung] Falha ao conectar com token em $url: $e');
+      disconnect();
+      return false;
+    }
+  }
+
+  /// Estabelece o socket para pareamento inicial e aguarda confirmação "Permitir" na TV
+  Future<bool> _tryOpenPairingSocket(String url, {required bool isSecure}) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+
+      _socket = await WebSocket.connect(
+        url,
+        customClient: isSecure ? client : null,
+      ).timeout(const Duration(seconds: 4));
+
+      _socket!.pingInterval = const Duration(seconds: 5);
+
+      final completer = Completer<bool>();
+      _handshakeCompleter = completer;
+
+      _socket!.listen(
+        _onMessageReceived,
+        onDone: _onSocketClosed,
+        onError: (err) {
+          debugPrint('[Samsung] Erro no socket de pareamento: $err');
+          if (!completer.isCompleted) completer.complete(false);
+          disconnect();
+        },
+      );
+
+      // Socket TCP/TLS estabelecido com sucesso!
+      // A TV Samsung exibe neste momento o banner de permissão ("Permitir / Negar") na tela.
+      _setState(DeviceConnectionState.pairingPrompt);
+
+      // Timeout estendido de até 45 segundos para o usuário confirmar no controle físico da TV
+      _pairingTimeoutTimer?.cancel();
+      _pairingTimeoutTimer = Timer(const Duration(seconds: 45), () {
+        if (_state == DeviceConnectionState.pairingPrompt) {
+          debugPrint('[Samsung] Tempo limite de 45s para confirmação esgotado.');
+          onError?.call('Tempo limite esgotado. A opção "Permitir" não foi acionada a tempo na TV.');
+          disconnect();
+        }
+      });
+
       return true;
     } catch (e) {
-      debugPrint('[Samsung] Falha ao tentar $url: $e');
+      debugPrint('[Samsung] Falha ao abrir socket em $url: $e');
+      disconnect();
       return false;
     }
   }
@@ -144,22 +263,38 @@ class SamsungTizenDriver implements TvDriver {
   void _onMessageReceived(dynamic data) {
     try {
       final msg = jsonDecode(data as String) as Map<String, dynamic>;
-      final event = msg['event'];
+      final event = msg['event'] as String?;
+      debugPrint('[Samsung] Mensagem recebida da TV: $event');
 
-      if (event == 'ms.channel.connect') {
-        _setState(DeviceConnectionState.connected);
+      if (event == 'ms.channel.connect' || event == 'ms.channel.clientConnect') {
+        _pairingTimeoutTimer?.cancel();
+        _pairingTimeoutTimer = null;
+
         final payload = msg['data'] as Map<String, dynamic>?;
-        if (payload != null && payload.containsKey('token')) {
-          final token = payload['token'] as String;
-          _token = token;
-          onAuthTokenReceived?.call(token);
-          debugPrint('[Samsung] Token de autorização recebido: $token');
+        final rawToken = payload?['token'];
+        if (rawToken != null) {
+          final token = rawToken.toString().trim();
+          if (token.isNotEmpty) {
+            _token = token;
+            onAuthTokenReceived?.call(token);
+            debugPrint('[Samsung] Token de autorização capturado com sucesso: $token');
+          }
         }
-      } else if (event == 'ms.channel.clientConnect') {
+
         _setState(DeviceConnectionState.connected);
+
+        if (_handshakeCompleter != null && !_handshakeCompleter!.isCompleted) {
+          _handshakeCompleter!.complete(true);
+        }
       } else if (event == 'ms.channel.unauthorized') {
-        _setState(DeviceConnectionState.pairingPrompt);
-        debugPrint('[Samsung] Confirmação pendente na tela da TV Samsung...');
+        // TV notificou que autorização é pendente
+        debugPrint('[Samsung] Evento ms.channel.unauthorized recebido da TV.');
+        if (_state == DeviceConnectionState.connecting) {
+          _setState(DeviceConnectionState.pairingPrompt);
+        }
+        if (_handshakeCompleter != null && !_handshakeCompleter!.isCompleted) {
+          _handshakeCompleter!.complete(false);
+        }
       }
     } catch (e) {
       debugPrint('[Samsung] Erro ao decodificar mensagem: $e');
@@ -168,33 +303,43 @@ class SamsungTizenDriver implements TvDriver {
 
   void _onSocketClosed() {
     debugPrint('[Samsung] Conexão com TV Samsung encerrada.');
+    if (_handshakeCompleter != null && !_handshakeCompleter!.isCompleted) {
+      _handshakeCompleter!.complete(false);
+    }
+    _pairingTimeoutTimer?.cancel();
+    _pairingTimeoutTimer = null;
     _socket = null;
     _setState(DeviceConnectionState.disconnected);
   }
 
-  /// Consulta os metadados da TV Samsung via REST na porta 8001
+  /// Consulta os metadados da TV Samsung via REST nas portas 8001 e 8002
   Future<void> _fetchDeviceInfo(String ip) async {
-    try {
-      if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    for (final port in [8001, 8002]) {
+      try {
+        final scheme = port == 8002 ? 'https' : 'http';
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(seconds: 2)
+          ..badCertificateCallback = (cert, host, p) => true;
+        final request = await client.getUrl(Uri.parse('$scheme://$ip:$port/api/v2/'));
+        final response = await request.close().timeout(const Duration(seconds: 2));
 
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 2);
-      final request = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/'));
-      final response = await request.close().timeout(const Duration(seconds: 2));
-
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        final device = json['device'] as Map<String, dynamic>?;
-        if (device != null) {
-          final name = device['name'] as String? ?? 'Samsung Smart TV';
-          final model = device['modelName'] as String?;
-          onDeviceNameResolved?.call(name, model);
-          debugPrint('[Samsung] Informações resolvidas: $name ($model)');
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final json = jsonDecode(body) as Map<String, dynamic>;
+          final device = json['device'] as Map<String, dynamic>?;
+          if (device != null) {
+            final name = device['name'] as String? ?? 'Samsung Smart TV';
+            final model = device['modelName'] as String?;
+            _detectedModel = model;
+            onDeviceNameResolved?.call(name, model);
+            debugPrint('[Samsung] Informações resolvidas ($port): $name ($model)');
+            return;
+          }
         }
+      } catch (_) {
+        // Tenta próxima porta
       }
-    } catch (_) {
-      // Falha silenciosa de probe REST
     }
   }
 
@@ -205,6 +350,9 @@ class SamsungTizenDriver implements TvDriver {
 
   @override
   void disconnect() {
+    _handshakeCompleter = null;
+    _pairingTimeoutTimer?.cancel();
+    _pairingTimeoutTimer = null;
     try {
       _socket?.close();
     } catch (_) {}
@@ -256,9 +404,33 @@ class SamsungTizenDriver implements TvDriver {
 
   @override
   void openApp(String appId) {
-    // Abre aplicativo via REST API
+    // Abre aplicativo via REST API (compatível com Tizen legado e moderno)
     if (_currentIp != null && _currentIp!.isNotEmpty) {
       _launchAppRest(_currentIp!, appId);
+    }
+    // E também via WebSocket channel emit (Tizen moderno)
+    _launchAppWs(appId);
+  }
+
+  void _launchAppWs(String appId) {
+    if (!isConnected || _socket == null) return;
+    try {
+      final payload = {
+        'method': 'ms.channel.emit',
+        'params': {
+          'event': 'ed.apps.launch',
+          'to': 'host',
+          'data': {
+            'action_type': 'DEEP_LINK',
+            'appId': appId,
+            'metaTag': '',
+          }
+        }
+      };
+      _socket!.add(jsonEncode(payload));
+      debugPrint('[Samsung] Requisição WebSocket de abertura enviada para app $appId');
+    } catch (e) {
+      debugPrint('[Samsung] Erro ao enviar comando WS para app $appId: $e');
     }
   }
 
@@ -279,6 +451,11 @@ class SamsungTizenDriver implements TvDriver {
       TvAppInfo.fromRaw(id: '3201710015037', name: 'Twitch'),
       TvAppInfo.fromRaw(id: 'org.tizen.browser', name: 'Navegador Web'),
     ];
+  }
+
+  @override
+  void triggerVoice() {
+    sendKey(RemoteKey.voice);
   }
 
   Future<void> _launchAppRest(String ip, String appId) async {
@@ -370,6 +547,8 @@ class SamsungTizenDriver implements TvDriver {
         return 'KEY_CYAN';
       case RemoteKey.dash:
         return 'KEY_DASH';
+      case RemoteKey.voice:
+        return 'KEY_VOICE';
     }
   }
 }

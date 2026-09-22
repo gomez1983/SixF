@@ -27,11 +27,17 @@ void main() {
       expect(() => HapticService.buttonPress(), returnsNormally);
       expect(() => HapticService.heavyPress(), returnsNormally);
       expect(() => HapticService.selectionClick(), returnsNormally);
+      expect(() => HapticService.voicePress(), returnsNormally);
+      expect(() => HapticService.voiceRelease(), returnsNormally);
+      expect(() => HapticService.voiceLock(), returnsNormally);
 
       HapticService.isEnabled = false;
       expect(() => HapticService.buttonPress(), returnsNormally);
       expect(() => HapticService.heavyPress(), returnsNormally);
       expect(() => HapticService.selectionClick(), returnsNormally);
+      expect(() => HapticService.voicePress(), returnsNormally);
+      expect(() => HapticService.voiceRelease(), returnsNormally);
+      expect(() => HapticService.voiceLock(), returnsNormally);
     });
 
     test('RemoteController toggles and updates HapticService', () {

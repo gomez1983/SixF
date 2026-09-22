@@ -47,12 +47,41 @@ class StorageService {
     return await _prefs?.setString(_keyMac, mac) ?? false;
   }
 
-  String? getClientKey() {
-    return _prefs?.getString(_keyClientKey);
+  String? getClientKey({TvBrand? brand, String? ip}) {
+    if (brand != null) {
+      if (ip != null && ip.isNotEmpty) {
+        final ipKey = '${_keyClientKey}_${brand.id}_$ip';
+        final val = _prefs?.getString(ipKey);
+        if (val != null && val.isNotEmpty) return val;
+      }
+      final brandKey = '${_keyClientKey}_${brand.id}';
+      final val = _prefs?.getString(brandKey);
+      if (val != null && val.isNotEmpty) return val;
+    }
+    // Fallback para chave legada apenas se for LG ou não especificada
+    if (brand == null || brand == TvBrand.lgWebOs) {
+      return _prefs?.getString(_keyClientKey);
+    }
+    return null;
   }
 
-  Future<bool> setClientKey(String? key) async {
+  Future<bool> setClientKey(String? key, {TvBrand? brand, String? ip}) async {
     await init();
+    if (brand != null) {
+      if (ip != null && ip.isNotEmpty) {
+        final ipKey = '${_keyClientKey}_${brand.id}_$ip';
+        if (key == null || key.isEmpty) {
+          await _prefs?.remove(ipKey);
+        } else {
+          await _prefs?.setString(ipKey, key);
+        }
+      }
+      final brandKey = '${_keyClientKey}_${brand.id}';
+      if (key == null || key.isEmpty) {
+        return await _prefs?.remove(brandKey) ?? false;
+      }
+      return await _prefs?.setString(brandKey, key) ?? false;
+    }
     if (key == null || key.isEmpty) {
       return await _prefs?.remove(_keyClientKey) ?? false;
     }

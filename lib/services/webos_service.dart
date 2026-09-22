@@ -117,8 +117,8 @@ class WebOsService {
         customClient: isSecure ? client : null,
       ).timeout(timeout);
 
-      // Keepalive automático (Heartbeat) para manter o socket ativo em segundo plano
-      _mainSocket!.pingInterval = const Duration(seconds: 8);
+      // Keepalive automático agressivo (Heartbeat a cada 5s) para manter o socket ativo mesmo com o app minimizado no Android
+      _mainSocket!.pingInterval = const Duration(seconds: 5);
 
       // Escuta mensagens da TV
       _mainSocket!.listen(
@@ -578,6 +578,13 @@ class WebOsService {
   void pressColorGreen() => sendButton('GREEN');
   void pressColorYellow() => sendButton('YELLOW');
   void pressColorBlue() => sendButton('BLUE');
+
+  /// Aciona a busca por voz / assistente na TV LG webOS
+  void triggerVoiceSearch() {
+    sendButton('VOICE');
+    sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.voice'});
+    sendCommand('ssap://system.launcher/launch', {'id': 'com.webos.app.search'});
+  }
 
   /// Envia comando de botão de hardware via Pointer Socket ou SSAP
   void sendButton(String buttonName) {

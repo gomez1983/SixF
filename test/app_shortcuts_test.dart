@@ -92,6 +92,8 @@ class MockAppDriver implements TvDriver {
   void setMute(bool mute) {}
   @override
   void setVolume(int volume) {}
+  @override
+  void triggerVoice() {}
 }
 
 void main() {

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sixf_remote/services/drivers/tv_driver.dart';
 import 'package:sixf_remote/services/ssdp_discovery_service.dart';
 import 'package:sixf_remote/services/storage_service.dart';
 import 'package:sixf_remote/services/wake_on_lan_service.dart';
@@ -118,6 +119,23 @@ void main() {
 
       await storage.setClientKey(null);
       expect(storage.getClientKey(), isNull);
+    });
+
+    test('Isola chaves de autenticação entre Samsung Tizen e LG webOS', () async {
+      await storage.init();
+
+      // Define token LG legado/global
+      await storage.setClientKey('lg_token_abc', brand: TvBrand.lgWebOs, ip: '192.168.1.50');
+
+      // Ao buscar para Samsung, não deve retornar a chave da LG
+      expect(storage.getClientKey(brand: TvBrand.samsungTizen, ip: '192.168.1.120'), isNull);
+
+      // Define token Samsung
+      await storage.setClientKey('samsung_token_xyz', brand: TvBrand.samsungTizen, ip: '192.168.1.120');
+
+      // Valida que cada marca tem seu token isolado
+      expect(storage.getClientKey(brand: TvBrand.samsungTizen, ip: '192.168.1.120'), 'samsung_token_xyz');
+      expect(storage.getClientKey(brand: TvBrand.lgWebOs, ip: '192.168.1.50'), 'lg_token_abc');
     });
   });
 
