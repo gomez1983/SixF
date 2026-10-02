@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../network_security_utils.dart';
 import 'tv_driver.dart';
 
 /// Driver de comunicação para Smart TVs Samsung rodando Tizen OS
@@ -176,7 +177,8 @@ class SamsungTizenDriver implements TvDriver {
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
-      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) =>
+          NetworkSecurityUtils.isLocalNetworkHost(host);
 
       _socket = await WebSocket.connect(
         url,
@@ -216,7 +218,8 @@ class SamsungTizenDriver implements TvDriver {
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
-      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) =>
+          NetworkSecurityUtils.isLocalNetworkHost(host);
 
       _socket = await WebSocket.connect(
         url,

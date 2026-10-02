@@ -75,14 +75,18 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
 
 ---
 
-## ⚡ Fase 3: Recursos Avançados & Integrações (v0.9.9 Release Candidate)
+## ⚡ Fase 3: Recursos Premium & Diferenciais de Mercado (v0.9.9 -> v1.0.0)
+- [ ] **Transmissão de Mídia & Espelhamento (Screen Mirroring & Media Cast)**:
+  - *Diferencial Comercial #1*: Transmissão instantânea de fotos e vídeos locais da galeria do celular para a Smart TV (DLNA / UPnP).
+  - Espelhamento de tela para visualização de conteúdo em tela cheia.
 - [ ] **Android Quick Settings & Widgets**:
   - Bloco de Ação Rápida (Quick Settings Tile) na barra de notificações para Ligar/Desligar e Mute.
-  - Widget para a tela inicial do Android.
-- [ ] **Atalhos Globais no Windows**:
-  - Teclas de atalho para atuar no segundo plano / bandeja do sistema.
-- [ ] **Conexão por IP Manual**:
-  - Inclusão manual para redes corporativas, sub-redes separadas ou VLANs.
+  - Widget compacto na tela inicial do Android com botões essenciais.
+- [ ] **Atalhos Globais & Janela Compacta no Windows**:
+  - Mini-janela flutuante (*Picture-in-Picture*) e atalhos globais de teclado no Windows.
+- [ ] **Monetização Freemium & Compra Única Vitalícia (In-App Purchase)**:
+  - Integração com lojas oficiais (Google Play Billing, Apple IAP, Microsoft Store).
+  - Download gratuito para controle básico e taxa única vitalícia para recursos Pro sem anúncios.
 
 ---
 

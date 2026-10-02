@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'drivers/tv_driver.dart';
+import 'network_security_utils.dart';
 
 /// Informações de uma TV ou aparelho descoberto na rede local.
 class DiscoveredTv {
@@ -236,7 +237,7 @@ class SsdpDiscoveryService {
   }) async {
     final client = HttpClient()
       ..connectionTimeout = timeout
-      ..badCertificateCallback = (cert, host, port) => true;
+      ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
     try {
       // 1. Tenta porta REST 8001
       final req8001 = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/')).timeout(timeout);

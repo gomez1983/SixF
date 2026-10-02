@@ -53,5 +53,9 @@ app.*.map.json
 /*.exe
 /*.dll
 /*.pem
+*.key
+*.keystore
+*.jks
+*.p12
 /native_assets.json
 /data/

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'drivers/tv_app_info.dart';
+import 'network_security_utils.dart';
 
 /// Estados possíveis da conexão WebOS com a TV LG.
 enum WebOsConnectionState {
@@ -110,7 +111,8 @@ class WebOsService {
 
       final uri = Uri.parse(url);
       final client = HttpClient()
-        ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+        ..badCertificateCallback = (X509Certificate cert, String host, int port) =>
+            NetworkSecurityUtils.isLocalNetworkHost(host);
 
       _mainSocket = await WebSocket.connect(
         uri.toString(),

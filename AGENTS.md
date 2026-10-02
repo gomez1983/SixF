@@ -46,3 +46,15 @@ A memória técnica, decisões históricas e cadernos de erros deste projeto est
 
 - O assistente **nunca deve executar `git commit` ou `git push`** de forma autônoma.
 - Todas as alterações de código devem permanecer no *working tree* para inspeção e aprovação humana prévia.
+
+---
+
+## 5. Gatilhos Proativos de Auditoria de Segurança (`flutter-security-audit`)
+
+O assistente deve **identificar proativamente** os momentos ideais e **avisar/recomendar ao desenvolvedor** a execução da skill `flutter-security-audit` antes de concluir tarefas nas seguintes situações:
+1. **Novas Dependências ou Upgrades:** Modificações no `pubspec.yaml` (adição de pacotes ou comandos de upgrade de dependências).
+2. **Alterações em Rede e Protocolos:** Criação ou modificação de drivers (`TvDriver`), sockets (`WebSocket`, `RawDatagramSocket`), SSDP ou Wake-on-LAN.
+3. **Persistência de Dados Sensíveis:** Mudanças no `StorageService` envolvendo chaves de TV, tokens ou senhas.
+4. **Permissões de Plataforma:** Alterações no `AndroidManifest.xml` (permissões, flags de tráfego claro) ou runners nativos do Windows.
+5. **Preparação de Release:** Sempre que o usuário mencionar publicação nas lojas (Google Play, Microsoft Store), builds de instalador (`.iss`, `.msix`) ou lançamento de versão.
+
