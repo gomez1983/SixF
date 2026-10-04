@@ -94,6 +94,8 @@ class MockAppDriver implements TvDriver {
   void setVolume(int volume) {}
   @override
   void triggerVoice() {}
+  @override
+  Future<bool> openMediaUrl(String mediaUrl, {required String title, String? mimeType}) async => true;
 }
 
 void main() {

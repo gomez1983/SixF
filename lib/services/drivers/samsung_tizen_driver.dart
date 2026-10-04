@@ -554,4 +554,10 @@ class SamsungTizenDriver implements TvDriver {
         return 'KEY_VOICE';
     }
   }
+
+  @override
+  Future<bool> openMediaUrl(String mediaUrl, {required String title, String? mimeType}) async {
+    // Smart TVs Samsung utilizam prioritariamente o protocolo aberto DLNA / UPnP AVTransport (portas 9197 / 7676).
+    return false;
+  }
 }

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/saved_device.dart';
 import 'drivers/tv_driver.dart';
 
 /// Serviço de persistência local para salvar parâmetros de conexão e chave de pareamento.
@@ -10,6 +12,8 @@ class StorageService {
   static const String _keyTvName = 'pref_tv_name';
   static const String _keyBrand = 'pref_tv_brand';
   static const String _keyHapticFeedback = 'pref_haptic_feedback_enabled';
+  static const String _keySavedDevices = 'pref_saved_devices_v1';
+  static const String _keyActiveDeviceId = 'pref_active_device_id';
 
   SharedPreferences? _prefs;
 
@@ -123,4 +127,80 @@ class StorageService {
     await init();
     return await _prefs?.setString(_keyBrand, brand.name) ?? false;
   }
+
+  // --- Gerenciamento de Múltiplos Dispositivos Salvos (Multi-Device) ---
+
+  /// Retorna todos os dispositivos salvos pelo usuário com migração transparente de legado.
+  List<SavedDevice> getSavedDevices() {
+    final raw = _prefs?.getString(_keySavedDevices);
+    if (raw == null || raw.isEmpty) {
+      // Migração automática de dispositivo legado se houver IP configurado
+      final legacyIp = _prefs?.getString(_keyIp);
+      if (legacyIp != null && legacyIp.isNotEmpty) {
+        final legacyName = _prefs?.getString(_keyTvName) ?? 'Smart TV';
+        final legacyMac = _prefs?.getString(_keyMac) ?? '';
+        final legacyBrand = getBrand();
+        final defaultDev = SavedDevice(
+          id: SavedDevice.generateId(legacyBrand, legacyIp),
+          name: legacyName,
+          ip: legacyIp,
+          mac: legacyMac,
+          brand: legacyBrand,
+          isDefault: true,
+        );
+        return [defaultDev];
+      }
+      return [];
+    }
+
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((item) => SavedDevice.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Salva a lista completa de dispositivos.
+  Future<bool> saveDevices(List<SavedDevice> devices) async {
+    await init();
+    final raw = jsonEncode(devices.map((d) => d.toJson()).toList());
+    return await _prefs?.setString(_keySavedDevices, raw) ?? false;
+  }
+
+  /// Adiciona ou atualiza um dispositivo na lista de dispositivos salvos.
+  Future<bool> saveDevice(SavedDevice device) async {
+    final current = getSavedDevices();
+    final index = current.indexWhere((d) => d.id == device.id || d.ip == device.ip);
+    if (index >= 0) {
+      current[index] = device;
+    } else {
+      current.add(device);
+    }
+    return await saveDevices(current);
+  }
+
+  /// Remove um dispositivo da lista pelo seu [id].
+  Future<bool> removeDevice(String id) async {
+    final current = getSavedDevices();
+    current.removeWhere((d) => d.id == id);
+    return await saveDevices(current);
+  }
+
+  /// Identificador do dispositivo atualmente selecionado como ativo.
+  String? getActiveDeviceId() {
+    return _prefs?.getString(_keyActiveDeviceId);
+  }
+
+  /// Salva o identificador do dispositivo ativo.
+  Future<bool> setActiveDeviceId(String? id) async {
+    await init();
+    if (id == null) {
+      return await _prefs?.remove(_keyActiveDeviceId) ?? false;
+    }
+    return await _prefs?.setString(_keyActiveDeviceId, id) ?? false;
+  }
 }
+

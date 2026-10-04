@@ -314,6 +314,9 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
 
                         const SizedBox(height: 16),
 
+                        // Seção de Múltiplos Dispositivos Salvos (Multi-Device)
+                        _buildSavedDevicesSection(context, controller),
+
                         // Card / Botão de Abertura de Busca de Dispositivos na Rede
                         InkWell(
                           onTap: () => DeviceDiscoveryDialog.show(context),
@@ -702,6 +705,262 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSavedDevicesSection(BuildContext context, RemoteController controller) {
+    final devices = controller.savedDevices;
+    final activeId = controller.activeDeviceId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Dispositivos Salvos (${devices.length})',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (devices.length > 1)
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () => controller.connectAllDevices(),
+                child: const Text('Conectar Todos', style: TextStyle(fontSize: 11)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...devices.map((device) {
+          final isActive = device.id == activeId;
+          final isConnected = controller.isDeviceConnected(device.id);
+          final isConnecting = controller.isDeviceConnecting(device.id);
+
+          final isDark = controller.isDarkMode;
+          final highlight = isDark ? AppColors.iconHighlight : AppColors.lightIconHighlight;
+          final textColor = isDark ? AppColors.textPrimary : AppColors.lightTextPrimary;
+          final mutedColor = isDark ? AppColors.textMuted : AppColors.lightTextMuted;
+          final secColor = isDark ? AppColors.textSecondary : AppColors.lightTextSecondary;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? highlight.withValues(alpha: isDark ? 0.12 : 0.08)
+                  : (isDark ? AppColors.surfaceCard : AppColors.lightSurfaceCard),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isActive
+                    ? highlight
+                    : (isDark ? AppColors.borderSubtle : AppColors.lightBorderSubtle),
+                width: isActive ? 1.5 : 1.0,
+              ),
+            ),
+            child: Row(
+              children: [
+                // LED de Status
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isConnected
+                        ? AppColors.statusConnected
+                        : (isConnecting
+                            ? AppColors.statusConnecting
+                            : AppColors.statusDisconnected),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Ícone da Marca
+                Icon(
+                  device.brand == TvBrand.lgWebOs
+                      ? Icons.smart_screen_rounded
+                      : Icons.tv_rounded,
+                  size: 18,
+                  color: isActive ? highlight : secColor,
+                ),
+                const SizedBox(width: 8),
+
+                // Dados do Aparelho (clicável para selecionar o ativo)
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      if (!isActive) {
+                        controller.setActiveDevice(device.id);
+                        _ipController.text = device.ip;
+                        _macController.text = device.mac;
+                      }
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                device.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
+                                  color: textColor,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (device.isDefault) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.star_rounded, size: 12, color: Colors.amber.shade400),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${device.brand.displayName} • ${device.ip}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: mutedColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Botão Conectar / Desconectar individual
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                  icon: isConnecting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          isConnected ? Icons.link_off_rounded : Icons.link_rounded,
+                          size: 18,
+                          color: isConnected ? AppColors.powerRed : AppColors.statusConnected,
+                        ),
+                  tooltip: isConnected ? 'Desconectar' : 'Conectar',
+                  onPressed: isConnecting
+                      ? null
+                      : () {
+                          if (isConnected) {
+                            controller.disconnectDevice(device.id);
+                          } else {
+                            controller.connectDevice(device.id);
+                          }
+                        },
+                ),
+
+                // Menu Popup de opções do dispositivo
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                  icon: const Icon(Icons.more_vert_rounded, size: 18),
+                  onSelected: (val) {
+                    if (val == 'default') {
+                      controller.setDefaultDevice(device.id);
+                    } else if (val == 'edit') {
+                      _showEditDeviceDialog(device, controller);
+                    } else if (val == 'delete') {
+                      controller.removeSavedDevice(device.id);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (!device.isDefault)
+                      const PopupMenuItem(
+                        value: 'default',
+                        child: Text('Tornar principal'),
+                      ),
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Editar apelido'),
+                    ),
+                    if (devices.length > 1)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Remover', style: TextStyle(color: Colors.red)),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  void _showEditDeviceDialog(SavedDevice device, RemoteController controller) {
+    final nameCtrl = TextEditingController(text: device.name);
+    final macCtrl = TextEditingController(text: device.mac);
+
+    showDialog<void>(
+      context: context,
+      builder: (diagContext) => AlertDialog(
+        backgroundColor: AppColors.remoteChassisOf(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Editar Aparelho'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Apelido (ex: Sala, Quarto)',
+                prefixIcon: Icon(Icons.label_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: macCtrl,
+              decoration: const InputDecoration(
+                labelText: 'MAC Address (para Wake-on-LAN)',
+                prefixIcon: Icon(Icons.perm_device_info_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(diagContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newName = nameCtrl.text.trim();
+              if (newName.isNotEmpty) {
+                final updated = device.copyWith(
+                  name: newName,
+                  mac: macCtrl.text.trim(),
+                );
+                controller.saveOrUpdateDevice(updated);
+              }
+              Navigator.of(diagContext).pop();
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
       ),
     );
   }

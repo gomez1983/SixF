@@ -111,8 +111,18 @@ class SsdpDiscoveryService {
               final brand = isSamsung ? TvBrand.samsungTizen : TvBrand.lgWebOs;
 
               if (locationUrl != null && locationUrl.isNotEmpty) {
+                // Se for LG webOS e a TV anunciou uma porta efêmera alta (> 1024 e diferente de 19531/8080),
+                // normaliza imediatamente para a porta DLNA permanente oficial 19531.
+                var cleanLocationUrl = locationUrl;
+                if (brand == TvBrand.lgWebOs) {
+                  final locUri = Uri.tryParse(locationUrl);
+                  if (locUri != null && locUri.hasPort && locUri.port != 19531 && locUri.port != 8080) {
+                    cleanLocationUrl = 'http://${locUri.host}:19531${locUri.path}${locUri.hasQuery ? '?${locUri.query}' : ''}';
+                  }
+                }
+
                 pendingLocations[senderIp] = {
-                  'url': locationUrl,
+                  'url': cleanLocationUrl,
                   'brand': brand,
                 };
               } else if (!discoveredMap.containsKey(senderIp)) {

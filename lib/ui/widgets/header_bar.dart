@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../controllers/media_cast_controller.dart';
 import '../../controllers/remote_controller.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
+import 'media_cast_dialog.dart';
 import 'remote_button.dart';
 
 /// Barra Superior do controle remoto.
@@ -80,42 +82,43 @@ class HeaderBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.asset(
-                            'assets/icons/SixF_Logo_01.png',
-                            width: 24,
-                            height: 24,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.asset(
+                              'assets/icons/SixF_Logo_01.png',
+                              width: 24,
+                              height: 24,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'SixF',
-                          style: TextStyle(
-                            color: Color(0xFF00E5FF),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
+                          const SizedBox(width: 8),
+                          const Text(
+                            'SixF',
+                            style: TextStyle(
+                              color: Color(0xFF00E5FF),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
+                          const SizedBox(width: 6),
+                          Text(
                             'Remote',
                             style: TextStyle(
                               color: AppColors.textPrimaryOf(context),
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Row(
@@ -161,8 +164,8 @@ class HeaderBar extends StatelessWidget {
 
           // Botão Buscar / Conectar TVs (Cast)
           RemoteButton(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             isCircular: true,
             backgroundColor: isConnected
                 ? AppColors.statusConnected.withValues(alpha: 0.15)
@@ -180,7 +183,7 @@ class HeaderBar extends StatelessWidget {
                     ? AppColors.statusConnecting
                     : AppColors.textMutedOf(context)),
             icon: isConnected ? Icons.tv_rounded : Icons.cast_rounded,
-            iconSize: 19,
+            iconSize: 18,
             tooltip: isConnected
                 ? 'TV Conectada: ${controller.connectedTvName ?? controller.ipAddress}'
                 : (isConnecting
@@ -189,34 +192,69 @@ class HeaderBar extends StatelessWidget {
             onPressed: () => DeviceDiscoveryDialog.show(context),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
+
+          // Botão Transmitir Fotos e Vídeos (DLNA / UPnP)
+          Builder(
+            builder: (context) {
+              MediaCastController? castCtrl;
+              try {
+                castCtrl = Provider.of<MediaCastController>(context, listen: true);
+              } catch (_) {
+                castCtrl = null;
+              }
+              final isStreaming = castCtrl?.isStreaming ?? false;
+              return RemoteButton(
+                width: 36,
+                height: 36,
+                isCircular: true,
+                backgroundColor: isStreaming
+                    ? AppColors.iconHighlightOf(context).withValues(alpha: 0.20)
+                    : AppColors.surfaceInteractiveOf(context),
+                borderColor: isStreaming
+                    ? AppColors.iconHighlightOf(context)
+                    : AppColors.borderSubtleOf(context),
+                foregroundColor: isStreaming
+                    ? AppColors.iconHighlightOf(context)
+                    : AppColors.textMutedOf(context),
+                icon: isStreaming ? Icons.cast_connected_rounded : Icons.photo_library_rounded,
+                iconSize: 18,
+                tooltip: isStreaming
+                    ? 'Transmitindo: ${castCtrl?.currentFileName ?? "Mídia"}'
+                    : 'Transmitir Fotos e Vídeos (DLNA)',
+                onPressed: () => MediaCastDialog.show(context),
+              );
+            },
+          ),
+
+          const SizedBox(width: 6),
 
           // Botão de alternância de Tema (Modo Claro / Modo Escuro)
           RemoteButton(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             isCircular: true,
             backgroundColor: AppColors.surfaceInteractiveOf(context),
             borderColor: AppColors.borderSubtleOf(context),
             foregroundColor: isDarkMode ? AppColors.buttonYellow : AppColors.iconHighlightOf(context),
             icon: isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            iconSize: 19,
+            iconSize: 18,
             tooltip: isDarkMode ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro',
             onPressed: () => controller.toggleTheme(),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
 
           // Botão para abrir o Drawer de configurações
           RemoteButton(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             isCircular: true,
             backgroundColor: AppColors.surfaceInteractiveOf(context),
             borderColor: AppColors.borderSubtleOf(context),
             foregroundColor: AppColors.textSecondaryOf(context),
             icon: Icons.tune_rounded,
-            iconSize: 19,
+            iconSize: 18,
             tooltip: 'Configurações de Rede (IP / MAC)',
             onPressed: onOpenDrawer,
           ),

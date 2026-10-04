@@ -355,6 +355,21 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                                   ),
                                                 ),
                                               ),
+                                              if (controller.savedDevices.any((d) => d.ip == tv.ip)) ...[
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.statusConnected.withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: AppColors.statusConnected.withValues(alpha: 0.4)),
+                                                  ),
+                                                  child: const Text(
+                                                    'Salvo',
+                                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.statusConnected),
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                           const SizedBox(height: 3),
@@ -368,7 +383,13 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
+                                    if (!controller.savedDevices.any((d) => d.ip == tv.ip))
+                                      IconButton(
+                                        icon: const Icon(Icons.bookmark_add_outlined, size: 20),
+                                        tooltip: 'Salvar no histórico',
+                                        onPressed: () => _showSaveTvDialog(context, controller, tv),
+                                      ),
+                                    const SizedBox(width: 8),
                                     if (isThisTvConnected)
                                       ElevatedButton(
                                         style: ElevatedButton.styleFrom(
@@ -593,4 +614,65 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
       ),
     );
   }
+
+  void _showSaveTvDialog(
+    BuildContext context,
+    RemoteController controller,
+    dynamic tv,
+  ) {
+    final nameCtrl = TextEditingController(text: tv.name as String);
+
+    showDialog<void>(
+      context: context,
+      builder: (diagContext) => AlertDialog(
+        backgroundColor: AppColors.remoteChassisOf(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Salvar no Histórico'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Defina um apelido amigável para este aparelho:',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondaryOf(context)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Apelido (ex: TV da Sala, TV Quarto)',
+                prefixIcon: Icon(Icons.label_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(diagContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final customName = nameCtrl.text.trim();
+              if (customName.isNotEmpty) {
+                final deviceId = SavedDevice.generateId(tv.brand, tv.ip as String);
+                final savedDev = SavedDevice(
+                  id: deviceId,
+                  name: customName,
+                  ip: tv.ip as String,
+                  brand: tv.brand,
+                  modelName: tv.modelName as String?,
+                );
+                controller.saveOrUpdateDevice(savedDev);
+              }
+              Navigator.of(diagContext).pop();
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

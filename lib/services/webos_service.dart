@@ -675,6 +675,91 @@ class WebOsService {
     }
   }
 
+  /// Abre uma mídia (foto, vídeo ou áudio) diretamente no player nativo da TV LG via SSAP.
+  Future<bool> openMedia({
+    required String mediaUrl,
+    required String title,
+    String? mimeType,
+  }) async {
+    if (!isConnected || _mainSocket == null) {
+      debugPrint('[WebOS] TV não conectada para abrir mídia via SSAP.');
+      return false;
+    }
+
+    try {
+      debugPrint('[WebOS] Abrindo mídia via canal nativo SSAP: $mediaUrl ($mimeType)');
+
+      final resolvedMime = mimeType ?? (mediaUrl.toLowerCase().endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+      final isVideo = resolvedMime.startsWith('video/') || resolvedMime.startsWith('audio/');
+
+      // 1. Tenta via ssap://media.viewer/open (Player oficial de tela cheia do webOS)
+      final viewerPayload = {
+        'target': mediaUrl,
+        'title': title,
+        'description': 'SixF Smart Remote',
+        'mimeType': resolvedMime,
+        'mediaType': isVideo ? 'video' : 'image',
+        'autoPlay': true,
+        'loop': false,
+      };
+
+      final resViewer = await sendRequestWithResponse(
+        'ssap://media.viewer/open',
+        viewerPayload,
+        const Duration(seconds: 4),
+      );
+
+      if (resViewer != null && (resViewer['returnValue'] == true || resViewer.containsKey('id'))) {
+        debugPrint('[WebOS] Mídia aberta com sucesso via media.viewer/open!');
+        if (isVideo) {
+          // Garante que o player do webOS inicie a reprodução do vídeo
+          Future.delayed(const Duration(milliseconds: 500), () {
+            sendCommand('ssap://media.controls/play');
+            sendButton('PLAY');
+          });
+        }
+        return true;
+      }
+
+      // 2. Fallback para ssap://system.launcher/open (Lançador nativo do sistema)
+      final launcherPayload = {
+        'target': mediaUrl,
+        'mimeType': resolvedMime,
+        'mediaType': isVideo ? 'video' : 'image',
+        'params': {
+          'target': mediaUrl,
+          'autoPlay': true,
+        },
+      };
+
+      final resLauncher = await sendRequestWithResponse(
+        'ssap://system.launcher/open',
+        launcherPayload,
+        const Duration(seconds: 4),
+      );
+
+      if (resLauncher != null && (resLauncher['returnValue'] == true || resLauncher.containsKey('id'))) {
+        debugPrint('[WebOS] Mídia aberta com sucesso via system.launcher/open!');
+        if (isVideo) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            sendCommand('ssap://media.controls/play');
+            sendButton('PLAY');
+          });
+        }
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[WebOS] Erro ao abrir mídia via SSAP: $e');
+    }
+
+    return false;
+  }
+
+  /// Fecha o visualizador de mídia do webOS.
+  void closeMedia() {
+    sendCommand('ssap://media.viewer/close');
+  }
+
   // --- Encerramento e Limpeza ---
 
   void disconnect() {

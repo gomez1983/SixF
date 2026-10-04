@@ -106,6 +106,9 @@ class MockTestDriver implements TvDriver {
 
   @override
   void sendTrackpadDelta(double dx, double dy) {}
+
+  @override
+  Future<bool> openMediaUrl(String mediaUrl, {required String title, String? mimeType}) async => true;
 }
 
 void main() {

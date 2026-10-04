@@ -245,4 +245,9 @@ class LgWebOsDriver implements TvDriver {
   Future<List<TvAppInfo>> getInstalledApps() {
     return _webOsService.getInstalledApps();
   }
+
+  @override
+  Future<bool> openMediaUrl(String mediaUrl, {required String title, String? mimeType}) {
+    return _webOsService.openMedia(mediaUrl: mediaUrl, title: title, mimeType: mimeType);
+  }
 }

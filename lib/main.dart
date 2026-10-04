@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'controllers/media_cast_controller.dart';
 import 'controllers/remote_controller.dart';
 import 'services/tray_service.dart';
 import 'services/volume_key_service.dart';
@@ -27,12 +28,14 @@ class SixFRemoteApp extends StatefulWidget {
 
 class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, WidgetsBindingObserver {
   late final RemoteController _remoteController;
+  late final MediaCastController _mediaCastController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _remoteController = RemoteController();
+    _mediaCastController = MediaCastController();
     _remoteController.addListener(_onControllerChanged);
     VolumeKeyService().init(_remoteController);
     _initDesktopFeatures();
@@ -86,14 +89,18 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
     VolumeKeyService().dispose();
     _remoteController.removeListener(_onControllerChanged);
     _remoteController.dispose();
+    _mediaCastController.dispose();
     TrayService().dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _remoteController,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _remoteController),
+        ChangeNotifierProvider.value(value: _mediaCastController),
+      ],
       child: Consumer<RemoteController>(
         builder: (context, controller, _) {
           return MaterialApp(

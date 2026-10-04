@@ -67,18 +67,25 @@ Este documento centraliza o planejamento estratégico e a evolução do aplicati
   - Keep-alive agressivo com ping/pong WebSocket reduzido para 5 segundos no webOS e Tizen.
   - Reconexão transparente automática (`autoReconnectIfNeeded`) ao retomar o app da tela de início ou multitarefa (`AppLifecycleState.resumed`).
   - Blindagem de estado para manter o flag de conexão ativo durante ciclo de minimização, desligando a sessão apenas quando o usuário explicitamente clica em Desconectar ou desliga a TV no botão Power.
-- [ ] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
-  - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG + Chromecast 4K na mesma sala).
-  - Aba/Pills de alternância rápida no topo da tela para trocar o controle ativo com 1 clique.
-- [ ] **Múltiplos Dispositivos Salvos**:
-  - Salvar lista de dispositivos com apelidos (ex: Sala, Quarto) para reconexão rápida.
+> - [x] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
+>   - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG webOS + Samsung Tizen na mesma residência).
+>   - Barra/Pills de alternância rápida no topo da tela (`DeviceSelectorBar`) para trocar o controle ativo com 1 clique (Hot-Switching instantâneo sem re-handshake).
+>   - Isolamento de sessões com `DeviceSession` mantendo estado de volume, canal, mute, apps instalados e keep-alive WebSocket por aparelho.
+> - [x] **Múltiplos Dispositivos Salvos**:
+>   - Salvar lista de dispositivos com apelidos amigáveis (ex: Sala, Quarto) e chaves de autenticação vinculadas por IP.
+>   - Gerenciamento completo no `NetworkDrawer` e diálogo de descoberta (`DeviceDiscoveryDialog`): adicionar, editar apelido, definir aparelho padrão e remover.
 
 ---
 
 ## ⚡ Fase 3: Recursos Premium & Diferenciais de Mercado (v0.9.9 -> v1.0.0)
-- [ ] **Transmissão de Mídia & Espelhamento (Screen Mirroring & Media Cast)**:
-  - *Diferencial Comercial #1*: Transmissão instantânea de fotos e vídeos locais da galeria do celular para a Smart TV (DLNA / UPnP).
-  - Espelhamento de tela para visualização de conteúdo em tela cheia.
+> - [x] **Transmissão de Mídia & Espelhamento (DLNA / UPnP Media Cast)**:
+>   - *Diferencial Comercial #1*: Transmissão instantânea de fotos, vídeos e músicas da galeria do celular e do computador diretamente para Smart TVs (LG webOS e Samsung Tizen).
+>   - **Transmissão de Fotos Estável**: Fotos renderizadas com sucesso via canal nativo SSAP (`media.viewer/open`) e DLNA AVTransport com resposta instantânea.
+>   - **Padrão Aberto Universal (UPnP AVTransport 1.0)**: sem exigência de chaves de nuvem ou mTLS proprietário do ecossistema Google Cast v2 (evitando as instabilidades crônicas do BPM-001).
+>   - **Servidor HTTP Embutido com Range Requests (206 Partial Content)**: suporte nativo a seek, avanço/retrocesso e buffering de vídeos sem sobrecarregar a memória RAM do transmissor (`dart:io` `HttpServer`).
+>   - **Interface Dedicada (`MediaCastDialog`)**: modal elegante com seleção por tipo (Fotos, Vídeos, Músicas), mini-player com botões de Play/Pause/Stop, status em tempo real e atalho direto na barra superior (`HeaderBar`) e aba de mídia (`RemoteView`).
+>   - **Segurança de Rede Local**: proteção ativa contra SSRF via `NetworkSecurityUtils.isLocalNetworkHost` validando hosts de destino.
+>   - *Backlog Futuro*: Investigação de transcoding/codec e cabeçalhos de streaming para vídeo em modelos webOS legados (v2.x / LF5900).
 - [ ] **Android Quick Settings & Widgets**:
   - Bloco de Ação Rápida (Quick Settings Tile) na barra de notificações para Ligar/Desligar e Mute.
   - Widget compacto na tela inicial do Android com botões essenciais.

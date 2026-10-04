@@ -139,6 +139,12 @@ abstract class TvDriver {
   /// Retorna a lista de aplicativos instalados ou atalhos disponíveis no dispositivo.
   Future<List<TvAppInfo>> getInstalledApps();
 
+  /// Abre uma URL de mídia (foto, vídeo ou áudio) no player nativo do dispositivo via protocolo proprietário.
+  /// Retorna true se o comando foi aceito com sucesso pela TV.
+  Future<bool> openMediaUrl(String mediaUrl, {required String title, String? mimeType}) async {
+    return false;
+  }
+
   /// Aciona a busca ou assistente de voz nativo da TV.
   void triggerVoice() {
     sendKey(RemoteKey.voice);
