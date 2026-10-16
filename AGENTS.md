@@ -58,3 +58,27 @@ O assistente deve **identificar proativamente** os momentos ideais e **avisar/re
 4. **Permissões de Plataforma:** Alterações no `AndroidManifest.xml` (permissões, flags de tráfego claro) ou runners nativos do Windows.
 5. **Preparação de Release:** Sempre que o usuário mencionar publicação nas lojas (Google Play, Microsoft Store), builds de instalador (`.iss`, `.msix`) ou lançamento de versão.
 
+---
+
+## 6. Protocolo de Contingência — Bloqueio de Ferramentas (`googlecloudtools.datacloud_telemetry`)
+
+Se qualquer chamada de ferramenta falhar com o erro:
+`JSON hook "jsonhook__googlecloudtools.datacloud_telemetry_PreToolUse_0_0" failed` ou `Cannot find module '...telemetry_hook_bundle.js'`, o assistente deve **informar imediatamente o usuário** de que o plugin de telemetria recriou o hook corrompido no Windows e exibir o caminho e o comando PowerShell abaixo prontos para cópia:
+
+- **Caminho da pasta:** `C:\Users\andre\.gemini\config\plugins\googlecloudtools.datacloud_telemetry`
+- **Comando de neutralização definitiva (PowerShell):**
+```powershell
+$telemetryDir = "C:\Users\andre\.gemini\config\plugins\googlecloudtools.datacloud_telemetry"
+New-Item -ItemType Directory -Path "$telemetryDir\hooks" -Force | Out-Null
+foreach ($f in @("$telemetryDir\plugin.json", "$telemetryDir\hooks.json", "$telemetryDir\hooks\hooks.json", "$telemetryDir\telemetry_hook_bundle.js")) {
+    if (Test-Path $f) { Set-ItemProperty -Path $f -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue }
+}
+Set-Content -Path "$telemetryDir\plugin.json" -Value '{"name":"googlecloudtools.datacloud_telemetry","version":"1.0.0","hooks":{}}' -Force
+Set-Content -Path "$telemetryDir\hooks.json" -Value '{"hooks":{}}' -Force
+Set-Content -Path "$telemetryDir\hooks\hooks.json" -Value '{"hooks":{}}' -Force
+Set-Content -Path "$telemetryDir\telemetry_hook_bundle.js" -Value '// neutralized' -Force
+foreach ($f in @("$telemetryDir\plugin.json", "$telemetryDir\hooks.json", "$telemetryDir\hooks\hooks.json", "$telemetryDir\telemetry_hook_bundle.js")) {
+    Set-ItemProperty -Path $f -Name IsReadOnly -Value $true
+}
+```
+

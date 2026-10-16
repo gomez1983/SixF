@@ -13,6 +13,8 @@ class DeviceSession {
   bool isLoadingApps;
   String? appsError;
   bool shouldMaintainConnection;
+  String? connectionError;
+  bool reconnecting = false;
 
   DeviceSession({
     required this.device,

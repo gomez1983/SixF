@@ -1,3 +1,5 @@
+import '../../services/desktop_window_service.dart';
+import '../widgets/compact_remote.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +37,26 @@ class RemoteView extends StatefulWidget {
 class _RemoteViewState extends State<RemoteView> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _focusNode = FocusNode();
+  final Stopwatch _repeatClock = Stopwatch()..start();
+  int _lastRepeat = -120;
+  final Map<LogicalKeyboardKey, Object> _heldKeyTargets = {};
+  final DesktopWindowService _windowService = DesktopWindowService();
+  bool _compact = false;
+  bool _changingWindow = false;
+
+  Future<void> _toggleCompact() async {
+    if (_changingWindow) return;
+    _changingWindow = true;
+    try {
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) await _windowService.setCompact(!_compact);
+      if (mounted) setState(() => _compact = !_compact);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível alterar a janela.')));
+    } finally {
+      _changingWindow = false;
+    }
+  }
+
   int _selectedTabIndex = 0; // 0: Controle, 1: Teclas & Mídia, 2: Magic Trackpad
 
   @override
@@ -50,7 +72,8 @@ class _RemoteViewState extends State<RemoteView> {
 
   /// Trata teclas do teclado físico do Windows
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) {
+    if (event is KeyUpEvent) _heldKeyTargets.remove(event.logicalKey);
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
 
@@ -66,6 +89,20 @@ class _RemoteViewState extends State<RemoteView> {
 
     final controller = context.read<RemoteController>();
     final key = event.logicalKey;
+    if (event is KeyDownEvent) _heldKeyTargets[key] = controller.driver;
+
+    if (event is KeyRepeatEvent) {
+      final repeatable = {LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.add, LogicalKeyboardKey.numpadAdd,
+        LogicalKeyboardKey.numpadSubtract,
+        LogicalKeyboardKey.audioVolumeUp, LogicalKeyboardKey.audioVolumeDown,
+        LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
+      if (!controller.isConnected || !identical(_heldKeyTargets[key], controller.driver) || !repeatable.contains(key)) return KeyEventResult.ignored;
+      final now = _repeatClock.elapsedMilliseconds;
+      if (now - _lastRepeat < 120) return KeyEventResult.handled;
+      _lastRepeat = now;
+    }
 
     // 1. Setas do teclado -> D-Pad
     if (key == LogicalKeyboardKey.arrowUp) {
@@ -79,6 +116,15 @@ class _RemoteViewState extends State<RemoteView> {
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowRight) {
       controller.dpadRight();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.pageUp) {
+      controller.channelUp();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageDown) {
+      controller.channelDown();
       return KeyEventResult.handled;
     }
 
@@ -176,6 +222,8 @@ class _RemoteViewState extends State<RemoteView> {
 
   @override
   Widget build(BuildContext context) {
+    final supportsTrackpad = context.watch<RemoteController>().supportsTrackpad;
+    if (!supportsTrackpad && _selectedTabIndex == 2) _selectedTabIndex = 0;
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
@@ -192,7 +240,7 @@ class _RemoteViewState extends State<RemoteView> {
               return SizedBox(
                 width: constraints.maxWidth,
                 height: constraints.maxHeight,
-                child: isWideScreen
+                child: _compact ? CompactRemote(onExpand: _toggleCompact) : isWideScreen
                     ? _buildDualPaneLayout(constraints)
                     : _buildMobileTabLayout(constraints),
               );
@@ -230,8 +278,10 @@ class _RemoteViewState extends State<RemoteView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildTrackpadExpandedCard(),
-                      const SizedBox(height: 14),
+                      if (context.read<RemoteController>().supportsTrackpad) ...[
+                        _buildTrackpadExpandedCard(),
+                        const SizedBox(height: 14),
+                      ],
                       _buildDesktopAppsCard(),
                       const SizedBox(height: 14),
                       _buildConsoleFeedbackCard(),
@@ -257,6 +307,7 @@ class _RemoteViewState extends State<RemoteView> {
         Padding(
            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: HeaderBar(
+            onToggleCompact: !kIsWeb && Platform.isWindows ? _toggleCompact : null,
             onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ),
@@ -279,7 +330,8 @@ class _RemoteViewState extends State<RemoteView> {
               _buildTab2KeypadAndMedia(),
 
               // Aba 3: Magic Trackpad em Tela Cheia
-              _buildTab3Trackpad(),
+              context.read<RemoteController>().supportsTrackpad
+                  ? _buildTab3Trackpad() : const SizedBox.shrink(),
 
               // Aba 4: Gaveta e Atalhos de Aplicativos
               const AppDrawerWidget(),
@@ -317,7 +369,7 @@ class _RemoteViewState extends State<RemoteView> {
                 const SizedBox(height: 16),
 
                 // 3. Roda D-Pad com HDMI 1 à esquerda e TV Digital à direita
-                const DPadWidget(size: 210),
+                DPadWidget(size: (constraints.maxWidth - 172).clamp(128.0, 210.0)),
 
                 const SizedBox(height: 12),
 
@@ -587,7 +639,7 @@ class _RemoteViewState extends State<RemoteView> {
                 title: 'Teclas & Mídia',
                 icon: Icons.dialpad_rounded,
               ),
-              _buildBottomNavItem(
+              if (context.read<RemoteController>().supportsTrackpad) _buildBottomNavItem(
                 index: 2,
                 title: 'Magic Trackpad',
                 icon: Icons.touch_app_rounded,
@@ -679,6 +731,7 @@ class _RemoteViewState extends State<RemoteView> {
         children: [
           // 1. Cabeçalho / Barra Superior
           HeaderBar(
+            onToggleCompact: !kIsWeb && Platform.isWindows ? _toggleCompact : null,
             onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
 

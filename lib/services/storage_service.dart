@@ -17,8 +17,38 @@ class StorageService {
 
   SharedPreferences? _prefs;
 
-  Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
+  Future<void>? _initializing;
+
+  Future<void> init() => _initializing ??= _initialize();
+
+  Future<void> _initialize() async {
+    _prefs = await SharedPreferences.getInstance();
+    if (_prefs!.getBool('pref_client_keys_migrated_v2') == true) return;
+
+    // Só o cadastro legado de um único aparelho permite atribuição inequívoca.
+    final ip = _prefs!.getString(_keyIp);
+    final brand = getBrand();
+    if (_prefs!.getString(_keySavedDevices) == null && ip != null && ip.isNotEmpty) {
+      final target = '${_keyClientKey}_${brand.id}_$ip';
+      final legacy = _prefs!.getString('${_keyClientKey}_${brand.id}') ??
+          (brand == TvBrand.lgWebOs ? _prefs!.getString(_keyClientKey) : null);
+      if (!_prefs!.containsKey(target) && legacy != null && legacy.isNotEmpty) {
+        await _prefs!.setString(target, legacy);
+      }
+    }
+    for (final brand in TvBrand.values) {
+      await _prefs!.remove('${_keyClientKey}_${brand.id}');
+    }
+    await _prefs!.remove(_keyClientKey);
+    await _prefs!.setBool('pref_client_keys_migrated_v2', true);
+  }
+
+  Set<String> getFavoriteApps(String deviceId, TvBrand brand) =>
+      (_prefs?.getStringList('pref_favorites_${brand.id}_$deviceId') ?? []).toSet();
+
+  Future<void> setFavoriteApps(String deviceId, TvBrand brand, Set<String> apps) async {
+    await init();
+    await _prefs!.setStringList('pref_favorites_${brand.id}_$deviceId', apps.toList()..sort());
   }
 
   String getIpAddress({String defaultValue = '192.168.1.150'}) {
@@ -51,45 +81,41 @@ class StorageService {
     return await _prefs?.setString(_keyMac, mac) ?? false;
   }
 
-  String? getClientKey({TvBrand? brand, String? ip}) {
-    if (brand != null) {
-      if (ip != null && ip.isNotEmpty) {
-        final ipKey = '${_keyClientKey}_${brand.id}_$ip';
-        final val = _prefs?.getString(ipKey);
-        if (val != null && val.isNotEmpty) return val;
-      }
-      final brandKey = '${_keyClientKey}_${brand.id}';
-      final val = _prefs?.getString(brandKey);
-      if (val != null && val.isNotEmpty) return val;
+  String? getClientKey({TvBrand? brand, String? ip, String? deviceId}) {
+    final resolvedBrand = brand ?? getBrand();
+    if (deviceId != null && deviceId.isNotEmpty) {
+      final byId = _prefs?.getString('${_keyClientKey}_id_${resolvedBrand.id}_$deviceId');
+      if (byId != null && byId.isNotEmpty) return byId;
     }
-    // Fallback para chave legada apenas se for LG ou não especificada
-    if (brand == null || brand == TvBrand.lgWebOs) {
-      return _prefs?.getString(_keyClientKey);
-    }
-    return null;
+    final targetIp = ip ?? getIpAddress(defaultValue: '');
+    if (targetIp.isEmpty) return null;
+    return _prefs?.getString('${_keyClientKey}_${resolvedBrand.id}_$targetIp');
   }
 
-  Future<bool> setClientKey(String? key, {TvBrand? brand, String? ip}) async {
+  Future<bool> setClientKey(String? key, {TvBrand? brand, String? ip, String? deviceId}) async {
     await init();
-    if (brand != null) {
-      if (ip != null && ip.isNotEmpty) {
-        final ipKey = '${_keyClientKey}_${brand.id}_$ip';
-        if (key == null || key.isEmpty) {
-          await _prefs?.remove(ipKey);
-        } else {
-          await _prefs?.setString(ipKey, key);
-        }
-      }
-      final brandKey = '${_keyClientKey}_${brand.id}';
+    final resolvedBrand = brand ?? getBrand();
+    final targetIp = ip ?? getIpAddress(defaultValue: '');
+    bool result = false;
+
+    if (deviceId != null && deviceId.isNotEmpty) {
+      final idTarget = '${_keyClientKey}_id_${resolvedBrand.id}_$deviceId';
       if (key == null || key.isEmpty) {
-        return await _prefs?.remove(brandKey) ?? false;
+        result = await _prefs!.remove(idTarget);
+      } else {
+        result = await _prefs!.setString(idTarget, key);
       }
-      return await _prefs?.setString(brandKey, key) ?? false;
     }
-    if (key == null || key.isEmpty) {
-      return await _prefs?.remove(_keyClientKey) ?? false;
+
+    if (targetIp.isNotEmpty) {
+      final ipTarget = '${_keyClientKey}_${resolvedBrand.id}_$targetIp';
+      if (key == null || key.isEmpty) {
+        result = (await _prefs!.remove(ipTarget)) || result;
+      } else {
+        result = (await _prefs!.setString(ipTarget, key)) || result;
+      }
     }
-    return await _prefs?.setString(_keyClientKey, key) ?? false;
+    return result;
   }
 
   String getThemeMode({String defaultValue = 'dark'}) {
@@ -172,21 +198,47 @@ class StorageService {
 
   /// Adiciona ou atualiza um dispositivo na lista de dispositivos salvos.
   Future<bool> saveDevice(SavedDevice device) async {
+    await init();
     final current = getSavedDevices();
     final index = current.indexWhere((d) => d.id == device.id || d.ip == device.ip);
     if (index >= 0) {
+      final previous = current[index];
+      final existingKey = getClientKey(
+        brand: previous.brand,
+        ip: previous.ip,
+        deviceId: previous.id,
+      );
+      if (existingKey != null && existingKey.isNotEmpty && previous.brand == device.brand) {
+        if (previous.ip != device.ip) {
+          await _prefs!.remove('${_keyClientKey}_${previous.brand.id}_${previous.ip}');
+        }
+        if (previous.id != device.id) {
+          await _prefs!.remove('${_keyClientKey}_id_${previous.brand.id}_${previous.id}');
+        }
+        await setClientKey(
+          existingKey,
+          brand: device.brand,
+          ip: device.ip,
+          deviceId: device.id,
+        );
+      }
       current[index] = device;
     } else {
       current.add(device);
     }
-    return await saveDevices(current);
+    return _prefs!.setString(_keySavedDevices, jsonEncode(current.map((d) => d.toJson()).toList()));
   }
 
   /// Remove um dispositivo da lista pelo seu [id].
   Future<bool> removeDevice(String id) async {
+    await init();
     final current = getSavedDevices();
-    current.removeWhere((d) => d.id == id);
-    return await saveDevices(current);
+    for (final device in current.where((d) => d.id == id)) {
+      await setClientKey(null, brand: device.brand, ip: device.ip, deviceId: device.id);
+      await _prefs!.remove('pref_favorites_${device.brand.id}_${device.id}');
+    }
+    final remaining = getSavedDevices()..removeWhere((d) => d.id == id);
+    return _prefs!.setString(_keySavedDevices, jsonEncode(remaining.map((d) => d.toJson()).toList()));
   }
 
   /// Identificador do dispositivo atualmente selecionado como ativo.

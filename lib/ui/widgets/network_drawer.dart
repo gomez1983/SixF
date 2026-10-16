@@ -796,7 +796,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                 ),
                 const SizedBox(width: 8),
 
-                // Dados do Aparelho (clicável para selecionar o ativo)
+                // Dados do Aparelho (clicável para selecionar o ativo e conectar se desconectado)
                 Expanded(
                   child: InkWell(
                     onTap: () {
@@ -804,6 +804,9 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         controller.setActiveDevice(device.id);
                         _ipController.text = device.ip;
                         _macController.text = device.mac;
+                      }
+                      if (!isConnected && !isConnecting) {
+                        controller.connectDevice(device.id);
                       }
                     },
                     child: Column(

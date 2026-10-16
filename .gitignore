@@ -59,3 +59,7 @@ app.*.map.json
 *.p12
 /native_assets.json
 /data/
+
+# Credenciais locais de assinatura
+/android/key.properties
+*.pfx

@@ -1,0 +1,6 @@
+# Copie para key.properties (ignorado pelo Git). Não compartilhe senhas ou chaves.
+# storeFile relativo à pasta android, ou caminho absoluto com barras /.
+storeFile=C:/assinatura/sixf-upload.jks
+storePassword=PREENCHER_LOCALMENTE
+keyAlias=upload
+keyPassword=PREENCHER_LOCALMENTE

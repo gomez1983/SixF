@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'drivers/tv_app_info.dart';
-import 'network_security_utils.dart';
+import 'network_operation.dart';
 
 /// Estados possíveis da conexão WebOS com a TV LG.
 enum WebOsConnectionState {
@@ -19,6 +19,10 @@ enum WebOsConnectionState {
 /// para porta legado (3000), handshake de pareamento, persistência de client-key,
 /// soquete secundário do Magic Remote (Pointer Socket) e comandos SSAP.
 class WebOsService {
+  final WebSocketConnector? socketConnector;
+  NetworkOperation? _operation;
+  int _pointerGeneration = 0;
+  WebOsService({this.socketConnector});
   WebSocket? _mainSocket;
   WebSocket? _pointerSocket;
   WebOsConnectionState _state = WebOsConnectionState.disconnected;
@@ -57,6 +61,8 @@ class WebOsService {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     disconnect();
+    final operation = NetworkOperation();
+    _operation = operation;
 
     _currentIp = ipAddress.trim();
     _clientKey = savedClientKey;
@@ -72,20 +78,22 @@ class WebOsService {
       // 1. Tenta porta segura 3001 (WebOS 4.0+ moderno)
       bool connected = await _tryConnectWebSocket(
         'wss://$_currentIp:3001',
-        isSecure: true,
         timeout: timeout,
+        operation: operation,
       );
 
+      if (operation.isCancelled) return false;
       // 2. Fallback para porta 3000 caso a 3001 falhe
       if (!connected) {
         debugPrint('[WebOS] Tentando fallback para porta 3000 (ws://)...');
         connected = await _tryConnectWebSocket(
           'ws://$_currentIp:3000',
-          isSecure: false,
           timeout: timeout,
+        operation: operation,
         );
       }
 
+      if (operation.isCancelled) return false;
       if (!connected) {
         debugPrint('[WebOS] Não foi possível conectar à TV em $_currentIp.');
         _setState(WebOsConnectionState.disconnected);
@@ -95,7 +103,8 @@ class WebOsService {
 
       return true;
     } catch (e) {
-      debugPrint('[WebOS] Exceção na conexão: $e');
+      if (operation.isCancelled) return false;
+      debugPrint('[WebOS] Exceção na conexão: ${e.runtimeType}');
       _setState(WebOsConnectionState.disconnected);
       onError?.call('Falha de conexão: $e');
       return false;
@@ -103,37 +112,23 @@ class WebOsService {
   }
 
   /// Estabelece conexão com o endpoint WebSocket ignorando certificados autoassinados da LG.
-  Future<bool> _tryConnectWebSocket(String url, {required bool isSecure, required Duration timeout}) async {
+  Future<bool> _tryConnectWebSocket(String url, {required Duration timeout, required NetworkOperation operation}) async {
     try {
-      if (Platform.environment.containsKey('FLUTTER_TEST')) {
-        return false;
-      }
-
-      final uri = Uri.parse(url);
-      final client = HttpClient()
-        ..badCertificateCallback = (X509Certificate cert, String host, int port) =>
-            NetworkSecurityUtils.isLocalNetworkHost(host);
-
-      _mainSocket = await WebSocket.connect(
-        uri.toString(),
-        customClient: isSecure ? client : null,
-      ).timeout(timeout);
-
-      // Keepalive automático agressivo (Heartbeat a cada 5s) para manter o socket ativo mesmo com o app minimizado no Android
-      _mainSocket!.pingInterval = const Duration(seconds: 5);
-
-      // Escuta mensagens da TV
-      _mainSocket!.listen(
-        _handleMainSocketMessage,
-        onDone: () => _handleSocketClosed('Conexão principal encerrada'),
-        onError: (err) => _handleSocketError('Erro no socket: $err'),
+      if (socketConnector == null && Platform.environment.containsKey('FLUTTER_TEST')) return false;
+      final socket = await operation.openWebSocket(url, timeout, connector: socketConnector);
+      operation.check();
+      _mainSocket = socket;
+      socket.pingInterval = const Duration(seconds: 5);
+      bool current() => !operation.isCancelled && identical(_mainSocket, socket);
+      socket.listen(
+        (message) { if (current()) _handleMainSocketMessage(message); },
+        onDone: () { if (current()) _handleSocketClosed('Conexão principal encerrada'); },
+        onError: (Object err) { if (current()) _handleSocketError('Erro no socket: ${err.runtimeType}'); },
       );
-
-      // Dispara o handshake de registro
       _sendRegisterHandshake();
       return true;
     } catch (e) {
-      debugPrint('[WebOS] Falha ao conectar em $url: $e');
+      if (!operation.isCancelled) debugPrint('[WebOS] Falha ao conectar: ${e.runtimeType}');
       return false;
     }
   }
@@ -218,13 +213,15 @@ class WebOsService {
       final id = json['id'] as String?;
       final payload = json['payload'] as Map<String, dynamic>?;
 
-      debugPrint('[WebOS] Resposta recebida ($type / $id): $payload');
+      debugPrint('[WebOS] Resposta recebida ($type / $id)');
 
       // 0. Resolução de requisições pendentes correlacionadas por ID
       if (id != null && _pendingRequests.containsKey(id)) {
         final completer = _pendingRequests.remove(id);
         if (completer != null && !completer.isCompleted) {
-          completer.complete(payload ?? json);
+          completer.complete(type == 'response' && json['error'] == null
+              ? (payload ?? <String, dynamic>{})
+              : <String, dynamic>{'returnValue': false});
         }
       }
 
@@ -268,9 +265,10 @@ class WebOsService {
           payload?['name'] ??
           payload?['deviceTitle']) as String?;
       final modelName = payload?['modelName'] as String?;
-      if (deviceName != null && deviceName.isNotEmpty) {
-        debugPrint('[WebOS] Nome da TV identificado: $deviceName ($modelName)');
-        onDeviceNameResolved?.call(deviceName, modelName);
+      if ((deviceName != null && deviceName.isNotEmpty) ||
+          (modelName != null && modelName.isNotEmpty)) {
+        debugPrint('[WebOS] Nome/Modelo da TV identificado: ${deviceName ?? modelName} ($modelName)');
+        onDeviceNameResolved?.call(deviceName ?? '', modelName);
       }
 
       // 5. Captura do volume real e status de áudio emitido pela TV
@@ -284,7 +282,7 @@ class WebOsService {
         }
       }
     } catch (e) {
-      debugPrint('[WebOS] Erro ao decodificar mensagem: $e');
+      debugPrint('[WebOS] Erro ao decodificar mensagem: ${e.runtimeType}');
     }
   }
 
@@ -327,41 +325,26 @@ class WebOsService {
 
   /// Conecta o socket de ponteiro quando o socketPath é retornado pela TV
   void connectPointerSocket(String socketPath) async {
+    final operation = _operation;
+    if (operation == null || operation.isCancelled) return;
+    final generation = ++_pointerGeneration;
+    final previous = _pointerSocket;
+    _pointerSocket = null;
+    previous?.close();
     try {
-      if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      if (socketConnector == null && Platform.environment.containsKey('FLUTTER_TEST')) return;
+      final socket = await operation.openWebSocket(socketPath, const Duration(seconds: 4), connector: socketConnector);
+      if (operation.isCancelled || generation != _pointerGeneration) {
+        await socket.close();
         return;
       }
-
-      await _pointerSocket?.close();
-      _pointerSocket = null;
-
-      final client = HttpClient()
-        ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-
-      final isSecure = socketPath.startsWith('wss://');
-
-      _pointerSocket = await WebSocket.connect(
-        socketPath,
-        customClient: isSecure ? client : null,
-      ).timeout(const Duration(seconds: 4));
-
-      _pointerSocket!.listen(
-        (data) {
-          debugPrint('[WebOS Pointer] Evento recebido: $data');
-        },
-        onDone: () {
-          debugPrint('[WebOS Pointer] Socket de controle fechado.');
-          _pointerSocket = null;
-        },
-        onError: (err) {
-          debugPrint('[WebOS Pointer] Erro no socket de controle: $err');
-          _pointerSocket = null;
-        },
-      );
-
-      debugPrint('[WebOS] Magic Pointer Socket conectado com sucesso!');
+      _pointerSocket = socket;
+      void closed() {
+        if (!operation.isCancelled && identical(_pointerSocket, socket)) _pointerSocket = null;
+      }
+      socket.listen((_) {}, onDone: closed, onError: (Object error) { closed(); });
     } catch (e) {
-      debugPrint('[WebOS] Falha ao conectar Pointer Socket: $e');
+      if (!operation.isCancelled) debugPrint('[WebOS] Falha no Pointer Socket: ${e.runtimeType}');
     }
   }
 
@@ -409,7 +392,9 @@ class WebOsService {
     _sendJson(_mainSocket, request);
 
     try {
-      return await completer.future.timeout(
+      final operation = NetworkOperation.current;
+      final response = operation == null ? completer.future : operation.wait(completer.future);
+      return await response.timeout(
         timeout,
         onTimeout: () {
           _pendingRequests.remove(id);
@@ -419,13 +404,16 @@ class WebOsService {
       );
     } catch (e) {
       _pendingRequests.remove(id);
-      debugPrint('[WebOS] Erro na requisição $uri: $e');
+      debugPrint('[WebOS] Erro na requisição $uri: ${e.runtimeType}');
       return null;
+    } finally {
+      _pendingRequests.remove(id);
     }
   }
 
   /// Consulta e retorna os aplicativos instalados na TV LG webOS via SSAP.
   Future<List<TvAppInfo>> getInstalledApps() async {
+    final operation = _operation;
     if (!isConnected) return [];
 
     try {
@@ -433,6 +421,7 @@ class WebOsService {
       var response = await sendRequestWithResponse('ssap://com.webos.applicationManager/listLaunchPoints');
       var rawList = response?['launchPoints'];
 
+      if (operation?.isCancelled == true) return [];
       // 2. Fallback para listApps caso listLaunchPoints não retorne itens
       if (rawList == null || rawList is! List || rawList.isEmpty) {
         response = await sendRequestWithResponse('ssap://com.webos.applicationManager/listApps');
@@ -681,13 +670,16 @@ class WebOsService {
     required String title,
     String? mimeType,
   }) async {
+    final operation = _operation;
+    final mediaOperation = NetworkOperation.current;
+    bool cancelled() => operation?.isCancelled == true || mediaOperation?.isCancelled == true;
     if (!isConnected || _mainSocket == null) {
       debugPrint('[WebOS] TV não conectada para abrir mídia via SSAP.');
       return false;
     }
 
     try {
-      debugPrint('[WebOS] Abrindo mídia via canal nativo SSAP: $mediaUrl ($mimeType)');
+      debugPrint('[WebOS] Abrindo mídia via canal nativo SSAP ($mimeType)');
 
       final resolvedMime = mimeType ?? (mediaUrl.toLowerCase().endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
       final isVideo = resolvedMime.startsWith('video/') || resolvedMime.startsWith('audio/');
@@ -709,18 +701,13 @@ class WebOsService {
         const Duration(seconds: 4),
       );
 
-      if (resViewer != null && (resViewer['returnValue'] == true || resViewer.containsKey('id'))) {
+      if (cancelled()) return false;
+      if (resViewer != null && resViewer['returnValue'] == true && resViewer['error'] == null && resViewer['errorCode'] == null && resViewer['errorText'] == null) {
         debugPrint('[WebOS] Mídia aberta com sucesso via media.viewer/open!');
-        if (isVideo) {
-          // Garante que o player do webOS inicie a reprodução do vídeo
-          Future.delayed(const Duration(milliseconds: 500), () {
-            sendCommand('ssap://media.controls/play');
-            sendButton('PLAY');
-          });
-        }
         return true;
       }
 
+      if (cancelled()) return false;
       // 2. Fallback para ssap://system.launcher/open (Lançador nativo do sistema)
       final launcherPayload = {
         'target': mediaUrl,
@@ -738,14 +725,9 @@ class WebOsService {
         const Duration(seconds: 4),
       );
 
-      if (resLauncher != null && (resLauncher['returnValue'] == true || resLauncher.containsKey('id'))) {
+      if (cancelled()) return false;
+      if (resLauncher != null && resLauncher['returnValue'] == true && resLauncher['error'] == null && resLauncher['errorCode'] == null && resLauncher['errorText'] == null) {
         debugPrint('[WebOS] Mídia aberta com sucesso via system.launcher/open!');
-        if (isVideo) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            sendCommand('ssap://media.controls/play');
-            sendButton('PLAY');
-          });
-        }
         return true;
       }
     } catch (e) {
@@ -763,6 +745,9 @@ class WebOsService {
   // --- Encerramento e Limpeza ---
 
   void disconnect() {
+    _operation?.cancel();
+    _operation = null;
+    _pointerGeneration++;
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) {
         completer.complete(<String, dynamic>{});

@@ -127,6 +127,8 @@ class VolumeChannelControls extends StatelessWidget {
             iconSize: 22,
             tooltip: plusTooltip,
             onPressed: onPlus,
+            repeatOnHold: context.read<RemoteController>().isConnected,
+            repeatToken: context.read<RemoteController>().driver,
           ),
 
           // Título central da coluna
@@ -167,6 +169,8 @@ class VolumeChannelControls extends StatelessWidget {
             iconSize: 22,
             tooltip: minusTooltip,
             onPressed: onMinus,
+            repeatOnHold: context.read<RemoteController>().isConnected,
+            repeatToken: context.read<RemoteController>().driver,
           ),
         ],
       ),

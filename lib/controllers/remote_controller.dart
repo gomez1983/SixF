@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import '../services/network_operation.dart';
 import '../models/device_session.dart';
 import '../models/saved_device.dart';
 import '../services/drivers/driver_factory.dart';
@@ -9,7 +12,6 @@ import '../services/ssdp_discovery_service.dart';
 import '../services/storage_service.dart';
 import '../services/voice_service.dart';
 import '../services/wake_on_lan_service.dart';
-import '../services/webos_service.dart';
 
 export '../models/device_session.dart';
 export '../models/saved_device.dart';
@@ -28,8 +30,59 @@ export '../models/saved_device.dart';
 class RemoteController extends ChangeNotifier {
   // Serviços de Back-End
   final StorageService storageService = StorageService();
-  final WebOsService _webOsService = WebOsService();
   final VoiceService voiceService;
+  final TvDriver Function(TvBrand) _driverFactory;
+  final Future<List<DiscoveredTv>> Function({Duration timeout, String? knownIp}) _discoveryRunner;
+  final bool _hasCustomDiscoveryRunner;
+  bool _disposed = false;
+  late final Future<void> ready;
+  final Map<DeviceSession, NetworkOperation> _sessionOperations = {};
+  NetworkOperation _discoveryOperation = NetworkOperation();
+
+  bool _isCurrent(DeviceSession session, NetworkOperation operation) =>
+      !_disposed && !operation.isCancelled && identical(_sessions[session.device.id], session);
+
+  void _detachDriver(TvDriver driver) {
+    driver.onStateChanged = null;
+    driver.onPinPromptRequested = null;
+    driver.onAuthTokenReceived = null;
+    driver.onError = null;
+    driver.onDeviceNameResolved = null;
+    driver.onVolumeStatusChanged = null;
+  }
+
+  void _endSession(DeviceSession session) {
+    _sessionOperations.remove(session)?.cancel();
+    _detachDriver(session.driver);
+    session.driver.disconnect();
+    session.shouldMaintainConnection = false;
+    session.isPoweredOn = false;
+    session.isLoadingApps = false;
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _discoveryOperation.cancel();
+    final fallbackOnly = !_sessions.values.any((session) => identical(session.driver, _driver));
+    for (final session in _sessions.values) {
+      _endSession(session);
+    }
+    if (fallbackOnly) {
+      _detachDriver(_driver);
+      _driver.disconnect();
+    }
+    _sessions.clear();
+    onPinPromptRequested = null;
+    voiceService.dispose();
+    super.dispose();
+  }
 
   // Driver e Sessão de Fallback/Legado
   late TvDriver _driver;
@@ -51,6 +104,8 @@ class RemoteController extends ChangeNotifier {
   bool _isMuted = false;
   bool _isWaitingPairing = false;
   bool _isScanningTvs = false;
+  String? _discoveryError;
+  String? get discoveryError => _discoveryError;
   bool _shouldMaintainConnection = false;
 
   int _volumeLevel = 18;
@@ -64,9 +119,6 @@ class RemoteController extends ChangeNotifier {
   bool _isLoadingApps = false;
   String? _appsError;
 
-  /// Expõe o [WebOsService] para compatibilidade com código existente e testes unitários.
-  WebOsService get webOsService => _webOsService;
-
   /// Driver do dispositivo ativo no momento.
   TvDriver get driver => activeSession?.driver ?? _driver;
 
@@ -75,6 +127,7 @@ class RemoteController extends ChangeNotifier {
 
   /// Se o dispositivo ativo suporta Magic Pointer / Trackpad livre.
   bool get supportsTrackpad => driver.supportsTrackpad;
+  bool get supportsDirectInputs => driver is LgWebOsDriver;
 
   /// Se o dispositivo ativo exige pareamento com código PIN de 4 a 6 dígitos na tela.
   bool get supportsPairingPin => driver.supportsPairingPin;
@@ -96,6 +149,39 @@ class RemoteController extends ChangeNotifier {
   List<DiscoveredTv> get discoveredTvs => _discoveredTvs;
   List<TvAppInfo> get installedApps => activeSession?.installedApps ?? _installedApps;
   bool get isLoadingApps => activeSession?.isLoadingApps ?? _isLoadingApps;
+  bool isFavoriteApp(String appId) {
+    final device = activeDevice;
+    return device != null && storageService.getFavoriteApps(device.id, device.brand).contains(appId);
+  }
+
+  Future<void> _favoriteWrites = Future<void>.value();
+  Future<void> toggleFavoriteApp(String appId) {
+    final device = activeDevice;
+    if (device == null) return Future<void>.value();
+    return _favoriteWrites = _favoriteWrites.catchError((_) {}).then((_) async {
+      await ready;
+      if (_disposed || _sessions[device.id]?.device.brand != device.brand) return;
+      final favorites = storageService.getFavoriteApps(device.id, device.brand);
+      if (!favorites.remove(appId)) favorites.add(appId);
+      await storageService.setFavoriteApps(device.id, device.brand, favorites);
+      notifyListeners();
+    });
+  }
+
+  String get connectionStatusLabel {
+    if (isWaitingPairing) return 'Confirme na tela da TV';
+    if (isConnecting) return activeSession?.reconnecting == true ? 'Reconectando...' : 'Conectando...';
+    if (isConnected) return 'Conectado';
+    if (activeSession?.connectionError != null) return 'TV indisponível';
+    return 'Desconectado';
+  }
+  String get connectionGuidance {
+    if (isWaitingPairing) return 'Aceite o pedido na TV ou informe o PIN solicitado. Mantenha a TV ligada.';
+    if (isConnected) return 'Conexão ativa. Os recursos disponíveis dependem da TV e da mídia.';
+    if (isConnecting) return 'Aguardando a TV responder. Confira se ela está ligada na mesma rede.';
+    return '${activeSession?.connectionError ?? 'Não há conexão ativa.'}\n\nConfira o IP, a rede local e a permissão de controle remoto na TV. No Windows, permita o SixF na rede privada do firewall.';
+  }
+
   String? get appsError => activeSession?.appsError ?? _appsError;
 
   // --- Getters de Múltiplos Dispositivos (Multi-Device) ---
@@ -120,10 +206,18 @@ class RemoteController extends ChangeNotifier {
   /// Retorna a sessão ativa de um dispositivo salvo.
   DeviceSession? getSession(String deviceId) => _sessions[deviceId];
 
-  RemoteController({TvDriver? initialDriver, VoiceService? voiceService})
+  RemoteController({
+    TvDriver? initialDriver,
+    VoiceService? voiceService,
+    TvDriver Function(TvBrand)? driverFactory,
+    Future<List<DiscoveredTv>> Function({Duration timeout, String? knownIp})? discoveryRunner,
+  })
       : _injectedDriver = initialDriver,
+        _driverFactory = driverFactory ?? DriverFactory.create,
+        _discoveryRunner = discoveryRunner ?? SsdpDiscoveryService.discoverTvs,
+        _hasCustomDiscoveryRunner = discoveryRunner != null,
         voiceService = voiceService ?? VoiceService() {
-    _driver = initialDriver ?? LgWebOsDriver(webOsService: _webOsService);
+    _driver = initialDriver ?? _driverFactory(TvBrand.lgWebOs);
 
     // Inicialização síncrona imediata da sessão padrão
     final defaultDev = SavedDevice(
@@ -139,14 +233,14 @@ class RemoteController extends ChangeNotifier {
     _sessions[defaultDev.id] = session;
     _activeDeviceId = defaultDev.id;
     _bindSessionDriverCallbacks(session);
-    _bindDriverCallbacks(_driver);
 
-    _initServices();
+    ready = _initServices();
   }
 
   Future<void> _initServices() async {
     try {
       await storageService.init();
+      if (_disposed) return;
 
       // Carrega preferências de tema e haptic
       final savedTheme = storageService.getThemeMode();
@@ -183,6 +277,16 @@ class RemoteController extends ChangeNotifier {
         );
         _savedDevices = [defaultDev];
         await storageService.saveDevice(defaultDev);
+        if (_disposed) return;
+      }
+
+      // Remove sessões provisórias do construtor que não estão na lista carregada
+      final validIds = _savedDevices.map((d) => d.id).toSet();
+      for (final staleId in _sessions.keys.where((id) => !validIds.contains(id)).toList()) {
+        final staleSession = _sessions.remove(staleId);
+        if (staleSession != null) {
+          _endSession(staleSession);
+        }
       }
 
       // Inicializa as sessões para todos os dispositivos salvos
@@ -204,6 +308,18 @@ class RemoteController extends ChangeNotifier {
 
       _syncActiveFields();
       notifyListeners();
+
+      final activeDev = activeDevice;
+      if (activeDev != null && !Platform.environment.containsKey('FLUTTER_TEST')) {
+        final savedKey = storageService.getClientKey(
+          brand: activeDev.brand,
+          ip: activeDev.ip,
+          deviceId: activeDev.id,
+        );
+        if (savedKey != null && savedKey.isNotEmpty) {
+          unawaited(connectDevice(activeDev.id));
+        }
+      }
     } catch (e) {
       debugPrint('[RemoteController] Erro ao inicializar serviços: $e');
     }
@@ -217,10 +333,7 @@ class RemoteController extends ChangeNotifier {
       return existing;
     }
 
-    final driver = customDriver ??
-        (device.brand == TvBrand.lgWebOs
-            ? LgWebOsDriver(webOsService: _webOsService)
-            : DriverFactory.create(device.brand));
+    final driver = customDriver ?? _driverFactory(device.brand);
 
     final session = DeviceSession(device: device, driver: driver);
     _sessions[device.id] = session;
@@ -234,13 +347,17 @@ class RemoteController extends ChangeNotifier {
   /// Vincula os callbacks de ciclo de vida de uma [DeviceSession].
   void _bindSessionDriverCallbacks(DeviceSession session) {
     final driver = session.driver;
+    final operation = _sessionOperations.putIfAbsent(session, NetworkOperation.new);
 
     driver.onStateChanged = (state) {
+      if (!_isCurrent(session, operation)) return;
       final isNowConnected = state == DeviceConnectionState.connected;
       final isNowConnecting = state == DeviceConnectionState.connecting;
       final isNowPairing = state == DeviceConnectionState.pairingPrompt;
 
       if (isNowConnected) {
+        session.connectionError = null;
+        session.reconnecting = false;
         session.isPoweredOn = true;
         session.shouldMaintainConnection = true;
         _logAction('${driver.brandDisplayName} Conectada e Autenticada', {
@@ -248,6 +365,8 @@ class RemoteController extends ChangeNotifier {
           'ip': session.device.ip,
         });
         _fetchAppsForSession(session);
+      } else if (state == DeviceConnectionState.disconnected && session.shouldMaintainConnection) {
+        session.connectionError ??= 'A conexão com a TV foi interrompida.';
       } else if (isNowPairing) {
         _logAction('Confirmação pendente na tela da TV (${session.device.name})');
       }
@@ -263,6 +382,7 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onPinPromptRequested = (prompt) {
+      if (!_isCurrent(session, operation)) return;
       if (_activeDeviceId == session.device.id) {
         _isWaitingPairing = true;
         onPinPromptRequested?.call(prompt);
@@ -271,10 +391,12 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onAuthTokenReceived = (key) {
+      if (!_isCurrent(session, operation)) return;
       storageService.setClientKey(
         key,
         brand: session.device.brand,
         ip: session.device.ip,
+        deviceId: session.device.id,
       );
       _logAction('Chave de autenticação salva', {
         'marca': driver.brandDisplayName,
@@ -283,11 +405,23 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onError = (err) {
+      if (!_isCurrent(session, operation)) return;
+      session.connectionError = err;
       _logAction('Erro de conexão [${session.device.name}]', {'msg': err});
     };
 
     driver.onDeviceNameResolved = (name, model) {
-      session.device = session.device.copyWith(name: name, modelName: model);
+      if (!_isCurrent(session, operation)) return;
+      final isGenericName = session.device.name == 'Smart TV' ||
+          session.device.name.startsWith('LG Smart TV (') ||
+          session.device.name.startsWith('Samsung Smart TV (');
+      final resolvedName = name.trim().isNotEmpty
+          ? name.trim()
+          : (model != null && model.trim().isNotEmpty ? model.trim() : null);
+      session.device = session.device.copyWith(
+        name: (isGenericName && resolvedName != null) ? resolvedName : null,
+        modelName: (model != null && model.trim().isNotEmpty) ? model.trim() : null,
+      );
       storageService.saveDevice(session.device);
 
       final idx = _savedDevices.indexWhere((d) => d.id == session.device.id);
@@ -296,18 +430,19 @@ class RemoteController extends ChangeNotifier {
       }
 
       if (_activeDeviceId == session.device.id) {
-        _connectedTvName = name;
+        _connectedTvName = session.device.name;
         _syncActiveFields();
       }
 
       _logAction('Nome da TV identificado', {
-        'nome': name,
+        'nome': session.device.name,
         'modelo': model,
       });
       notifyListeners();
     };
 
     driver.onVolumeStatusChanged = (volume, isMuted) {
+      if (!_isCurrent(session, operation)) return;
       session.volumeLevel = volume;
       session.isMuted = isMuted;
 
@@ -327,6 +462,7 @@ class RemoteController extends ChangeNotifier {
   /// Vincula callbacks do driver padrão para retrocompatibilidade.
   void _bindDriverCallbacks(TvDriver driver) {
     driver.onStateChanged = (state) {
+      if (_disposed || !identical(_driver, driver)) return;
       _isConnecting = state == DeviceConnectionState.connecting;
       _isConnected = state == DeviceConnectionState.connected;
       _isWaitingPairing = state == DeviceConnectionState.pairingPrompt;
@@ -345,12 +481,14 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onPinPromptRequested = (prompt) {
+      if (_disposed || !identical(_driver, driver)) return;
       _isWaitingPairing = true;
       onPinPromptRequested?.call(prompt);
       notifyListeners();
     };
 
     driver.onAuthTokenReceived = (key) {
+      if (_disposed || !identical(_driver, driver)) return;
       storageService.setClientKey(key, brand: driver.brand, ip: _ipAddress);
       _logAction('Chave de autenticação salva com sucesso', {
         'marca': driver.brandDisplayName,
@@ -358,10 +496,12 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onError = (err) {
+      if (_disposed || !identical(_driver, driver)) return;
       _logAction('Erro de conexão', {'msg': err});
     };
 
     driver.onDeviceNameResolved = (name, model) {
+      if (_disposed || !identical(_driver, driver)) return;
       _connectedTvName = name;
       storageService.setTvName(name);
       _logAction('Nome da TV identificado', {
@@ -372,6 +512,7 @@ class RemoteController extends ChangeNotifier {
     };
 
     driver.onVolumeStatusChanged = (volume, isMuted) {
+      if (_disposed || !identical(_driver, driver)) return;
       _volumeLevel = volume;
       _isMuted = isMuted;
       _logAction('Volume da TV sincronizado', {
@@ -408,10 +549,10 @@ class RemoteController extends ChangeNotifier {
   /// Alterna instantaneamente o controle ativo para outro dispositivo salvo (Hot-Switching).
   void setActiveDevice(String deviceId) {
     if (!_sessions.containsKey(deviceId)) return;
+    storageService.setActiveDeviceId(deviceId);
     if (_activeDeviceId == deviceId) return;
 
     _activeDeviceId = deviceId;
-    storageService.setActiveDeviceId(deviceId);
     final session = _sessions[deviceId]!;
     _driver = session.driver;
     _syncActiveFields();
@@ -425,15 +566,74 @@ class RemoteController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Verifica se uma TV descoberta na rede já corresponde a um dispositivo salvo.
+  bool isTvSaved(DiscoveredTv tv) => _findMatchingSavedDevice(tv) != null;
+
+  static String _normalizeTvName(String raw) {
+    return raw.trim().replaceFirst(RegExp(r'\s*\(\d+\.\d+\.\d+\.\d+\)\s*$'), '').toLowerCase();
+  }
+
+  /// Localiza um dispositivo salvo compatível com uma TV descoberta na rede,
+  /// reconciliando mudanças de IP via DHCP (por modelo, nome amigável ou único aparelho pareado da marca).
+  SavedDevice? _findMatchingSavedDevice(DiscoveredTv tv) {
+    final deviceId = SavedDevice.generateId(tv.brand, tv.ip);
+    for (final d in _savedDevices) {
+      if (d.id == deviceId || d.ip == tv.ip) return d;
+    }
+    final sameBrand = _savedDevices.where((d) => d.brand == tv.brand).toList();
+    if (sameBrand.isEmpty) return null;
+
+    bool hasSavedKey(SavedDevice d) {
+      final key = storageService.getClientKey(
+        brand: d.brand,
+        ip: d.ip,
+        deviceId: d.id,
+      );
+      return key != null && key.isNotEmpty;
+    }
+
+    if (tv.modelName != null && tv.modelName!.isNotEmpty) {
+      for (final d in sameBrand) {
+        if (d.modelName != null &&
+            d.modelName!.toLowerCase() == tv.modelName!.toLowerCase()) {
+          return d;
+        }
+      }
+    }
+
+    final normalizedDiscovered = _normalizeTvName(tv.name);
+    for (final d in sameBrand) {
+      if (d.ip == '192.168.1.150' && !hasSavedKey(d)) continue;
+      if (_normalizeTvName(d.name) == normalizedDiscovered) {
+        return d;
+      }
+    }
+
+    final pairedSameBrand = sameBrand.where(hasSavedKey).toList();
+    if (pairedSameBrand.length == 1) {
+      return pairedSameBrand.first;
+    }
+    return null;
+  }
+
   /// Conecta um dispositivo salvo específico sem desconectar os outros.
-  Future<void> connectDevice(String deviceId) async {
+  Future<void> connectDevice(String deviceId, {bool allowDiscoveryFallback = true}) async {
+    await ready;
+    if (_disposed) return;
     final session = _sessions[deviceId];
-    if (session == null || session.isConnecting) return;
+    if (_disposed || session == null || session.isConnecting || session.isWaitingPairing) return;
+    _sessionOperations.remove(session)?.cancel();
+    session.isLoadingApps = false;
+    session.connectionError = null;
+    session.reconnecting = session.shouldMaintainConnection;
+    _bindSessionDriverCallbacks(session);
+    final operation = _sessionOperations[session]!;
 
     final driver = session.driver;
-    final savedKey = storageService.getClientKey(
+    var savedKey = storageService.getClientKey(
       brand: session.device.brand,
       ip: session.device.ip,
+      deviceId: session.device.id,
     );
     final timeoutDuration = session.device.brand == TvBrand.samsungTizen
         ? const Duration(seconds: 10)
@@ -446,18 +646,71 @@ class RemoteController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await driver.connect(
+      var success = await operation.wait(driver.connect(
         ipAddress: session.device.ip,
         authToken: savedKey,
         timeout: timeoutDuration,
-      );
+      ));
+      if (!_isCurrent(session, operation)) return;
+
+      // Se falhou em conectar no IP antigo (ex: DHCP mudou o IP da TV na LAN) e temos credencial salva,
+      // faz uma varredura rápida para reconciliar o novo IP mantendo a credencial pareada.
+      if (!success &&
+          !session.isWaitingPairing &&
+          allowDiscoveryFallback &&
+          savedKey != null &&
+          savedKey.isNotEmpty &&
+          (_injectedDriver == null || _hasCustomDiscoveryRunner)) {
+        final discovered = await operation.run(() => _discoveryRunner(
+              timeout: const Duration(seconds: 2),
+            ));
+        if (!_isCurrent(session, operation)) return;
+
+        DiscoveredTv? matchedTv;
+        for (final tv in discovered.where((t) => t.brand == session.device.brand)) {
+          final matched = _findMatchingSavedDevice(tv);
+          if (matched != null && matched.id == session.device.id && tv.ip != session.device.ip) {
+            matchedTv = tv;
+            break;
+          }
+        }
+
+        if (matchedTv != null) {
+          final updatedDevice = session.device.copyWith(
+            ip: matchedTv.ip,
+            modelName: matchedTv.modelName ?? session.device.modelName,
+          );
+          session.device = updatedDevice;
+          final idx = _savedDevices.indexWhere((d) => d.id == updatedDevice.id);
+          if (idx >= 0) _savedDevices[idx] = updatedDevice;
+          await storageService.saveDevice(updatedDevice);
+          if (!_isCurrent(session, operation)) return;
+
+          session.connectionError = null;
+          savedKey = storageService.getClientKey(
+            brand: updatedDevice.brand,
+            ip: updatedDevice.ip,
+            deviceId: updatedDevice.id,
+          );
+          success = await operation.wait(driver.connect(
+            ipAddress: updatedDevice.ip,
+            authToken: savedKey,
+            timeout: timeoutDuration,
+          ));
+          if (!_isCurrent(session, operation)) return;
+        }
+      }
 
       if (success && driver.isConnected) {
         session.isPoweredOn = true;
         session.shouldMaintainConnection = true;
         _fetchAppsForSession(session);
+      } else if (!success && !session.isWaitingPairing) {
+        session.connectionError ??= 'A TV não respondeu à tentativa de conexão.';
       }
     } catch (e) {
+      if (!_isCurrent(session, operation)) return;
+      session.connectionError = 'Falha ao estabelecer a conexão. Tente novamente.';
       _logAction('Falha ao conectar ${session.device.name}', {'erro': '$e'});
     }
 
@@ -472,9 +725,9 @@ class RemoteController extends ChangeNotifier {
     final session = _sessions[deviceId];
     if (session == null) return;
 
-    session.shouldMaintainConnection = false;
-    session.driver.disconnect();
-    session.isPoweredOn = false;
+    _endSession(session);
+    session.connectionError = null;
+    session.reconnecting = false;
 
     if (_activeDeviceId == deviceId) {
       _isConnected = false;
@@ -496,9 +749,7 @@ class RemoteController extends ChangeNotifier {
   /// Desconecta todos os dispositivos conectados.
   void disconnectAllDevices() {
     for (final session in _sessions.values) {
-      session.shouldMaintainConnection = false;
-      session.driver.disconnect();
-      session.isPoweredOn = false;
+      _endSession(session);
     }
     _isConnected = false;
     _isConnecting = false;
@@ -510,6 +761,8 @@ class RemoteController extends ChangeNotifier {
 
   /// Salva ou atualiza um dispositivo na lista persistente e no mapa de sessões.
   Future<void> saveOrUpdateDevice(SavedDevice device, {bool makeActive = false}) async {
+    await ready;
+    if (_disposed) return;
     final idx = _savedDevices.indexWhere((d) => d.id == device.id || d.ip == device.ip);
     if (idx >= 0) {
       _savedDevices[idx] = device;
@@ -517,6 +770,7 @@ class RemoteController extends ChangeNotifier {
       _savedDevices.add(device);
     }
     await storageService.saveDevice(device);
+    if (_disposed) return;
 
     final session = _getOrCreateSession(device);
     session.device = device;
@@ -531,10 +785,13 @@ class RemoteController extends ChangeNotifier {
 
   /// Remove um dispositivo do histórico, desconectando sua sessão.
   Future<void> removeSavedDevice(String deviceId) async {
+    await ready;
+    if (_disposed) return;
     disconnectDevice(deviceId);
     _sessions.remove(deviceId);
     _savedDevices.removeWhere((d) => d.id == deviceId);
     await storageService.removeDevice(deviceId);
+    if (_disposed) return;
 
     if (_activeDeviceId == deviceId) {
       if (_savedDevices.isNotEmpty) {
@@ -551,6 +808,8 @@ class RemoteController extends ChangeNotifier {
 
   /// Define um dispositivo como padrão inicial do aplicativo.
   Future<void> setDefaultDevice(String deviceId) async {
+    await ready;
+    if (_disposed) return;
     for (var i = 0; i < _savedDevices.length; i++) {
       final isDef = _savedDevices[i].id == deviceId;
       _savedDevices[i] = _savedDevices[i].copyWith(isDefault: isDef);
@@ -565,10 +824,8 @@ class RemoteController extends ChangeNotifier {
 
     final session = activeSession;
     if (session != null) {
-      session.driver.disconnect();
-      final newDriver = (brand == TvBrand.lgWebOs)
-          ? LgWebOsDriver(webOsService: _webOsService)
-          : DriverFactory.create(brand);
+      _endSession(session);
+      final newDriver = _driverFactory(brand);
 
       final updatedDevice = session.device.copyWith(brand: brand);
       session.device = updatedDevice;
@@ -584,11 +841,7 @@ class RemoteController extends ChangeNotifier {
       _syncActiveFields();
     } else {
       _driver.disconnect();
-      if (brand == TvBrand.lgWebOs) {
-        _driver = LgWebOsDriver(webOsService: _webOsService);
-      } else {
-        _driver = DriverFactory.create(brand);
-      }
+      _driver = _driverFactory(brand);
       _bindDriverCallbacks(_driver);
     }
 
@@ -606,6 +859,8 @@ class RemoteController extends ChangeNotifier {
     String? tvName,
     TvBrand? brand,
   }) async {
+    await ready;
+    if (_disposed) return;
     final targetBrand = brand ?? currentBrand;
     final targetIp = (ip != null && ip.trim().isNotEmpty) ? ip.trim() : _ipAddress;
     final targetMac = (mac != null && mac.trim().isNotEmpty) ? mac.trim() : _macAddress;
@@ -657,6 +912,7 @@ class RemoteController extends ChangeNotifier {
     await storageService.setIpAddress(targetIp);
     if (targetMac.isNotEmpty) await storageService.setMacAddress(targetMac);
     await storageService.setTvName(targetName);
+    if (_disposed) return;
 
     _getOrCreateSession(device);
     setActiveDevice(device.id);
@@ -679,7 +935,8 @@ class RemoteController extends ChangeNotifier {
 
   /// Reconecta de forma transparente quando o usuário retorna ao aplicativo
   Future<void> autoReconnectIfNeeded() async {
-    for (final session in _sessions.values) {
+    for (final session in _sessions.values.toList()) {
+      if (_disposed) return;
       if (session.shouldMaintainConnection && !session.isConnected && !session.isConnecting) {
         await connectDevice(session.device.id);
       }
@@ -692,19 +949,44 @@ class RemoteController extends ChangeNotifier {
   // --- Descoberta Automática de TVs na Rede (SSDP e Probes) ---
 
   Future<List<DiscoveredTv>> scanForTvs() async {
-    if (_isScanningTvs) return _discoveredTvs;
+    if (_disposed || _isScanningTvs) return _discoveredTvs;
+    _discoveryOperation = NetworkOperation();
     _isScanningTvs = true;
+    _discoveryError = null;
     _logAction('Buscando TVs na rede local (SSDP)...');
     notifyListeners();
 
     try {
-      _discoveredTvs = await SsdpDiscoveryService.discoverTvs(
+      final discovered = await _discoveryOperation.run(() => _discoveryRunner(
         timeout: const Duration(seconds: 4),
         knownIp: _ipAddress,
-      );
+      ));
+      if (_disposed) return [];
+      _discoveredTvs = List<DiscoveredTv>.from(discovered);
 
-      // Adiciona o dispositivo ativo se não foi localizado
-      if (_ipAddress.isNotEmpty && _connectedTvName != null) {
+      // Reconcilia alterações de IP via DHCP para dispositivos já salvos/pareados
+      for (final tv in _discoveredTvs) {
+        final matched = _findMatchingSavedDevice(tv);
+        if (matched != null &&
+            (matched.ip != tv.ip || (tv.modelName != null && matched.modelName != tv.modelName))) {
+          final updated = matched.copyWith(
+            ip: tv.ip,
+            modelName: tv.modelName ?? matched.modelName,
+          );
+          final idx = _savedDevices.indexWhere((d) => d.id == matched.id);
+          if (idx >= 0) _savedDevices[idx] = updated;
+          final session = _sessions[matched.id];
+          if (session != null) session.device = updated;
+          await storageService.saveDevice(updated);
+          if (_disposed) return [];
+          if (_activeDeviceId == updated.id) {
+            _syncActiveFields();
+          }
+        }
+      }
+
+      // Adiciona o dispositivo ativo se não foi localizado (exceto placeholder inicial não pareado)
+      if (_ipAddress.isNotEmpty && _connectedTvName != null && _ipAddress != '192.168.1.150') {
         if (!_discoveredTvs.any((t) => t.ip == _ipAddress)) {
           _discoveredTvs.add(DiscoveredTv(
             ip: _ipAddress,
@@ -716,8 +998,10 @@ class RemoteController extends ChangeNotifier {
 
       _logAction('Busca concluída', {'encontradas': _discoveredTvs.length});
     } catch (e) {
+      _discoveryError = 'Não foi possível concluir a busca. Confira a rede e tente novamente.';
       _logAction('Erro na busca SSDP', {'erro': '$e'});
     } finally {
+      _discoveryOperation.cancel();
       _isScanningTvs = false;
       notifyListeners();
     }
@@ -725,28 +1009,35 @@ class RemoteController extends ChangeNotifier {
     return _discoveredTvs;
   }
 
-  void selectDiscoveredTv(DiscoveredTv tv) {
-    final deviceId = SavedDevice.generateId(tv.brand, tv.ip);
-    SavedDevice? device = _savedDevices.firstWhere(
-      (d) => d.id == deviceId || d.ip == tv.ip,
-      orElse: () => SavedDevice(
+  Future<SavedDevice> selectDiscoveredTv(DiscoveredTv tv) async {
+    await ready;
+    final existing = _findMatchingSavedDevice(tv);
+    final SavedDevice device;
+    if (existing != null) {
+      device = existing.copyWith(
+        ip: tv.ip,
+        modelName: tv.modelName ?? existing.modelName,
+      );
+    } else {
+      final deviceId = SavedDevice.generateId(tv.brand, tv.ip);
+      device = SavedDevice(
         id: deviceId,
         name: tv.name,
         ip: tv.ip,
         brand: tv.brand,
         modelName: tv.modelName,
-      ),
-    );
+      );
+    }
 
-    saveOrUpdateDevice(device, makeActive: true);
+    await saveOrUpdateDevice(device, makeActive: true);
     _logAction('TV selecionada', {'nome': tv.name, 'ip': tv.ip});
     notifyListeners();
+    return device;
   }
 
   Future<void> connectToTv(DiscoveredTv tv) async {
-    selectDiscoveredTv(tv);
-    final deviceId = SavedDevice.generateId(tv.brand, tv.ip);
-    await connectDevice(deviceId);
+    final device = await selectDiscoveredTv(tv);
+    await connectDevice(device.id, allowDiscoveryFallback: false);
   }
 
   // --- Controle de Energia ---
@@ -932,6 +1223,7 @@ class RemoteController extends ChangeNotifier {
   }
 
   void switchHdmi1() {
+    if (!supportsDirectInputs) return;
     final active = driver;
     if (active is LgWebOsDriver) {
       active.webOsService.switchToInput('HDMI_1');
@@ -940,6 +1232,7 @@ class RemoteController extends ChangeNotifier {
   }
 
   void switchTvDigital() {
+    if (!supportsDirectInputs) return;
     final active = driver;
     if (active is LgWebOsDriver) {
       active.webOsService.launchLiveTv();
@@ -1026,6 +1319,7 @@ class RemoteController extends ChangeNotifier {
   // --- Magic Remote: Trackpad e Ponteiro ---
 
   void sendTrackpadDelta(double dx, double dy) {
+    if (!supportsTrackpad) return;
     driver.sendTrackpadDelta(dx, dy);
     _logAction('Trackpad Move', {'dx': dx, 'dy': dy});
   }
@@ -1033,6 +1327,7 @@ class RemoteController extends ChangeNotifier {
   void onTrackpadPan(double dx, double dy) => sendTrackpadDelta(dx, dy);
 
   void sendTrackpadClick() {
+    if (!supportsTrackpad) return;
     driver.sendTrackpadClick();
     _logAction('Trackpad Click / Confirmação');
   }
@@ -1048,12 +1343,13 @@ class RemoteController extends ChangeNotifier {
 
   /// Executa comandos de voz diretos (volume +/- 5 passos, mudo, desligar e abrir apps).
   Future<bool> executeVoiceIntent(VoiceIntent intent) async {
-    if (!intent.isCommand) return false;
+    if (_disposed || !intent.isCommand) return false;
 
     switch (intent.type) {
       case VoiceIntentType.volumeUp:
         HapticService.buttonPress();
         for (var i = 0; i < 5; i++) {
+          if (_disposed) return false;
           volumeUp();
           if (i < 4) await Future.delayed(const Duration(milliseconds: 65));
         }
@@ -1063,6 +1359,7 @@ class RemoteController extends ChangeNotifier {
       case VoiceIntentType.volumeDown:
         HapticService.buttonPress();
         for (var i = 0; i < 5; i++) {
+          if (_disposed) return false;
           volumeDown();
           if (i < 4) await Future.delayed(const Duration(milliseconds: 65));
         }
@@ -1133,35 +1430,24 @@ class RemoteController extends ChangeNotifier {
   }
 
   Future<void> _fetchAppsForSession(DeviceSession session, {bool forceRefresh = false}) async {
-    if (!forceRefresh && session.installedApps.isNotEmpty && session.isLoadingApps) return;
-
+    final operation = _sessionOperations[session];
+    if (operation == null || !_isCurrent(session, operation) || session.isLoadingApps) return;
+    if (!forceRefresh && session.installedApps.isNotEmpty) return;
     session.isLoadingApps = true;
     session.appsError = null;
-    if (_activeDeviceId == session.device.id) {
-      _isLoadingApps = true;
-      _appsError = null;
-    }
     notifyListeners();
-
     try {
-      final apps = await session.driver.getInstalledApps();
+      final apps = await operation.wait(session.driver.getInstalledApps());
+      if (!_isCurrent(session, operation)) return;
       session.installedApps = apps;
-      if (_activeDeviceId == session.device.id) {
-        _installedApps = apps;
-      }
-      _logAction('Aplicativos sincronizados [${session.device.name}]', {'total': apps.length});
     } catch (e) {
-      session.appsError = 'Falha ao carregar aplicativos: $e';
-      if (_activeDeviceId == session.device.id) {
-        _appsError = session.appsError;
-      }
-      _logAction('Erro ao buscar aplicativos [${session.device.name}]', {'erro': e.toString()});
+      if (_isCurrent(session, operation)) session.appsError = 'Falha ao carregar aplicativos: $e';
     } finally {
-      session.isLoadingApps = false;
-      if (_activeDeviceId == session.device.id) {
-        _isLoadingApps = false;
+      if (_isCurrent(session, operation)) {
+        session.isLoadingApps = false;
+        if (_activeDeviceId == session.device.id) _syncActiveFields();
+        notifyListeners();
       }
-      notifyListeners();
     }
   }
 

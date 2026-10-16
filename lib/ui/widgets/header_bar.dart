@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
 import 'media_cast_dialog.dart';
 import 'remote_button.dart';
+import 'connection_diagnostic.dart';
 
 /// Barra Superior do controle remoto.
 ///
@@ -13,10 +14,12 @@ import 'remote_button.dart';
 /// botão de busca e conexão de dispositivos (Cast/TV), alternador de Tema e abertura da gaveta.
 class HeaderBar extends StatelessWidget {
   final VoidCallback onOpenDrawer;
+  final VoidCallback? onToggleCompact;
 
   const HeaderBar({
     super.key,
     required this.onOpenDrawer,
+    this.onToggleCompact,
   });
 
   @override
@@ -35,13 +38,7 @@ class HeaderBar extends StatelessWidget {
             ? AppColors.buttonYellow
             : (isConnected ? AppColors.statusConnected : AppColors.statusDisconnected));
 
-    final statusText = isConnecting
-        ? 'Conectando...'
-        : (isWaitingPairing
-            ? 'Confirme na tela da TV'
-            : (isConnected
-                ? (controller.connectedTvName ?? 'Conectado (WebOS)')
-                : 'Desconectado'));
+    final statusText = isConnected ? (controller.connectedTvName ?? 'Conectado') : controller.connectionStatusLabel;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -52,6 +49,13 @@ class HeaderBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          if (onToggleCompact != null) IconButton(
+            constraints: const BoxConstraints.tightFor(width: 28, height: 36),
+            padding: EdgeInsets.zero,
+            onPressed: onToggleCompact,
+            icon: const Icon(Icons.picture_in_picture_alt, size: 18),
+            tooltip: 'Modo compacto',
+          ),
           // Botão Power com realce vermelho sutil
           RemoteButton(
             width: 42,
@@ -75,7 +79,7 @@ class HeaderBar extends StatelessWidget {
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () => DeviceDiscoveryDialog.show(context),
+              onTap: () => showDialog<void>(context: context, builder: (_) => const ConnectionDiagnostic()),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
                 child: Column(

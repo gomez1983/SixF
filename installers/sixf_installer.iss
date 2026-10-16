@@ -2,7 +2,7 @@
 ; Gera um instalador único executável (.exe) moderno e autocontido
 
 #define MyAppName "SixF Remote"
-#define MyAppVersion "0.9.8"
+#define MyAppVersion GetVersionNumbersString(SourcePath + "..\build\windows\x64\runner\Release\sixf_remote.exe")
 #define MyAppPublisher "SixF"
 #define MyAppExeName "sixf_remote.exe"
 
@@ -15,7 +15,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\build\installer
-OutputBaseFilename=SixF_Remote_Setup_v0.9.8
+OutputBaseFilename=SixF_Remote_Setup_v{#MyAppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

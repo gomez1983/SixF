@@ -284,6 +284,8 @@ void main() {
 
     test('Definir dispositivo padrão atualiza o flag isDefault em todos os aparelhos', () async {
       final controller = RemoteController();
+      await controller.ready;
+      await controller.removeSavedDevice(controller.activeDeviceId!);
 
       const d1 = SavedDevice(id: 'd1', name: 'D1', ip: '192.168.1.1', isDefault: true);
       const d2 = SavedDevice(id: 'd2', name: 'D2', ip: '192.168.1.2', isDefault: false);
@@ -300,6 +302,8 @@ void main() {
 
     test('Remover dispositivo ativo seleciona automaticamente o próximo disponível', () async {
       final controller = RemoteController();
+      await controller.ready;
+      await controller.removeSavedDevice(controller.activeDeviceId!);
 
       const d1 = SavedDevice(id: 'd1', name: 'TV Sala', ip: '192.168.1.10');
       const d2 = SavedDevice(id: 'd2', name: 'TV Quarto', ip: '192.168.1.20');
@@ -320,6 +324,8 @@ void main() {
   group('DeviceSelectorBar Widget Tests', () {
     testWidgets('Renderiza chips dos dispositivos salvos e permite alternar com 1 toque', (tester) async {
       final controller = RemoteController();
+      await controller.ready;
+      await controller.removeSavedDevice(controller.activeDeviceId!);
 
       const dev1 = SavedDevice(
         id: 'tv_sala',

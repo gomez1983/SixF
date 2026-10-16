@@ -45,6 +45,7 @@ class AppDrawerWidget extends StatefulWidget {
 class _AppDrawerWidgetState extends State<AppDrawerWidget> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _favoritesOnly = false;
 
   @override
   void initState() {
@@ -70,10 +71,14 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     final apps = controller.installedApps;
 
     final filteredApps = apps.where((app) {
+      if (_favoritesOnly && !controller.isFavoriteApp(app.id)) return false;
       if (_searchQuery.isEmpty) return true;
       return app.name.toLowerCase().contains(_searchQuery) ||
           app.id.toLowerCase().contains(_searchQuery);
-    }).toList();
+    }).toList()..sort((a, b) {
+      final favoriteOrder = (controller.isFavoriteApp(b.id) ? 1 : 0) - (controller.isFavoriteApp(a.id) ? 1 : 0);
+      return favoriteOrder != 0 ? favoriteOrder : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -91,6 +96,11 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
           // 2. Campo de Pesquisa Instantânea
           if (isConnected && apps.isNotEmpty) ...[
             _buildSearchField(context),
+            Align(alignment: Alignment.centerLeft, child: FilterChip(
+              label: const Text('Favoritos'),
+              selected: _favoritesOnly,
+              onSelected: (value) => setState(() => _favoritesOnly = value),
+            )),
             SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
           ],
 
@@ -405,7 +415,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
         maxCrossAxisExtent: isDesktop ? 86 : 96,
         mainAxisSpacing: isDesktop ? 8 : 10,
         crossAxisSpacing: isDesktop ? 8 : 10,
-        childAspectRatio: isDesktop ? 0.94 : 0.85,
+        childAspectRatio: isDesktop ? 0.75 : 0.72,
       ),
       itemCount: filteredApps.length,
       itemBuilder: (context, index) {
@@ -428,7 +438,8 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     final iconBoxSize = isDesktop ? 36.0 : 44.0;
     final iconInnerSize = isDesktop ? 18.0 : 22.0;
 
-    return Material(
+    return Stack(children: [
+      Positioned.fill(child: Material(
       color: AppColors.surfaceCardOf(context),
       borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
       child: InkWell(
@@ -505,6 +516,16 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
           ),
         ),
       ),
-    );
+      )),
+      Positioned(top: 0, right: 0, child: IconButton(
+        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+        padding: EdgeInsets.zero,
+        iconSize: 18,
+        tooltip: controller.isFavoriteApp(app.id) ? 'Remover ${app.name} dos favoritos' : 'Favoritar ${app.name}',
+        icon: Icon(controller.isFavoriteApp(app.id) ? Icons.star_rounded : Icons.star_outline_rounded,
+          color: AppColors.iconHighlightOf(context)),
+        onPressed: () => controller.toggleFavoriteApp(app.id),
+      )),
+    ]);
   }
 }

@@ -84,8 +84,8 @@ class DeviceSelectorBar extends StatelessWidget {
       onTap: () {
         if (!isActive) {
           controller.setActiveDevice(device.id);
-        } else if (!isConnected && !isConnecting) {
-          // Se já está ativo mas desconectado, toque reconecta
+        }
+        if (!isConnected && !isConnecting) {
           HapticService.selectionClick();
           controller.connectDevice(device.id);
         }

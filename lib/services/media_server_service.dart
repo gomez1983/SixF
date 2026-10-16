@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
+import 'network_operation.dart';
 import 'package:flutter/foundation.dart';
 
 /// Servidor HTTP leve embutido para streaming local de fotos, vídeos e músicas para Smart TVs (DLNA / UPnP).
@@ -11,6 +13,11 @@ class MediaServerService {
   File? _currentFile;
   String? _mimeType;
   String? _fileName;
+  String? _mediaPath;
+  NetworkOperation? _starting;
+  Future<int>? _startFuture;
+
+  String? get mediaPath => _mediaPath;
 
   int? get port => _server?.port;
   bool get isRunning => _server != null;
@@ -18,33 +25,49 @@ class MediaServerService {
   String? get currentMimeType => _mimeType;
 
   /// Inicia o servidor HTTP em uma porta livre do sistema operacional.
-  Future<int> start() async {
-    if (_server != null) return _server!.port;
+  Future<int> start() {
+    if (_server != null) return Future.value(_server!.port);
+    if (_startFuture != null) return _startFuture!;
+    final operation = NetworkOperation();
+    _starting = operation;
+    return _startFuture = _start(operation);
+  }
 
+  Future<int> _start(NetworkOperation operation) async {
     try {
-      _server = await HttpServer.bind(
-        InternetAddress.anyIPv4,
-        0, // Porta dinâmica livre
-        shared: true,
+      final server = await operation.wait(
+        HttpServer.bind(InternetAddress.anyIPv4, 0),
+        onDiscard: (server) { server.close(force: true); },
       );
-
-      _server!.listen(_handleRequest, onError: (e) {
-        debugPrint('[MediaServer] Erro no stream do servidor: $e');
+      operation.onCancel(() { server.close(force: true); });
+      operation.check();
+      _server = server;
+      server.listen((request) async {
+        try {
+          await _handleRequest(request);
+        } catch (_) {
+          try { await request.response.close(); } catch (_) {}
+        }
+      }, onError: (Object error) {
+        debugPrint('[MediaServer] Erro no servidor: ${error.runtimeType}');
       });
-
-      debugPrint('[MediaServer] Servidor HTTP local iniciado na porta ${_server!.port}');
-      return _server!.port;
-    } catch (e) {
-      debugPrint('[MediaServer] Falha ao iniciar servidor HTTP: $e');
-      rethrow;
+      return server.port;
+    } finally {
+      if (identical(_starting, operation)) {
+        _starting = null;
+        _startFuture = null;
+      }
     }
   }
 
   /// Define o arquivo local a ser disponibilizado para a Smart TV.
   void serveFile(File file, {String? mimeType, String? customName}) {
+    final random = Random.secure();
+    final token = List.generate(32, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
     _currentFile = file;
     _fileName = customName ?? file.uri.pathSegments.last;
     _mimeType = mimeType ?? _guessMimeType(_fileName!);
+    _mediaPath = '/media/$token/${Uri.encodeComponent(_fileName!)}';
     debugPrint('[MediaServer] Arquivo carregado para streaming: $_fileName ($_mimeType)');
   }
 
@@ -89,11 +112,13 @@ class MediaServerService {
   /// Gera a URL HTTP completa do arquivo para envio à TV.
   Future<String?> getMediaUrlForTv(String targetTvIp) async {
     if (_server == null || _currentFile == null) return null;
+    final server = _server;
+    final path = _mediaPath;
     final localIp = await getLocalIpForTarget(targetTvIp);
+    if (!identical(server, _server) || path != _mediaPath) return null;
     if (localIp == null) return null;
 
-    final encodedName = Uri.encodeComponent(_fileName ?? 'media');
-    return 'http://$localIp:${_server!.port}/media/$encodedName';
+    return 'http://$localIp:${server!.port}$path';
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -105,22 +130,39 @@ class MediaServerService {
     res.headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
     res.headers.set('Server', 'SixF-DLNA-MediaServer/1.0');
 
+    final file = _currentFile;
+    final path = _mediaPath;
+    final mime = _mimeType ?? 'application/octet-stream';
+    if (file == null || path == null || request.uri.path != Uri.parse(path).path || request.uri.hasQuery) {
+      res.statusCode = HttpStatus.notFound;
+      await res.close();
+      return;
+    }
+    if (!const ['GET', 'HEAD', 'OPTIONS'].contains(request.method)) {
+      res.statusCode = HttpStatus.methodNotAllowed;
+      res.headers.set(HttpHeaders.allowHeader, 'GET, HEAD, OPTIONS');
+      await res.close();
+      return;
+    }
     if (request.method == 'OPTIONS') {
       res.statusCode = HttpStatus.ok;
       await res.close();
       return;
     }
 
-    if (_currentFile == null || !await _currentFile!.exists()) {
+    if (!await file.exists() || path != _mediaPath) {
       res.statusCode = HttpStatus.notFound;
       res.write('Arquivo não encontrado no servidor SixF.');
       await res.close();
       return;
     }
 
-    final file = _currentFile!;
     final fileLength = await file.length();
-    final mime = _mimeType ?? 'application/octet-stream';
+    if (path != _mediaPath) {
+      res.statusCode = HttpStatus.notFound;
+      await res.close();
+      return;
+    }
     final isVideo = mime.startsWith('video/') || mime.startsWith('audio/');
 
     res.headers.set(HttpHeaders.contentTypeHeader, mime);
@@ -269,15 +311,15 @@ class MediaServerService {
 
   /// Encerra o servidor e libera portas locais.
   Future<void> stop() async {
-    try {
-      await _server?.close(force: true);
-      _server = null;
-      _currentFile = null;
-      _fileName = null;
-      _mimeType = null;
-      debugPrint('[MediaServer] Servidor HTTP encerrado.');
-    } catch (e) {
-      debugPrint('[MediaServer] Erro ao encerrar servidor: $e');
-    }
+    _starting?.cancel();
+    _starting = null;
+    _startFuture = null;
+    final server = _server;
+    _server = null;
+    _currentFile = null;
+    _fileName = null;
+    _mimeType = null;
+    _mediaPath = null;
+    await server?.close(force: true);
   }
 }

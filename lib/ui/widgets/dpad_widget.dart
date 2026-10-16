@@ -17,6 +17,8 @@ class DPadWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.read<RemoteController>();
+    context.select<RemoteController, (bool, Object)>((c) => (c.isConnected, c.driver));
+    final supportsInputs = context.select<RemoteController, bool>((controller) => controller.supportsDirectInputs);
     final buttonSize = size * 0.28;
     final centerSize = size * 0.36;
 
@@ -88,6 +90,8 @@ class DPadWidget extends StatelessWidget {
                     iconSize: 28,
                     tooltip: 'Navegar para Cima (Seta Cima)',
                     onPressed: () => controller.dpadUp(),
+                    repeatOnHold: controller.isConnected,
+                    repeatToken: controller.driver,
                   ),
                 ),
 
@@ -105,6 +109,8 @@ class DPadWidget extends StatelessWidget {
                     iconSize: 28,
                     tooltip: 'Navegar para Baixo (Seta Baixo)',
                     onPressed: () => controller.dpadDown(),
+                    repeatOnHold: controller.isConnected,
+                    repeatToken: controller.driver,
                   ),
                 ),
 
@@ -122,6 +128,8 @@ class DPadWidget extends StatelessWidget {
                     iconSize: 28,
                     tooltip: 'Navegar para Esquerda (Seta Esquerda)',
                     onPressed: () => controller.dpadLeft(),
+                    repeatOnHold: controller.isConnected,
+                    repeatToken: controller.driver,
                   ),
                 ),
 
@@ -139,6 +147,8 @@ class DPadWidget extends StatelessWidget {
                     iconSize: 28,
                     tooltip: 'Navegar para Direita (Seta Direita)',
                     onPressed: () => controller.dpadRight(),
+                    repeatOnHold: controller.isConnected,
+                    repeatToken: controller.driver,
                   ),
                 ),
 
@@ -176,6 +186,7 @@ class DPadWidget extends StatelessWidget {
             ),
           ),
 
+          if (supportsInputs) ...[
           const SizedBox(width: 12),
 
           // Botões Laterais Direitos: TV Digital e HDMI 1
@@ -215,6 +226,7 @@ class DPadWidget extends StatelessWidget {
               ),
             ],
           ),
+          ],
         ],
       ),
     );

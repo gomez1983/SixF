@@ -6,6 +6,7 @@ import '../../controllers/remote_controller.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
+import 'media_progress_slider.dart';
 
 /// Modal interativo para seleção e transmissão de mídia local (Fotos, Vídeos e Áudio)
 /// para a Smart TV conectada via protocolo aberto DLNA / UPnP AVTransport.
@@ -71,7 +72,10 @@ class MediaCastDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               'Transmitir Mídia',
@@ -81,7 +85,6 @@ class MediaCastDialog extends StatelessWidget {
                                 color: textPrimary,
                               ),
                             ),
-                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
@@ -91,9 +94,10 @@ class MediaCastDialog extends StatelessWidget {
                                   color: AppColors.statusConnected.withValues(alpha: 0.4),
                                 ),
                               ),
-                              child: const Text(
-                                'DLNA',
-                                style: TextStyle(
+                              child: Text(
+                                castController.transport == MediaCastTransport.native ? 'Nativo' :
+                                    castController.transport == MediaCastTransport.dlna ? 'DLNA' : 'Mídia',
+                                style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.statusConnected,
@@ -104,7 +108,8 @@ class MediaCastDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          isTvConnected ? 'Destino: $targetName' : 'TV desconectada',
+                          castController.isStreaming ? 'Destino: ${castController.currentTvName}' :
+                              isTvConnected ? 'Destino: $targetName' : 'TV desconectada',
                           style: TextStyle(
                             fontSize: 12,
                             color: isTvConnected ? textSecondary : AppColors.powerRed,
@@ -126,7 +131,7 @@ class MediaCastDialog extends StatelessWidget {
               const Divider(height: 28),
 
               // Conteúdo Dinâmico conforme estado
-              if (!isTvConnected) ...[
+              if (!isTvConnected && !castController.isStreaming) ...[
                 _buildDisconnectedWarning(context, textPrimary, textSecondary, surfaceElevated),
               ] else if (castController.isStreaming) ...[
                 _buildActivePlayerCard(
@@ -172,7 +177,7 @@ class MediaCastDialog extends StatelessWidget {
               ],
 
               // Mensagem de Erro se houver
-              if (castController.status == MediaCastStatus.error && castController.errorMessage != null) ...[
+              if (castController.errorMessage != null) ...[
                 const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -275,7 +280,7 @@ class MediaCastDialog extends StatelessWidget {
           context,
           icon: Icons.video_library_rounded,
           title: 'Vídeos do Celular / PC',
-          subtitle: 'Streaming fluido com suporte a avanço e pausa',
+          subtitle: 'Controles disponíveis conforme o suporte da TV',
           accentColor: highlight,
           onTap: () {
             castController.pickAndCastMedia(
@@ -451,14 +456,14 @@ class MediaCastDialog extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          isPlaying ? 'Reproduzindo na TV' : 'Pausado',
+                        Flexible(child: Text(
+                          castController.playbackLabel,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: isPlaying ? AppColors.statusConnected : AppColors.buttonYellow,
                           ),
-                        ),
+                        )),
                         if (sizeMb.isNotEmpty) ...[
                           Text(' • $sizeMb', style: TextStyle(fontSize: 11, color: textSecondary)),
                         ],
@@ -471,7 +476,7 @@ class MediaCastDialog extends StatelessWidget {
           ),
 
           // Barra de Progresso / Timeline do Vídeo (Seek)
-          if (!isPhoto) ...[
+          if (castController.hasProgress) ...[
             const SizedBox(height: 12),
             Column(
               children: [
@@ -484,19 +489,9 @@ class MediaCastDialog extends StatelessWidget {
                     inactiveTrackColor: highlight.withValues(alpha: 0.2),
                     thumbColor: highlight,
                   ),
-                  child: Slider(
-                    value: castController.currentPosition.inSeconds.toDouble().clamp(
-                          0.0,
-                          castController.totalDuration.inSeconds > 0
-                              ? castController.totalDuration.inSeconds.toDouble()
-                              : 100.0,
-                        ),
-                    max: castController.totalDuration.inSeconds > 0
-                        ? castController.totalDuration.inSeconds.toDouble()
-                        : 100.0,
-                    onChanged: (val) {
-                      castController.seekTo(Duration(seconds: val.toInt()));
-                    },
+                  child: MediaProgressSlider(
+                    key: ValueKey(castController.currentFilePath),
+                    controller: castController,
                   ),
                 ),
                 Padding(
@@ -529,14 +524,21 @@ class MediaCastDialog extends StatelessWidget {
             ),
           ],
 
+          if (!isPhoto && !castController.hasProgress) ...[
+            const SizedBox(height: 12),
+            Text('A TV não informou o progresso. Avanço e repetição indisponíveis.',
+              style: TextStyle(fontSize: 11, color: textSecondary), textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 16),
 
           // Barra de Controles (Play/Pause/Stop/Loop/Trocar)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               // Botão Repetir / Loop (apenas para vídeo e áudio)
-              if (!isPhoto) ...[
+              if (castController.canLoop || castController.isLooping) ...[
                 IconButton.filledTonal(
                   style: IconButton.styleFrom(
                     backgroundColor: castController.isLooping
@@ -552,7 +554,6 @@ class MediaCastDialog extends StatelessWidget {
                   tooltip: castController.isLooping ? 'Repetição Ativada' : 'Repetir Vídeo',
                   onPressed: () => castController.toggleLoop(),
                 ),
-                const SizedBox(width: 10),
               ],
 
               // Botão Parar (Stop)
@@ -566,30 +567,19 @@ class MediaCastDialog extends StatelessWidget {
                 onPressed: () => castController.stop(),
               ),
 
-              const SizedBox(width: 12),
 
-              // Botão Play / Pause
-              IconButton.filled(
-                style: IconButton.styleFrom(
-                  backgroundColor: highlight,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.all(12),
-                ),
-                icon: Icon(
-                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 28,
-                ),
-                tooltip: isPlaying ? 'Pausar' : 'Reproduzir',
-                onPressed: () {
-                  if (isPlaying) {
-                    castController.pause();
-                  } else {
-                    castController.play();
-                  }
-                },
+              if (castController.canPause) IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: highlight, foregroundColor: Colors.black),
+                icon: const Icon(Icons.pause_rounded, size: 28),
+                tooltip: castController.transport == MediaCastTransport.native ? 'Enviar pausa' : 'Pausar',
+                onPressed: castController.pause,
               ),
-
-              const SizedBox(width: 12),
+              if (castController.canPlay) IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: highlight, foregroundColor: Colors.black),
+                icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                tooltip: castController.transport == MediaCastTransport.native ? 'Enviar reprodução' : 'Reproduzir',
+                onPressed: castController.play,
+              ),
 
               // Botão Nova Mídia
               IconButton.filledTonal(
@@ -630,7 +620,7 @@ class MediaCastDialog extends StatelessWidget {
     } else if (status == MediaCastStatus.preparingServer) {
       message = 'Iniciando servidor de streaming local...';
     } else if (status == MediaCastStatus.connectingTv) {
-      message = 'Enviando comando DLNA para a TV...';
+      message = 'Enviando mídia para a TV...';
     }
 
     return Padding(
@@ -646,7 +636,7 @@ class MediaCastDialog extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'A TV irá carregar a mídia na resolução original',
+            'Aguardando resposta da TV',
             style: TextStyle(fontSize: 11, color: textSecondary),
           ),
         ],

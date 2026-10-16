@@ -3,25 +3,51 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import '../models/dlna_renderer.dart';
-import '../services/dlna_service.dart';
+import '../services/dlna_transport.dart';
 import '../services/drivers/tv_driver.dart';
 import '../services/haptic_service.dart';
 import '../services/media_server_service.dart';
+import '../services/network_operation.dart';
 
 enum MediaCastStatus {
   idle,
   picking,
   preparingServer,
   connectingTv,
+  sent,
   playing,
   paused,
   stopped,
   error,
 }
 
+enum MediaCastTransport { none, native, dlna }
+
 /// Controlador de transmissão de mídia e fotos/vídeos locais para a Smart TV (DLNA / UPnP).
 class MediaCastController extends ChangeNotifier {
-  final MediaServerService _serverService = MediaServerService();
+  final MediaServerService _serverService;
+  final DlnaTransport _dlna;
+  NetworkOperation? _operation;
+  bool _disposed = false;
+  int _selectionGeneration = 0;
+  bool _polling = false;
+
+  MediaCastController({MediaServerService? serverService, DlnaTransport? dlna})
+      : _serverService = serverService ?? MediaServerService(),
+        _dlna = dlna ?? DlnaTransport();
+
+  bool _current(NetworkOperation operation) => !_disposed && !operation.isCancelled && identical(_operation, operation);
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  void _cancelTimers() {
+    _positionPollTimer?.cancel();
+    _positionPollTimer = null;
+    _polling = false;
+  }
 
   MediaCastStatus _status = MediaCastStatus.idle;
   String? _currentFileName;
@@ -40,9 +66,35 @@ class MediaCastController extends ChangeNotifier {
   bool _isLooping = false;
   Timer? _positionPollTimer;
   bool _isSeeking = false;
+  bool _commandPending = false;
+  bool _hasPosition = false;
+  bool _loopRestarting = false;
+  Set<String> _actions = {};
+  MediaCastTransport _transport = MediaCastTransport.none;
+  String? _lastCommand;
+
+  MediaCastTransport get transport => _transport;
+  bool get hasProgress => isStreaming && !isPhoto && _transport == MediaCastTransport.dlna && _hasPosition;
+  bool get canSeek => hasProgress && _totalDuration > Duration.zero && _actions.contains('Seek') && !_isSeeking && !_commandPending && !_polling;
+  bool get canLoop => canSeek && _actions.contains('Play');
+  bool get canPlay => _canCommand('Play');
+  bool get canPause => _canCommand('Pause');
+  bool _canCommand(String action) => isStreaming && !isPhoto && !_commandPending && !_isSeeking && !_polling &&
+      (_transport == MediaCastTransport.native
+          ? _activeDriver?.isConnected == true
+          : _actions.contains(action));
+
+  String get playbackLabel {
+    if (isPhoto) return 'Imagem enviada à TV';
+    if (_status == MediaCastStatus.playing) return 'Reproduzindo na TV';
+    if (_status == MediaCastStatus.paused) return 'Pausado na TV';
+    if (_status == MediaCastStatus.stopped) return 'Reprodução parada na TV';
+    return _lastCommand ?? 'Mídia enviada à TV';
+  }
+
 
   MediaCastStatus get status => _status;
-  bool get isStreaming => _status == MediaCastStatus.playing || _status == MediaCastStatus.paused;
+  bool get isStreaming => const {MediaCastStatus.sent, MediaCastStatus.playing, MediaCastStatus.paused, MediaCastStatus.stopped}.contains(_status);
   bool get isPlaying => _status == MediaCastStatus.playing;
   bool get isPaused => _status == MediaCastStatus.paused;
   bool get isVideo => _currentMimeType?.startsWith('video/') ?? false;
@@ -72,9 +124,11 @@ class MediaCastController extends ChangeNotifier {
     FileType fileType = FileType.media,
     TvDriver? activeDriver,
   }) async {
+    if (_disposed) return false;
+    final selection = ++_selectionGeneration;
+    final previousStatus = _status;
     _setErrorMessage(null);
     _status = MediaCastStatus.picking;
-    _activeDriver = activeDriver;
     notifyListeners();
 
     try {
@@ -82,8 +136,9 @@ class MediaCastController extends ChangeNotifier {
         type: fileType,
       );
 
+      if (_disposed || selection != _selectionGeneration) return false;
       if (pickedFiles.isEmpty || pickedFiles.first.path == null) {
-        _status = isStreaming ? _status : MediaCastStatus.idle;
+        _status = previousStatus;
         notifyListeners();
         return false;
       }
@@ -96,6 +151,7 @@ class MediaCastController extends ChangeNotifier {
         throw Exception('O arquivo selecionado não foi encontrado no armazenamento.');
       }
 
+      if (_disposed || selection != _selectionGeneration) return false;
       return await castFile(
         file,
         fileName: pickedFile.name,
@@ -106,6 +162,7 @@ class MediaCastController extends ChangeNotifier {
         activeDriver: activeDriver,
       );
     } catch (e) {
+      if (_disposed || selection != _selectionGeneration) return false;
       debugPrint('[MediaCast] Erro ao selecionar mídia: $e');
       _status = MediaCastStatus.error;
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -117,10 +174,51 @@ class MediaCastController extends ChangeNotifier {
   /// Transmite um arquivo local específico diretamente para a Smart TV selecionada.
   ///
   /// Se um [activeDriver] conectado for fornecido (ex: LG webOS ou Samsung Tizen já pareada),
-  /// tenta prioritariamente a reprodução via API nativa do fabricante (SSAP / WebSocket).
-  /// Caso contrário ou em caso de recusa da TV, recorre ao protocolo aberto DLNA / UPnP AVTransport.
+  /// fotos priorizam a API nativa do fabricante (SSAP / WebSocket).
+  /// Vídeos e áudios LG priorizam DLNA / UPnP AVTransport com Play explícito;
+  /// a API nativa é alternativa quando esse transporte recusa o envio.
   Future<bool> castFile(
     File file, {
+    String? fileName,
+    required String targetTvIp,
+    required TvBrand brand,
+    String? tvName,
+    String? locationUrl,
+    TvDriver? activeDriver,
+  }) async {
+    if (_disposed) return false;
+    _selectionGeneration++;
+    _operation?.cancel();
+    _cancelTimers();
+    final operation = NetworkOperation();
+    _operation = operation;
+    final closing = _serverService.stop();
+    _currentControlUrl = null;
+    _activeRenderer = null;
+    _currentPosition = Duration.zero;
+    _totalDuration = Duration.zero;
+    _isSeeking = false;
+    _commandPending = false;
+    _hasPosition = false;
+    _loopRestarting = false;
+    _isLooping = false;
+    _actions = {};
+    _transport = MediaCastTransport.none;
+    _lastCommand = null;
+    try {
+      await closing;
+      if (!_current(operation)) return false;
+      return await operation.run(() => _castFile(file, operation: operation,
+        fileName: fileName, targetTvIp: targetTvIp, brand: brand,
+        tvName: tvName, locationUrl: locationUrl, activeDriver: activeDriver));
+    } on OperationCancelled {
+      return false;
+    }
+  }
+
+  Future<bool> _castFile(
+    File file, {
+    required NetworkOperation operation,
     String? fileName,
     required String targetTvIp,
     required TvBrand brand,
@@ -136,150 +234,80 @@ class MediaCastController extends ChangeNotifier {
         throw Exception('O arquivo selecionado não foi encontrado no armazenamento.');
       }
 
+      operation.check();
       _currentFileName = fileName ?? file.uri.pathSegments.last;
       _currentFilePath = file.path;
       _currentFileSize = await file.length();
+      operation.check();
       _currentTvName = tvName ?? '${brand.displayName} ($targetTvIp)';
 
       // 1. Inicia ou reutiliza o servidor HTTP local
       _status = MediaCastStatus.preparingServer;
       notifyListeners();
 
+      operation.check();
       await _serverService.start();
+      operation.check();
       _serverService.serveFile(file, customName: _currentFileName);
       _currentMimeType = _serverService.currentMimeType;
 
       final mediaUrl = await _serverService.getMediaUrlForTv(targetTvIp);
+      operation.check();
       if (mediaUrl == null) {
         throw Exception('Não foi possível identificar o IP local do celular/PC na mesma rede da TV.');
       }
 
-      // 2. Canal de Envio:
-      // Se houver driver nativo conectado (LG webOS SSAP / Samsung WebSocket), utiliza prioritariamente
-      // a API nativa da TV (ssap://media.viewer/open e system.launcher).
-      // Isso elimina 100% de erros de recusa de porta de rede (como Erro 1225 do DLNA/UPnP).
       _status = MediaCastStatus.connectingTv;
       notifyListeners();
 
-      if (activeDriver != null && activeDriver.isConnected) {
-        debugPrint('[MediaCast] Transmitindo mídia via canal nativo do fabricante (${activeDriver.runtimeType})...');
-        try {
-          final nativeSuccess = await activeDriver.openMediaUrl(
-            mediaUrl,
-            title: _currentFileName ?? 'Mídia SixF',
-            mimeType: _currentMimeType,
-          );
-          if (nativeSuccess) {
-            debugPrint('[MediaCast] Mídia iniciada com sucesso via canal nativo do driver!');
-            _status = MediaCastStatus.playing;
-            HapticService.heavyPress();
-            notifyListeners();
-
-            if (!isPhoto) {
-              Future.delayed(const Duration(milliseconds: 600), () {
-                try {
-                  activeDriver.sendKey(RemoteKey.play);
-                } catch (_) {}
-              });
-              _startPositionPolling();
-            }
-            return true;
-          }
-        } catch (nativeErr) {
-          debugPrint('[MediaCast] Canal nativo falhou ($nativeErr), recorrendo ao fallback DLNA...');
-        }
-      }
-
-      // 3. Canal Universal / DLNA AVTransport (Fallback para reprodutores genéricos ou quando driver desconectado)
-      debugPrint('[MediaCast] Acionando canal DLNA AVTransport para $targetTvIp (${_currentMimeType})...');
-      final renderer = await DlnaService.resolveRenderer(
-        targetTvIp,
-        locationUrl: locationUrl,
-        brand: brand,
-        tvName: tvName,
-      );
-
+      // O visualizador nativo LG pode aceitar a abertura sem iniciar o vídeo.
+      // AVTransport carrega a URI e envia Play explicitamente no mesmo endpoint.
+      final preferDlna = brand == TvBrand.lgWebOs && (isVideo || isAudio);
+      if (!preferDlna && await _tryNative(mediaUrl, operation)) return true;
+      final renderer = await _dlna.resolveRenderer(targetTvIp,
+        locationUrl: locationUrl, brand: brand, tvName: tvName);
+      operation.check();
       if (renderer == null) {
-        // Se o DLNA não respondeu, tenta uma última vez via canal nativo caso disponível
-        if (activeDriver != null && activeDriver.isConnected) {
-          final fallbackSuccess = await activeDriver.openMediaUrl(
-            mediaUrl,
-            title: _currentFileName ?? 'Mídia SixF',
-            mimeType: _currentMimeType,
-          );
-          if (fallbackSuccess) {
-            _status = MediaCastStatus.playing;
-            notifyListeners();
-            return true;
-          }
-        }
+        if (await _tryNative(mediaUrl, operation)) return true;
         throw Exception('A Smart TV não respondeu aos comandos de mídia DLNA/UPnP.');
       }
-
-      _activeRenderer = renderer;
-      _currentControlUrl = renderer.controlUrl;
-
-      // 4. Envia SetAVTransportURI
-      final setResult = await DlnaService.setAVTransportURI(
-        renderer.controlUrl,
-        mediaUrl,
+      final setResult = await _dlna.setUri(renderer.controlUrl, mediaUrl,
         title: _currentFileName ?? 'Mídia SixF',
-        mimeType: _currentMimeType ?? 'video/mp4',
-        fileSize: _currentFileSize,
-      );
-
+        mimeType: _currentMimeType ?? 'video/mp4', fileSize: _currentFileSize);
+      operation.check();
       if (!setResult.success) {
-        // Se falhou por recusa de porta de rede (errno 1225) e há driver conectado, tenta acioná-lo imediatamente
-        if (activeDriver != null && activeDriver.isConnected) {
-          debugPrint('[MediaCast] DLNA recusou conexão (1225). Tentando recuperar via canal nativo...');
-          final recoverySuccess = await activeDriver.openMediaUrl(
-            mediaUrl,
-            title: _currentFileName ?? 'Mídia SixF',
-            mimeType: _currentMimeType,
-          );
-          if (recoverySuccess) {
-            _status = MediaCastStatus.playing;
-            HapticService.heavyPress();
-            notifyListeners();
-            if (!isPhoto) {
-              Future.delayed(const Duration(milliseconds: 600), () {
-                try {
-                  activeDriver.sendKey(RemoteKey.play);
-                } catch (_) {}
-              });
-              _startPositionPolling();
-            }
-            return true;
-          }
-        }
+        if (await _tryNative(mediaUrl, operation)) return true;
         throw Exception(setResult.userFriendlyMessage);
       }
 
-      // Para fotos estáticas, SetAVTransportURI já renderiza a imagem na TV.
-      // Dispara comando Play apenas para vídeos e áudios para não causar erro 701 na TV.
+      // Mantém todos os comandos no endpoint que aceitou a URI, inclusive no fallback.
+      _currentControlUrl = setResult.controlUrl ?? renderer.controlUrl;
+      _activeRenderer = DlnaRenderer(ip: renderer.ip, name: renderer.name,
+        controlUrl: _currentControlUrl!, locationUrl: renderer.locationUrl, brand: renderer.brand);
+      _transport = MediaCastTransport.dlna;
       if (!isPhoto) {
-        final playResult = await DlnaService.play(renderer.controlUrl);
+        final playResult = await _dlna.play(_currentControlUrl!);
+        operation.check();
         if (!playResult.success) {
-          debugPrint('[MediaCast] Aviso ao acionar Play via DLNA: ${playResult.userFriendlyMessage}');
+          if (await _tryNative(mediaUrl, operation)) return true;
+          throw Exception(playResult.userFriendlyMessage);
         }
-        // Se houver driver LG webOS conectado e o SmartShare abrir em pausa, envia tecla Play física
-        if (activeDriver != null && activeDriver.isConnected) {
-          Future.delayed(const Duration(milliseconds: 600), () {
-            try {
-              activeDriver.sendKey(RemoteKey.play);
-            } catch (_) {}
-          });
-        }
-        // Inicia o monitoramento de progresso e loop
-        _startPositionPolling();
       }
-
-      _status = MediaCastStatus.playing;
+      _status = MediaCastStatus.sent;
       HapticService.heavyPress();
       notifyListeners();
+      if (!isPhoto) {
+        await _refreshPlayback(operation);
+        operation.check();
+        _startPositionPolling();
+      }
       return true;
     } catch (e) {
-      debugPrint('[MediaCast] Erro ao transmitir mídia: $e');
+      if (!_current(operation)) return false;
+      _cancelTimers();
+      await _serverService.stop();
+      if (!_current(operation)) return false;
+      debugPrint('[MediaCast] Erro ao transmitir mídia: ${e.runtimeType}');
       _status = MediaCastStatus.error;
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
       notifyListeners();
@@ -287,132 +315,176 @@ class MediaCastController extends ChangeNotifier {
     }
   }
 
-  /// Pausa a reprodução na TV.
-  Future<void> pause() async {
-    HapticService.selectionClick();
-    if (_currentControlUrl != null) {
-      final result = await DlnaService.pause(_currentControlUrl!);
-      if (result.success) {
-        _status = MediaCastStatus.paused;
-        notifyListeners();
-        return;
-      }
+  Future<bool> _tryNative(String mediaUrl, NetworkOperation operation) async {
+    final driver = _activeDriver;
+    if (driver == null || !driver.isConnected) return false;
+    bool accepted;
+    try {
+      accepted = await driver.openMediaUrl(mediaUrl,
+        title: _currentFileName ?? 'Mídia SixF', mimeType: _currentMimeType);
+    } catch (_) {
+      operation.check();
+      return false;
     }
-    if (_activeDriver != null && _activeDriver!.isConnected) {
-      _activeDriver!.sendKey(RemoteKey.pause);
-      _status = MediaCastStatus.paused;
-      notifyListeners();
+    operation.check();
+    if (!accepted) return false;
+    _transport = MediaCastTransport.native;
+    _currentControlUrl = null;
+    _activeRenderer = null;
+    _status = MediaCastStatus.sent;
+    HapticService.heavyPress();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> pause() => _sendPlaybackCommand(false);
+  Future<void> play() => _sendPlaybackCommand(true);
+
+  Future<void> _sendPlaybackCommand(bool play) async {
+    final operation = _operation;
+    if (operation == null || !_current(operation) || !(play ? canPlay : canPause)) return;
+    _commandPending = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      if (_transport == MediaCastTransport.native) {
+        _activeDriver!.sendKey(play ? RemoteKey.play : RemoteKey.pause);
+      } else {
+        final result = await operation.run(() => play
+            ? _dlna.play(_currentControlUrl!) : _dlna.pause(_currentControlUrl!));
+        operation.check();
+        if (!result.success) throw Exception(result.userFriendlyMessage);
+      }
+      _status = MediaCastStatus.sent;
+      _lastCommand = play ? 'Comando de reprodução enviado' : 'Comando de pausa enviado';
+      if (_transport == MediaCastTransport.dlna) await _refreshPlayback(operation);
+    } catch (e) {
+      if (_current(operation)) _errorMessage = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (_current(operation)) {
+        _commandPending = false;
+        notifyListeners();
+      }
     }
   }
 
-  /// Retoma a reprodução na TV.
-  Future<void> play() async {
-    HapticService.selectionClick();
-    if (_currentControlUrl != null) {
-      final result = await DlnaService.play(_currentControlUrl!);
-      if (result.success) {
-        _status = MediaCastStatus.playing;
-        notifyListeners();
-        return;
-      }
-    }
-    if (_activeDriver != null && _activeDriver!.isConnected) {
-      _activeDriver!.sendKey(RemoteKey.play);
-      _status = MediaCastStatus.playing;
-      notifyListeners();
-    }
-  }
-
-  /// Alterna a repetição contínua (Loop) do vídeo/áudio.
   void toggleLoop() {
+    if (!_isLooping && !canLoop) return;
     HapticService.selectionClick();
     _isLooping = !_isLooping;
     notifyListeners();
   }
 
-  /// Realiza busca rápida de posição (Seek) no vídeo.
-  Future<void> seekTo(Duration target) async {
-    if (_currentControlUrl == null || isPhoto) return;
+  Future<bool> seekTo(Duration target) async {
+    final operation = _operation;
+    if (operation == null || !_current(operation) || !canSeek) return false;
+    target = Duration(milliseconds: target.inMilliseconds.clamp(0, _totalDuration.inMilliseconds));
+    final targetTime = '${target.inHours.toString().padLeft(2, '0')}:'
+        '${(target.inMinutes % 60).toString().padLeft(2, '0')}:'
+        '${(target.inSeconds % 60).toString().padLeft(2, '0')}';
     _isSeeking = true;
-    _currentPosition = target;
+    _errorMessage = null;
     notifyListeners();
-
-    final hours = target.inHours.toString().padLeft(2, '0');
-    final minutes = (target.inMinutes % 60).toString().padLeft(2, '0');
-    final seconds = (target.inSeconds % 60).toString().padLeft(2, '0');
-    final targetTimeStr = '$hours:$minutes:$seconds';
-
-    debugPrint('[MediaCast] Executando Seek para: $targetTimeStr');
-    await DlnaService.seek(_currentControlUrl!, targetTimeStr);
-    _isSeeking = false;
+    try {
+      final result = await operation.run(() => _dlna.seek(_currentControlUrl!, targetTime));
+      operation.check();
+      if (!result.success) throw Exception(result.userFriendlyMessage);
+      // A posição exibida continua sendo a informada pela TV.
+      await _refreshPlayback(operation);
+      return _current(operation);
+    } catch (e) {
+      if (_current(operation)) _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      if (_current(operation)) {
+        _isSeeking = false;
+        notifyListeners();
+      }
+    }
   }
 
-  /// Polling periódico da posição de reprodução e detecção de loop.
-  void _startPositionPolling() {
-    _positionPollTimer?.cancel();
-    _positionPollTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (_currentControlUrl == null || _status != MediaCastStatus.playing || isPhoto) {
-        return;
+  Future<void> _refreshPlayback(NetworkOperation operation) async {
+    if (!_current(operation) || _currentControlUrl == null || isPhoto || _polling) return;
+    final url = _currentControlUrl!;
+    _polling = true;
+    try {
+      final state = await operation.run(() => _dlna.state(url));
+      operation.check();
+      _status = switch (state) {
+        'PLAYING' => MediaCastStatus.playing,
+        'PAUSED_PLAYBACK' => MediaCastStatus.paused,
+        'STOPPED' || 'NO_MEDIA_PRESENT' => MediaCastStatus.stopped,
+        _ => MediaCastStatus.sent,
+      };
+      final actions = await operation.run(() => _dlna.actions(url));
+      operation.check();
+      _actions = actions ?? {};
+      final position = await operation.run(() => _dlna.position(url));
+      operation.check();
+      _hasPosition = position != null && position.duration > Duration.zero;
+      if (position != null) {
+        _totalDuration = position.duration;
+        _currentPosition = position.position;
       }
+    } catch (_) {
+      if (_current(operation)) {
+        _status = MediaCastStatus.sent;
+        _actions = {};
+        _hasPosition = false;
+      }
+    } finally {
+      if (_current(operation)) {
+        _polling = false;
+        notifyListeners();
+      }
+    }
+  }
 
-      if (_isSeeking) return;
-
-      try {
-        final posInfo = await DlnaService.getPositionInfo(_currentControlUrl!);
-        if (posInfo != null) {
-          if (posInfo.duration > Duration.zero) {
-            _totalDuration = posInfo.duration;
-          }
-          _currentPosition = posInfo.position;
-          notifyListeners();
-
-          // Detecção de fim de vídeo para loop automático
-          if (_isLooping && _totalDuration > Duration.zero) {
-            final remaining = _totalDuration - _currentPosition;
-            if (remaining <= const Duration(seconds: 1)) {
-              debugPrint('[MediaCast] Loop ativado: reiniciando vídeo do início...');
-              await seekTo(Duration.zero);
-              await play();
-            }
-          }
-        } else {
-          // Fallback se GetPositionInfo não for retornado: verifica estado de transporte
-          if (_isLooping) {
-            final state = await DlnaService.getTransportInfo(_currentControlUrl!);
-            if (state == 'STOPPED') {
-              debugPrint('[MediaCast] Vídeo finalizado (STOPPED) e loop ativo: reiniciando...');
-              await seekTo(Duration.zero);
-              await play();
-            }
-          }
+  void _startPositionPolling() {
+    final operation = _operation;
+    if (operation == null || !_current(operation)) return;
+    _positionPollTimer?.cancel();
+    _positionPollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!_current(operation) || _polling || _isSeeking || _commandPending || _loopRestarting) return;
+      final wasPlaying = isPlaying;
+      await _refreshPlayback(operation);
+      if (!_current(operation)) return;
+      // Repete apenas após uma transição real para STOPPED, sem cortar o fim do vídeo.
+      if (_isLooping && wasPlaying && _status == MediaCastStatus.stopped && canLoop) {
+        _loopRestarting = true;
+        try {
+          if (await seekTo(Duration.zero) && _current(operation)) await play();
+        } finally {
+          if (_current(operation)) _loopRestarting = false;
         }
-      } catch (_) {}
+      }
     });
   }
 
   /// Encerra a transmissão e libera a TV e o servidor local.
   Future<void> stop() async {
-    HapticService.buttonPress();
-    _positionPollTimer?.cancel();
-    _positionPollTimer = null;
+    if (_disposed) return;
+    _selectionGeneration++;
+    _operation?.cancel();
+    _cancelTimers();
+    final driver = _transport == MediaCastTransport.native ? _activeDriver : null;
+    final controlUrl = _currentControlUrl;
+    final operation = NetworkOperation();
+    _operation = operation;
+    // Revoga o acesso ao arquivo antes de aguardar qualquer resposta da TV.
+    final closing = _serverService.stop();
+    _status = MediaCastStatus.idle;
+    _transport = MediaCastTransport.none;
+    _isLooping = false;
+    _actions = {};
+    _hasPosition = false;
+    _commandPending = false;
+    _loopRestarting = false;
+    _lastCommand = null;
+    _errorMessage = null;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
-
-    if (_activeDriver != null && _activeDriver!.isConnected) {
-      try {
-        _activeDriver!.sendKey(RemoteKey.stop);
-        _activeDriver!.sendKey(RemoteKey.back);
-      } catch (_) {}
-    }
-    if (_currentControlUrl != null) {
-      try {
-        await DlnaService.stop(_currentControlUrl!);
-      } catch (e) {
-        debugPrint('[MediaCast] Aviso ao interromper na TV: $e');
-      }
-    }
-    await _serverService.stop();
-    _status = MediaCastStatus.idle;
+    _isSeeking = false;
     _currentFileName = null;
     _currentFilePath = null;
     _currentFileSize = null;
@@ -421,6 +493,16 @@ class MediaCastController extends ChangeNotifier {
     _activeRenderer = null;
     _currentControlUrl = null;
     notifyListeners();
+    if (driver != null && driver.isConnected) {
+      try {
+        driver.sendKey(RemoteKey.stop);
+        driver.sendKey(RemoteKey.back);
+      } catch (_) {}
+    }
+    await closing;
+    if (controlUrl != null && _current(operation)) {
+      try { await operation.run(() => _dlna.stop(controlUrl)); } catch (_) {}
+    }
   }
 
   void _setErrorMessage(String? msg) {
@@ -429,7 +511,11 @@ class MediaCastController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _positionPollTimer?.cancel();
+    if (_disposed) return;
+    _disposed = true;
+    _selectionGeneration++;
+    _operation?.cancel();
+    _cancelTimers();
     _serverService.stop();
     super.dispose();
   }

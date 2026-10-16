@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'network_operation.dart';
 import 'package:flutter/foundation.dart';
 import '../models/dlna_renderer.dart';
 import 'drivers/tv_driver.dart';
@@ -9,6 +9,7 @@ import 'network_security_utils.dart';
 /// Resultado detalhado de uma ação executada via DLNA / UPnP na TV.
 class DlnaResult {
   final bool success;
+  final String? controlUrl;
   final int? statusCode;
   final int? upnpErrorCode;
   final String? upnpErrorDescription;
@@ -18,6 +19,7 @@ class DlnaResult {
 
   const DlnaResult({
     required this.success,
+    this.controlUrl,
     this.statusCode,
     this.upnpErrorCode,
     this.upnpErrorDescription,
@@ -39,12 +41,16 @@ class DlnaResult {
   factory DlnaResult.fromResponse({
     required int statusCode,
     required String responseBody,
+    String? controlUrl,
   }) {
-    if (statusCode >= 200 && statusCode < 300) {
+    if (statusCode >= 200 && statusCode < 300 &&
+        !RegExp(r'<(?:[\w-]+:)?Fault(?:\s|/?>)', caseSensitive: false).hasMatch(responseBody) &&
+        DlnaService.extractTag(responseBody, 'errorCode').isEmpty) {
       return DlnaResult(
         success: true,
         statusCode: statusCode,
         rawResponse: responseBody,
+        controlUrl: controlUrl,
       );
     }
 
@@ -86,7 +92,7 @@ class DlnaResult {
         case 716:
           return 'A TV não conseguiu acessar o arquivo no seu computador (Erro UPnP 716: Recurso não encontrado ou bloqueado pelo Firewall do Windows).';
         case 701:
-          return 'Comando de reprodução não aplicável para fotos estáticas (Erro UPnP 701: Transição não suportada).';
+          return 'A TV não permite esse comando no estado atual (Erro UPnP 701).';
         case 705:
           return 'Acesso negado pela Smart TV (Erro UPnP 705: Permissão necessária na TV).';
         case 501:
@@ -183,7 +189,7 @@ class DlnaService {
     String? tvName,
     required Duration timeout,
   }) async {
-    final client = HttpClient()
+    final client = NetworkOperation.httpClient()
       ..connectionTimeout = timeout
       ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
 
@@ -208,7 +214,7 @@ class DlnaService {
       final res = await req.close().timeout(timeout);
 
       if (res.statusCode == 200) {
-        final xml = await res.transform(utf8.decoder).join();
+        final xml = await res.transform(utf8.decoder).join().timeout(timeout);
         final friendlyName = extractTag(xml, 'friendlyName');
         final resolvedName = (friendlyName.isNotEmpty) ? friendlyName : (tvName ?? brand.displayName);
 
@@ -278,7 +284,7 @@ class DlnaService {
     } catch (e) {
       debugPrint('[DLNA] Erro ao obter XML de localização em $locationUrl: $e');
     } finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
     return null;
   }
@@ -332,7 +338,9 @@ class DlnaService {
       case 'image/webp':
         return 'http-get:*:image/webp:DLNA.ORG_CI=0;DLNA.ORG_FLAGS=00D00000000000000000000000000000';
       case 'video/mp4':
-        return 'http-get:*:video/mp4:DLNA.ORG_PN=AVC_MP4_MP_SD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01500000000000000000000000000000';
+        // A extensão MP4 não informa codec, resolução ou perfil de áudio.
+        // Não anunciar AVC SD/AAC sem inspecionar o conteúdo do arquivo.
+        return 'http-get:*:video/mp4:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01500000000000000000000000000000';
       case 'video/x-matroska':
       case 'video/mkv':
         return 'http-get:*:video/x-matroska:DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01500000000000000000000000000000';
@@ -495,36 +503,6 @@ class DlnaService {
       timeout: timeout,
     );
 
-    if (res.success) return res;
-
-    // Se a porta falhou com erro 1225/recusa, tenta portas oficiais alternativas LG
-    if (res.networkError != null &&
-        (res.networkError!.contains('1225') ||
-            res.networkError!.toLowerCase().contains('refused') ||
-            res.networkError!.toLowerCase().contains('recusou'))) {
-      final parsedUri = Uri.tryParse(controlUrl);
-      if (parsedUri != null) {
-        final host = parsedUri.host;
-        final candidateAlternativeUrls = [
-          'http://$host:19531/udap/api/data?target=avtransport.xml',
-          'http://$host:19531/upnp/control/AVTransport',
-          'http://$host:8080/avt',
-          'http://$host:8080/upnp/control/AVTransport',
-        ];
-
-        for (final altUrl in candidateAlternativeUrls) {
-          if (altUrl == controlUrl) continue;
-          final altRes = await _sendSoapAction(
-            controlUrl: altUrl,
-            action: 'Play',
-            body: soapBody,
-            timeout: const Duration(seconds: 2),
-          );
-          if (altRes.success) return altRes;
-        }
-      }
-    }
-
     return res;
   }
 
@@ -595,7 +573,7 @@ class DlnaService {
       return null;
     }
 
-    final client = HttpClient()
+    final client = NetworkOperation.httpClient()
       ..connectionTimeout = timeout
       ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
 
@@ -607,13 +585,31 @@ class DlnaService {
 
       final res = await req.close().timeout(timeout);
       if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
+        final body = await res.transform(utf8.decoder).join().timeout(timeout);
         return extractTag(body, 'CurrentTransportState');
       }
     } catch (_) {} finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
     return null;
+  }
+
+  /// Ações disponíveis para a mídia e o estado atuais; null significa desconhecido.
+  static Future<Set<String>?> getCurrentTransportActions(String controlUrl) async {
+    final result = await _sendSoapAction(
+      controlUrl: controlUrl,
+      action: 'GetCurrentTransportActions',
+      body: '<?xml version="1.0" encoding="utf-8"?>'
+          '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
+          '<s:Body><u:GetCurrentTransportActions xmlns:u="$avTransportServiceType">'
+          '<InstanceID>0</InstanceID></u:GetCurrentTransportActions></s:Body></s:Envelope>',
+      timeout: const Duration(seconds: 2),
+    );
+    if (!result.success) return null;
+    final body = result.rawResponse ?? '';
+    if (!RegExp(r'<(?:[\w-]+:)?Actions(?:\s|/?>)').hasMatch(body)) return null;
+    return extractTag(body, 'Actions').split(',')
+        .map((action) => action.trim()).where((action) => action.isNotEmpty).toSet();
   }
 
   /// Busca a posição e duração atual da mídia (GetPositionInfo).
@@ -636,7 +632,7 @@ class DlnaService {
       return null;
     }
 
-    final client = HttpClient()
+    final client = NetworkOperation.httpClient()
       ..connectionTimeout = timeout
       ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
 
@@ -649,13 +645,15 @@ class DlnaService {
 
       final res = await req.close().timeout(timeout);
       if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
+        final body = await res.transform(utf8.decoder).join().timeout(timeout);
         final trackDuration = extractTag(body, 'TrackDuration');
         final relTime = extractTag(body, 'RelTime');
+        final time = RegExp(r'^\d+:\d{2}:\d{2}(?:\.\d+)?$');
+        if (!time.hasMatch(trackDuration) || !time.hasMatch(relTime)) return null;
         return DlnaPositionInfo.parse(trackDuration: trackDuration, relTime: relTime);
       }
     } catch (_) {} finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
     return null;
   }
@@ -699,7 +697,7 @@ class DlnaService {
       return DlnaResult.networkFailure('Endereço IP de destino não é permitido (não é rede local).');
     }
 
-    final client = HttpClient()
+    final client = NetworkOperation.httpClient()
       ..connectionTimeout = timeout
       ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
 
@@ -711,9 +709,9 @@ class DlnaService {
       req.write(body);
 
       final res = await req.close().timeout(timeout);
-      final resBody = await res.transform(utf8.decoder).join();
+      final resBody = await res.transform(utf8.decoder).join().timeout(timeout);
 
-      final result = DlnaResult.fromResponse(statusCode: res.statusCode, responseBody: resBody);
+      final result = DlnaResult.fromResponse(statusCode: res.statusCode, responseBody: resBody, controlUrl: controlUrl);
 
       if (result.success) {
         debugPrint('[DLNA] Ação SOAP $action executada com sucesso na TV.');
@@ -727,7 +725,7 @@ class DlnaService {
       debugPrint('[DLNA] Erro de rede ao enviar ação SOAP $action para $controlUrl: $e');
       return DlnaResult.networkFailure(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
   }
 
@@ -749,7 +747,7 @@ class DlnaService {
   /// Utilitário público para extração de tags XML.
   static String extractTag(String xml, String tag) {
     final pattern = RegExp(
-      '<$tag>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/$tag>',
+      '<(?:[\\w-]+:)?$tag(?:\\s[^>]*)?>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/(?:[\\w-]+:)?$tag>',
       caseSensitive: false,
       dotAll: true,
     );

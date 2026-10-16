@@ -56,6 +56,8 @@ class VoiceIntent {
 class VoiceService {
   final stt.SpeechToText _speech;
   bool _isInitialized = false;
+  bool _disposed = false;
+  int _listeningGeneration = 0;
   bool _isListening = false;
   String currentLocaleId = 'pt_BR';
 
@@ -67,6 +69,7 @@ class VoiceService {
 
   /// Inicializa o mecanismo de reconhecimento de fala e verifica permissões.
   Future<bool> initialize() async {
+    if (_disposed) return false;
     if (_isInitialized) return true;
     try {
       _isInitialized = await _speech.initialize(
@@ -95,7 +98,10 @@ class VoiceService {
     VoidCallback? onDone,
     String? localeId,
   }) async {
+    if (_disposed) return false;
+    final generation = ++_listeningGeneration;
     final ready = await initialize();
+    if (_disposed || generation != _listeningGeneration) return false;
     if (!ready) {
       debugPrint('[VoiceService] Microfone não inicializado ou sem permissão.');
       return false;
@@ -107,6 +113,7 @@ class VoiceService {
     try {
       await _speech.listen(
         onResult: (result) {
+          if (_disposed || generation != _listeningGeneration) return;
           final words = result.recognizedWords;
           onResult(words);
           if (result.finalResult) {
@@ -121,6 +128,11 @@ class VoiceService {
           localeId: targetLocale,
         ),
       );
+      if (_disposed || generation != _listeningGeneration) {
+        await _speech.cancel();
+        _isListening = false;
+        return false;
+      }
       return true;
     } catch (e) {
       debugPrint('[VoiceService] Erro ao iniciar escuta: $e');
@@ -143,12 +155,19 @@ class VoiceService {
 
   /// Cancela o reconhecimento sem disparar callbacks finais.
   Future<void> cancelListening() async {
+    _listeningGeneration++;
     _isListening = false;
     try {
       await _speech.cancel();
     } catch (e) {
       debugPrint('[VoiceService] Erro ao cancelar escuta: $e');
     }
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    cancelListening();
   }
 
   /// Remove acentuação e pontuações para análise robusta.

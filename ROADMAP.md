@@ -1,107 +1,34 @@
-# 🗺️ Roadmap de Atualizações - SixF Smart Remote (Antigo controle_LG)
+# SixF — implementação e escopo futuro
 
-Este documento centraliza o planejamento estratégico e a evolução do aplicativo, marcando a transição de um controle exclusivo para webOS (LG) em direção ao SixF (abreviação de Six Finger — múltiplos controles e dispositivos na ponta dos dedos), um controle universal inteligente para Windows e Android focado nas plataformas líderes (LG webOS e Samsung Tizen).
+## Implementado no código
 
----
+- [x] Windows e Android; drivers LG webOS e Samsung Tizen.
+- [x] Sessões independentes, aparelhos salvos e alternância de controle ativo.
+- [x] Credenciais por marca/IP, cancelamento e limpeza de operações.
+- [x] Arquivos locais via SSAP/DLNA, URL exclusiva, HEAD/Range e revogação ao encerrar.
+- [x] Estado de mídia e controles conforme informações da TV; envio separado de reprodução confirmada.
+- [x] Diagnóstico por aparelho, repetição de D-Pad/volume/canais, favoritos persistidos por TV.
+- [x] Janela compacta Windows com restauração da geometria e sobreposição anteriores.
+- [x] Documentação do escopo real, versões alinhadas, assinatura release independente de debug e CI de validação/build.
 
-### 🎨 Legenda de Status:
-- [x] [Título em Azul](#): Alterações já concluídas e comitadas no Git.
-> - [x] Título em Verde: Alterações implementadas no código local, mas ainda não comitadas.
-- [ ] **Título em Laranja**: Alterações planejadas (ainda não processadas).
+Implementado não equivale a homologado em todos os modelos de TV. Consulte docs/DISTRIBUTION.md para a matriz manual e os resultados locais registrados.
 
----
+## Dependências externas da distribuição
 
-## 📌 Status Atual: v0.9.0 (Estágio Beta / Base LG webOS Estável)
-- [x] [Suporte Multiplataforma (Windows com bandeja do sistema e Android)](#)
-- [x] [Layout mobile otimizado em 3 abas (Essenciais, Teclado/Mídia e Magic Trackpad)](#)
-- [x] [Suporte a Ícone Adaptativo / Material You / Themed Icons no Android](#)
-- [x] [Descoberta de TVs via SSDP e pareamento seguro via WebSocket (webOS SSAP)](#)
-- [x] [Wake-on-LAN (WoL) para ligar a TV via rede local](#)
-- [x] [Reconexão inteligente e ping keep-alive em segundo plano](#)
-- [x] [Temas Claro (Light) e Escuro (Dark)](#)
+- [ ] Homologar em TVs LG e Samsung físicas e Android/Windows reais.
+- [ ] Configurar chave Android e certificado/identidade de distribuição Windows.
+- [ ] Assinar, revisar instaladores e publicar nas lojas mediante autorização.
 
----
+## Evoluções fora dos cinco blocos de estabilização
 
-## 🚀 Fases Planejadas
+- [ ] Primeiro uso sem cadastro legado predefinido.
+- [ ] Identidade estável de aparelho e armazenamento de credenciais protegido pelo sistema operacional.
+- [ ] Seleção de interface de rede por rota, revisão de descoberta e validação uniforme dos destinos.
+- [ ] Separar responsabilidades restantes do RemoteController e medir custo de notificações.
+- [ ] Comandos explícitos de energia/mudo na bandeja e validação de volume absoluto por driver.
+- [ ] Rever dependências diretas herdadas do suporte descontinuado, com validação dos builds.
+- [ ] Atalhos globais adicionais, widgets e Quick Settings Android.
+- [ ] Captura/espelhamento de tela e eventual transcodificação: recursos distintos, não implementados.
+- [ ] Monetização, Apple TV, Roku e automações: propostas sem implementação.
 
-### 🌟 Fase 1: Rebranding SixF & Expansão de Marcas (v0.9.5 Beta) — PRIORIDADE IMEDIATA
-- [x] [Rebranding & Nova Identidade Visual (SixF)](#):
-  - Oficialização do nome SixF (Six Finger — todos os seus controles na ponta dos dedos).
-  - Criação de novo logotipo/ícone moderno estilizado com a marca SixF (neutro e tecnológico) compatível com Windows e Android (Adaptive Icons / Material You / Themed Icons).
-  - Atualização dos metadados de projeto (pubspec.yaml, manifests Android/Windows, títulos de janela e strings de UI).
-- [x] [Refatoração da Camada de Abstração (Driver / Adapter Pattern)](#):
-  - Criação de uma interface base agnóstica (TvDriver) para comandos padronizados (sendKey, volumeUp, openApp, mouseMove).
-  - Isolamento do driver atual da LG em um módulo específico (LgWebOsDriver).
-  - Criação de DriverFactory, AndroidTvDriver e SamsungTizenDriver desacoplando o RemoteController.
-- [x] [Expansão de Marcas e Protocolos (Samsung Tizen e LG webOS Estável)](#):
-  - ~~Chromecast e Google TV / Android TV (Sony, TCL, Philips, Xiaomi)~~ [DESCONTINUADO / ABANDONADO]:
-    - *Desvio de rota:* As especificações recentes do protocolo Google Cast / Android TV Remote v2 apresentaram instabilidades frequentes de handshake TLS e expiração forçada de sessão pelo ecossistema Google. A funcionalidade foi abandonada para manter a confiabilidade e robustez do app.
-  - Samsung Smart TV (Tizen OS):
-    - Protocolo WebSocket Tizen (portas 8001/8002 com chave/token e handshake na tela).
-- [x] [Seletor de Marca & Detecção Automática no Escaneamento](#):
-  - Descoberta unificada na rede local (SSDP para LG e Samsung, e varredura de portas 8001/3000) permitindo selecionar e parear com as marcas suportadas.
-  - Seletor rápido de marcas (LG webOS e Samsung Tizen) na barra lateral e crachás de identificação visual no popup de busca.
-
----
-
-### 🌐 Fase 2: Experiência Móvel & Conexões Simultâneas (v0.9.8 Beta)
-> - [x] **Feedback Háptico (Vibração)**:
-  - Resposta tátil com impacto físico suave ao tocar nos botões no Android.
-  - Pulso firme de impacto médio dedicado para alternar energia (Power) e cliques discretos no trackpad e abas.
-  - Chave de ativação/desativação no menu de configurações com persistência local.
-> - [x] **Gaveta / Atalhos de Aplicativos**:
-  - Listar apps instalados no dispositivo conectado para abertura direta com busca instantânea e grade interativa.
-  - Suporte dinâmico em tempo real via SSAP na LG webOS (`listLaunchPoints`) e catálogo curado dos principais streamings na Samsung Tizen.
-  - 4ª aba dedicada no layout mobile ("Apps"), card integrado no painel Desktop dual-pane e feedback háptico ao abrir.
-> - [x] **Comandos de Voz & Ditado Inteligente (Speech-to-Text)**:
-  - Reconhecimento de fala no dispositivo via `speech_to_text` em tempo real com transcrição visual instantânea.
-  - Foco em **ações diretas de alta confiabilidade** para controle da Smart TV:
-    - Volume: "Aumentar volume" / "Diminuir volume" (ajuste automático sequencial em 5 passos).
-    - Lançamento de Apps: "Abrir YouTube", "Abrir Netflix", "Abrir Globoplay", "Abrir Prime Video", "Abrir Spotify", etc.
-    - Mudo: "Mudo", "Mutar", "Tirar mudo".
-    - Energia: "Desligar TV", "Desligar".
-  - *Nota Arquitetural*: A injeção arbitrária de voz/texto em caixas de busca internas de apps de terceiros (Globoplay, Netflix, YouTube via Chromecast HDMI-CEC) foi despriorizada devido às restrições proprietárias de IME e áudio de cada aplicativo de streaming.
-  - Modos Push-to-Talk (Pressione para Falar) e Slide-to-Lock (Mãos Livres) com vibração háptica tátil no acionamento e liberação.
-  - Seletor rápido de idiomas no popup (`[🇧🇷 PT]` e `[🇺🇸 EN]`) e chips de comandos diretos sugeridos.
-> - [x] **Persistência de Conexão em Segundo Plano (Android)**:
-  - Keep-alive agressivo com ping/pong WebSocket reduzido para 5 segundos no webOS e Tizen.
-  - Reconexão transparente automática (`autoReconnectIfNeeded`) ao retomar o app da tela de início ou multitarefa (`AppLifecycleState.resumed`).
-  - Blindagem de estado para manter o flag de conexão ativo durante ciclo de minimização, desligando a sessão apenas quando o usuário explicitamente clica em Desconectar ou desliga a TV no botão Power.
-> - [x] **Conexão Simultânea & Alternância Rápida (Multi-Device)**:
->   - Manter 2 ou mais dispositivos conectados ativamente em segundo plano (ex: TV LG webOS + Samsung Tizen na mesma residência).
->   - Barra/Pills de alternância rápida no topo da tela (`DeviceSelectorBar`) para trocar o controle ativo com 1 clique (Hot-Switching instantâneo sem re-handshake).
->   - Isolamento de sessões com `DeviceSession` mantendo estado de volume, canal, mute, apps instalados e keep-alive WebSocket por aparelho.
-> - [x] **Múltiplos Dispositivos Salvos**:
->   - Salvar lista de dispositivos com apelidos amigáveis (ex: Sala, Quarto) e chaves de autenticação vinculadas por IP.
->   - Gerenciamento completo no `NetworkDrawer` e diálogo de descoberta (`DeviceDiscoveryDialog`): adicionar, editar apelido, definir aparelho padrão e remover.
-
----
-
-## ⚡ Fase 3: Recursos Premium & Diferenciais de Mercado (v0.9.9 -> v1.0.0)
-> - [x] **Transmissão de Mídia & Espelhamento (DLNA / UPnP Media Cast)**:
->   - *Diferencial Comercial #1*: Transmissão instantânea de fotos, vídeos e músicas da galeria do celular e do computador diretamente para Smart TVs (LG webOS e Samsung Tizen).
->   - **Transmissão de Fotos Estável**: Fotos renderizadas com sucesso via canal nativo SSAP (`media.viewer/open`) e DLNA AVTransport com resposta instantânea.
->   - **Padrão Aberto Universal (UPnP AVTransport 1.0)**: sem exigência de chaves de nuvem ou mTLS proprietário do ecossistema Google Cast v2 (evitando as instabilidades crônicas do BPM-001).
->   - **Servidor HTTP Embutido com Range Requests (206 Partial Content)**: suporte nativo a seek, avanço/retrocesso e buffering de vídeos sem sobrecarregar a memória RAM do transmissor (`dart:io` `HttpServer`).
->   - **Interface Dedicada (`MediaCastDialog`)**: modal elegante com seleção por tipo (Fotos, Vídeos, Músicas), mini-player com botões de Play/Pause/Stop, status em tempo real e atalho direto na barra superior (`HeaderBar`) e aba de mídia (`RemoteView`).
->   - **Segurança de Rede Local**: proteção ativa contra SSRF via `NetworkSecurityUtils.isLocalNetworkHost` validando hosts de destino.
->   - *Backlog Futuro*: Investigação de transcoding/codec e cabeçalhos de streaming para vídeo em modelos webOS legados (v2.x / LF5900).
-- [ ] **Android Quick Settings & Widgets**:
-  - Bloco de Ação Rápida (Quick Settings Tile) na barra de notificações para Ligar/Desligar e Mute.
-  - Widget compacto na tela inicial do Android com botões essenciais.
-- [ ] **Atalhos Globais & Janela Compacta no Windows**:
-  - Mini-janela flutuante (*Picture-in-Picture*) e atalhos globais de teclado no Windows.
-- [ ] **Monetização Freemium & Compra Única Vitalícia (In-App Purchase)**:
-  - Integração com lojas oficiais (Google Play Billing, Apple IAP, Microsoft Store).
-  - Download gratuito para controle básico e taxa única vitalícia para recursos Pro sem anúncios.
-
----
-
-## 💡 Ideias Futuras / Backlog (Pós v1.0)
-- [ ] **Suporte a Apple TV**:
-  - Integração via protocolo companion / pyatv.
-- [ ] **Suporte a Roku OS**:
-  - Protocolo ECP (External Control Protocol) via HTTP.
-- [ ] **Integração com Automações**:
-  - Suporte a Home Assistant e integração MQTT.
-- [x] ~~**Controle por Voz**~~: Promovido e unificado à *Entrada de Texto Remota* na Fase 2.
+Android TV/Google Cast permanece descontinuado. iOS não possui projeto/plataforma neste checkout.

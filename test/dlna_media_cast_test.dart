@@ -49,7 +49,7 @@ void main() {
       expect(serverService.currentMimeType, equals('video/mp4'));
 
       final client = HttpClient();
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.ok));
@@ -67,7 +67,7 @@ void main() {
       serverService.serveFile(testFile);
 
       final client = HttpClient();
-      final req = await client.headUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.headUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.ok));
@@ -80,7 +80,7 @@ void main() {
       serverService.serveFile(testFile);
 
       final client = HttpClient();
-      final req = await client.openUrl('OPTIONS', Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.openUrl('OPTIONS', Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.ok));
@@ -93,7 +93,7 @@ void main() {
       serverService.serveFile(testFile);
 
       final client = HttpClient();
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       // Solicita os primeiros 10 bytes: '0123456789'
       req.headers.set(HttpHeaders.rangeHeader, 'bytes=0-9');
       final res = await req.close();
@@ -112,7 +112,7 @@ void main() {
       serverService.serveFile(testFile);
 
       final client = HttpClient();
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       req.headers.set(HttpHeaders.rangeHeader, 'bytes=10-');
       final res = await req.close();
 
@@ -130,7 +130,7 @@ void main() {
       serverService.serveFile(testFile);
 
       final client = HttpClient();
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       req.headers.set(HttpHeaders.rangeHeader, 'bytes=9999-10000');
       final res = await req.close();
 
@@ -142,7 +142,7 @@ void main() {
       final port = await serverService.start();
 
       final client = HttpClient();
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/media'));
+      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port${serverService.mediaPath ?? '/missing'}'));
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.notFound));
@@ -178,7 +178,8 @@ void main() {
       expect(pngProto, contains('DLNA.ORG_PN=PNG_LRG'));
 
       final mp4Proto = DlnaService.buildProtocolInfo('video/mp4');
-      expect(mp4Proto, contains('DLNA.ORG_PN=AVC_MP4'));
+      expect(mp4Proto, startsWith('http-get:*:video/mp4:'));
+      expect(mp4Proto, isNot(contains('DLNA.ORG_PN=')));
     });
 
     test('DlnaResult decodifica SOAP Fault com códigos UPnP com mensagens amigáveis', () {
@@ -327,7 +328,7 @@ void main() {
       controller.dispose();
     });
 
-    test('Transmissão e controles de reprodução (pause, play, stop) via driver nativo conectado', () async {
+    test('Foto nativa confirma envio sem inventar reprodução ou controles de vídeo', () async {
       final fakeDriver = FakeTvDriver();
       final controller = MediaCastController();
 
@@ -345,17 +346,17 @@ void main() {
         );
 
         expect(success, isTrue);
-        expect(controller.isPlaying, isTrue);
+        expect(controller.status, MediaCastStatus.sent);
         expect(fakeDriver.openMediaUrlCalled, isTrue);
         expect(fakeDriver.lastOpenedUrl, contains('http://'));
 
         await controller.pause();
-        expect(fakeDriver.sentKeys, contains(RemoteKey.pause));
-        expect(controller.isPaused, isTrue);
+        expect(fakeDriver.sentKeys, isNot(contains(RemoteKey.pause)));
+        expect(controller.isPaused, isFalse);
 
         await controller.play();
-        expect(fakeDriver.sentKeys, contains(RemoteKey.play));
-        expect(controller.isPlaying, isTrue);
+        expect(fakeDriver.sentKeys, isNot(contains(RemoteKey.play)));
+        expect(controller.status, MediaCastStatus.sent);
 
         await controller.stop();
         expect(fakeDriver.sentKeys, contains(RemoteKey.stop));
@@ -381,11 +382,11 @@ void main() {
       expect(pos.position.inSeconds, equals(330));
     });
 
-    test('Alterna estado de loop repeat do vídeo no controller', () {
+    test('Não habilita repetição sem mídia e suporte confirmado', () {
       final controller = MediaCastController();
       expect(controller.isLooping, isFalse);
       controller.toggleLoop();
-      expect(controller.isLooping, isTrue);
+      expect(controller.isLooping, isFalse);
       controller.toggleLoop();
       expect(controller.isLooping, isFalse);
       controller.dispose();

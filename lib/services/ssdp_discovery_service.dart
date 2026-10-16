@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'network_operation.dart';
 import 'package:flutter/foundation.dart';
 import 'drivers/tv_driver.dart';
 import 'network_security_utils.dart';
@@ -43,8 +44,11 @@ class SsdpDiscoveryService {
       return [];
     }
 
+    final operation = NetworkOperation.current;
+    operation?.check();
     final discoveredMap = <String, DiscoveredTv>{};
     final ssdpSockets = <RawDatagramSocket>[];
+    operation?.onCancel(() { for (final socket in ssdpSockets) { socket.close(); } });
     final ssdpTarget = InternetAddress(_ssdpMulticastAddress);
     final pendingLocations = <String, Map<String, dynamic>>{};
 
@@ -66,9 +70,10 @@ class SsdpDiscoveryService {
           if (addr.isLoopback) continue;
           try {
             final sSsdp = await RawDatagramSocket.bind(addr, 0, reuseAddress: true);
+            ssdpSockets.add(sSsdp);
+            if (operation?.isCancelled == true) { sSsdp.close(); throw const OperationCancelled(); }
             sSsdp.broadcastEnabled = true;
             sSsdp.multicastLoopback = false;
-            ssdpSockets.add(sSsdp);
           } catch (_) {}
         }
       }
@@ -76,10 +81,12 @@ class SsdpDiscoveryService {
       // Fallback genérico para anyIPv4
       try {
         final sAnySsdp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0, reuseAddress: true);
-        sAnySsdp.broadcastEnabled = true;
         ssdpSockets.add(sAnySsdp);
+        if (operation?.isCancelled == true) { sAnySsdp.close(); throw const OperationCancelled(); }
+        sAnySsdp.broadcastEnabled = true;
       } catch (_) {}
 
+      operation?.check();
       // 3. Configura ouvintes dos sockets SSDP ANTES de enviar pacotes
       for (final s in ssdpSockets) {
         s.listen((event) {
@@ -178,14 +185,19 @@ class SsdpDiscoveryService {
       if (knownIp != null && knownIp.trim().isNotEmpty && knownIp != '192.168.1.150') {
         probeFutures.add(probeTvAtIp(knownIp.trim()).then((dev) {
           if (dev != null) discoveredMap[dev.ip] = dev;
-        }));
+        }).catchError((_) {}));
       }
 
       // Dispara varredura rápida de portas conhecidas (8001 Samsung / 3000 LG) na sub-rede
       probeFutures.add(_sweepLocalSubnet(interfaces, discoveredMap));
 
       // Aguarda a janela de timeout configurada
-      await Future.delayed(timeout);
+      if (operation == null) {
+        await Future.delayed(timeout);
+      } else {
+        await operation.wait(Future.delayed(timeout));
+      }
+      operation?.check();
 
       // Aguarda encerramento das probes pendentes
       await Future.wait(probeFutures).timeout(
@@ -194,7 +206,7 @@ class SsdpDiscoveryService {
       );
 
       // 8. Resolve descrições XML das TVs LG e Samsung descobertas via SSDP
-      for (final entry in pendingLocations.entries) {
+      for (final entry in pendingLocations.entries.toList()) {
         final senderIp = entry.key;
         final locationUrl = entry.value['url'] as String;
         final brand = entry.value['brand'] as TvBrand;
@@ -245,7 +257,7 @@ class SsdpDiscoveryService {
     String ip, {
     Duration timeout = const Duration(milliseconds: 1200),
   }) async {
-    final client = HttpClient()
+    final client = NetworkOperation.httpClient()
       ..connectionTimeout = timeout
       ..badCertificateCallback = (cert, host, port) => NetworkSecurityUtils.isLocalNetworkHost(host);
     try {
@@ -253,11 +265,12 @@ class SsdpDiscoveryService {
       final req8001 = await client.getUrl(Uri.parse('http://$ip:8001/api/v2/')).timeout(timeout);
       final res8001 = await req8001.close().timeout(timeout);
       if (res8001.statusCode == 200) {
-        final body = await res8001.transform(utf8.decoder).join();
+        final body = await res8001.transform(utf8.decoder).join().timeout(timeout);
         final json = jsonDecode(body) as Map<String, dynamic>;
         final dev = json['device'] as Map<String, dynamic>?;
         final name = dev?['name'] as String? ?? 'Samsung Smart TV';
         final model = dev?['modelName'] as String? ?? 'Tizen TV';
+        NetworkOperation.closeClient(client);
         return DiscoveredTv(
           ip: ip,
           name: name,
@@ -272,11 +285,12 @@ class SsdpDiscoveryService {
       final req8002 = await client.getUrl(Uri.parse('https://$ip:8002/api/v2/')).timeout(timeout);
       final res8002 = await req8002.close().timeout(timeout);
       if (res8002.statusCode == 200) {
-        final body = await res8002.transform(utf8.decoder).join();
+        final body = await res8002.transform(utf8.decoder).join().timeout(timeout);
         final json = jsonDecode(body) as Map<String, dynamic>;
         final dev = json['device'] as Map<String, dynamic>?;
         final name = dev?['name'] as String? ?? 'Samsung Smart TV';
         final model = dev?['modelName'] as String? ?? 'Tizen TV';
+        NetworkOperation.closeClient(client);
         return DiscoveredTv(
           ip: ip,
           name: name,
@@ -285,7 +299,7 @@ class SsdpDiscoveryService {
         );
       }
     } catch (_) {} finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
     return null;
   }
@@ -301,16 +315,16 @@ class SsdpDiscoveryService {
       'http://$ip:8080/',
     ];
 
-    final client = HttpClient()..connectionTimeout = timeout;
+    final client = NetworkOperation.httpClient()..connectionTimeout = timeout;
     for (final url in urls) {
       try {
         final req = await client.getUrl(Uri.parse(url)).timeout(timeout);
         final res = await req.close().timeout(timeout);
         if (res.statusCode == 200) {
-          final xml = await res.transform(utf8.decoder).join();
+          final xml = await res.transform(utf8.decoder).join().timeout(timeout);
           final friendlyName = extractXmlTag(xml, 'friendlyName');
           final modelName = extractXmlTag(xml, 'modelName');
-          client.close(force: true);
+          NetworkOperation.closeClient(client);
           return DiscoveredTv(
             ip: ip,
             name: friendlyName.isNotEmpty ? friendlyName : 'LG Smart TV ($ip)',
@@ -321,7 +335,7 @@ class SsdpDiscoveryService {
         }
       } catch (_) {}
     }
-    client.close(force: true);
+    NetworkOperation.closeClient(client);
     return null;
   }
 
@@ -353,6 +367,7 @@ class SsdpDiscoveryService {
       // Dispara teste de porta TCP rápido (300ms timeout) em blocos de 60
       const chunkSize = 60;
       for (int i = 0; i < targetIps.length; i += chunkSize) {
+        NetworkOperation.current?.check();
         final end = (i + chunkSize < targetIps.length) ? i + chunkSize : targetIps.length;
         final chunk = targetIps.sublist(i, end);
 
@@ -361,6 +376,7 @@ class SsdpDiscoveryService {
 
           // 1. Testa porta 8001 (Samsung Tizen)
           try {
+            NetworkOperation.current?.check();
             final sSam = await Socket.connect(ip, 8001, timeout: const Duration(milliseconds: 300));
             sSam.destroy();
             final samDev = await _probeSamsungTizen(ip);
@@ -372,6 +388,7 @@ class SsdpDiscoveryService {
 
           // 2. Testa porta 3000 (LG webOS fallback)
           try {
+            NetworkOperation.current?.check();
             final sLg = await Socket.connect(ip, 3000, timeout: const Duration(milliseconds: 300));
             sLg.destroy();
             final lgDev = await _probeLgWebOs(ip);
@@ -392,7 +409,7 @@ class SsdpDiscoveryService {
     Duration timeout = const Duration(seconds: 2),
     TvBrand brand = TvBrand.lgWebOs,
   }) async {
-    final client = HttpClient()..connectionTimeout = timeout;
+    final client = NetworkOperation.httpClient()..connectionTimeout = timeout;
 
     try {
       final uri = Uri.parse(locationUrl);
@@ -400,7 +417,7 @@ class SsdpDiscoveryService {
       final response = await request.close().timeout(timeout);
 
       if (response.statusCode == 200) {
-        final xml = await response.transform(utf8.decoder).join();
+        final xml = await response.transform(utf8.decoder).join().timeout(timeout);
         final friendlyName = extractXmlTag(xml, 'friendlyName');
         final modelName = extractXmlTag(xml, 'modelName');
 
@@ -415,7 +432,7 @@ class SsdpDiscoveryService {
         );
       }
     } finally {
-      client.close(force: true);
+      NetworkOperation.closeClient(client);
     }
 
     return DiscoveredTv(

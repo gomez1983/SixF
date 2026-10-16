@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
+import 'repeat_press.dart';
 
 /// Intensidade e padrão do feedback háptico (vibração) ao pressionar um botão.
 enum HapticType {
@@ -39,6 +41,8 @@ class RemoteButton extends StatelessWidget {
   final bool isSelected;
   final bool isCircular;
   final HapticType hapticType;
+  final bool repeatOnHold;
+  final Object? repeatToken;
 
   const RemoteButton({
     super.key,
@@ -59,6 +63,8 @@ class RemoteButton extends StatelessWidget {
     this.isSelected = false,
     this.isCircular = false,
     this.hapticType = HapticType.light,
+    this.repeatOnHold = false,
+    this.repeatToken,
   });
 
   void _handlePress() {
@@ -82,9 +88,14 @@ class RemoteButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = backgroundColor ?? AppColors.surfaceInteractiveOf(context);
     final fg = foregroundColor ?? AppColors.textPrimaryOf(context);
-    final border = borderColor ?? (isSelected ? AppColors.iconHighlightOf(context) : AppColors.borderSubtleOf(context));
+    final border =
+        borderColor ??
+        (isSelected
+            ? AppColors.iconHighlightOf(context)
+            : AppColors.borderSubtleOf(context));
 
-    final shape = customShape ??
+    final shape =
+        customShape ??
         (isCircular
             ? const CircleBorder()
             : RoundedRectangleBorder(
@@ -121,45 +132,45 @@ class RemoteButton extends StatelessWidget {
     } else if (label != null) {
       content = Text(
         label!,
-        style: TextStyle(
-          color: fg,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w600),
         textAlign: TextAlign.center,
       );
     } else {
       content = const SizedBox.shrink();
     }
 
-    final buttonCore = Material(
+    Widget buttonCore = Material(
       color: isSelected ? AppColors.surfaceElevatedOf(context) : bg,
       shape: shape,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed != null ? _handlePress : null,
         hoverColor: AppColors.surfaceInteractiveHoverOf(context),
-        splashColor: (foregroundColor ?? AppColors.iconHighlightOf(context)).withValues(alpha: 0.2),
-        highlightColor: (foregroundColor ?? AppColors.iconHighlightOf(context)).withValues(alpha: 0.1),
+        splashColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
+            .withValues(alpha: 0.2),
+        highlightColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
+            .withValues(alpha: 0.1),
         customBorder: shape,
         child: Container(
           width: width,
           height: height,
           padding: padding ?? const EdgeInsets.all(8),
           alignment: Alignment.center,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: content,
-          ),
+          child: FittedBox(fit: BoxFit.scaleDown, child: content),
         ),
       ),
     );
 
-    if (tooltip != null && tooltip!.isNotEmpty) {
-      return Tooltip(
-        message: tooltip!,
+    if (repeatOnHold && onPressed != null) {
+      buttonCore = RepeatPress(
+        onRepeat: _handlePress,
+        sessionToken: repeatToken,
         child: buttonCore,
       );
+    }
+
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      return Tooltip(message: tooltip!, child: buttonCore);
     }
 
     return buttonCore;

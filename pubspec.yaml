@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.9.0+1
+version: 1.0.1+3
 
 environment:
   sdk: ^3.13.3
@@ -59,11 +59,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 msix_config:
-  display_name: LG Smart TV Remote
+  display_name: SixF Remote
   publisher_display_name: Andre Gomez
   identity_name: com.andregomez.controlelg
-  msix_version: 1.0.0.0
-  logo_path: assets/icons/lg-icon.png
+  msix_version: 1.0.1.3
+  logo_path: assets/icons/SixF_Logo_01.png
   capabilities: internetClient, privateNetworkClientServer
   execution_alias: controle_lg
   install_certificate: false
