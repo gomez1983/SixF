@@ -1,3 +1,4 @@
+import 'google_tv_discovery.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -180,7 +181,11 @@ class SsdpDiscoveryService {
       }
 
       // 5. Varredura direta e probes paralelos (knownIp e varredura TCP na sub-rede física)
-      final probeFutures = <Future<void>>[];
+      final probeFutures = <Future<void>>[
+        GoogleTvDiscovery.discover(timeout).then((devices) {
+          for (final device in devices) { discoveredMap[device.ip] = device; }
+        }),
+      ];
 
       if (knownIp != null && knownIp.trim().isNotEmpty && knownIp != '192.168.1.150') {
         probeFutures.add(probeTvAtIp(knownIp.trim()).then((dev) {
@@ -250,7 +255,7 @@ class SsdpDiscoveryService {
     final lgDev = await _probeLgWebOs(ip, timeout: timeout);
     if (lgDev != null) return lgDev;
 
-    return null;
+    return GoogleTvDiscovery.probe(ip, timeout);
   }
 
   static Future<DiscoveredTv?> _probeSamsungTizen(
@@ -385,6 +390,10 @@ class SsdpDiscoveryService {
               return;
             }
           } catch (_) {}
+
+          // Google TV requires Remote Service ports, never Cast-only port 8009.
+          final googleTv = await GoogleTvDiscovery.probe(ip, const Duration(milliseconds: 300));
+          if (googleTv != null) { discoveredMap[ip] = googleTv; return; }
 
           // 2. Testa porta 3000 (LG webOS fallback)
           try {

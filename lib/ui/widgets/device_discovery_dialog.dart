@@ -633,7 +633,9 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              tv.brand == TvBrand.samsungTizen
+                                              tv.brand == TvBrand.googleTv
+                                                  ? 'Digite no SixF o código de 6 caracteres exibido no Google TV.'
+                                                  : tv.brand == TvBrand.samsungTizen
                                                   ? 'Olhe para a tela da TV Samsung e selecione "Permitir" usando o controle remoto.'
                                                   : 'Confirme a permissão de conexão na tela da TV.',
                                               style: const TextStyle(

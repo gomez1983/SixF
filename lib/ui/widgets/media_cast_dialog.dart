@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'media_session_controls.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -49,8 +51,8 @@ class MediaCastDialog extends StatelessWidget {
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Padding(
+        constraints: BoxConstraints(maxWidth:440,maxHeight:MediaQuery.sizeOf(context).height-48),
+        child: SingleChildScrollView(child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -96,7 +98,7 @@ class MediaCastDialog extends StatelessWidget {
                               ),
                               child: Text(
                                 castController.transport == MediaCastTransport.native ? 'Nativo' :
-                                    castController.transport == MediaCastTransport.dlna ? 'DLNA' : 'Mídia',
+                                    castController.transport == MediaCastTransport.dlna ? 'DLNA' : castController.transport == MediaCastTransport.cast ? 'Google Cast' : 'Mídia',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -204,7 +206,7 @@ class MediaCastDialog extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildDisconnectedWarning(
@@ -229,7 +231,7 @@ class MediaCastDialog extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Para transmitir fotos e vídeos, verifique se a sua Smart TV LG ou Samsung está ligada na mesma rede Wi-Fi.',
+            'Para transmitir fotos e vídeos, verifique se a sua TV ou Chromecast está ligada na mesma rede Wi-Fi.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: textSecondary),
           ),
@@ -258,7 +260,7 @@ class MediaCastDialog extends StatelessWidget {
           context,
           icon: Icons.photo_library_rounded,
           title: 'Fotos da Galeria',
-          subtitle: 'Transmita imagens em alta resolução em tela cheia',
+          subtitle: 'Selecione várias fotos para navegar sem abrir a galeria novamente',
           accentColor: Colors.purpleAccent,
           onTap: () {
             castController.pickAndCastMedia(
@@ -399,6 +401,7 @@ class MediaCastDialog extends StatelessWidget {
     final fileName = castController.currentFileName ?? 'Mídia em reprodução';
     final isVideo = castController.isVideo;
     final isPhoto = castController.isPhoto;
+    var swipeDistance=0.0;
     final isPlaying = castController.isPlaying;
     final sizeMb = (castController.currentFileSize != null)
         ? '${(castController.currentFileSize! / (1024 * 1024)).toStringAsFixed(1)} MB'
@@ -475,6 +478,25 @@ class MediaCastDialog extends StatelessWidget {
             ],
           ),
 
+          if(isPhoto && castController.currentFilePath!=null) ...[
+            const SizedBox(height:12),
+            GestureDetector(
+              key:const Key('photo-gallery'),
+              behavior:HitTestBehavior.opaque,
+              onHorizontalDragStart: (_) { swipeDistance=0; },
+              onHorizontalDragUpdate:(details) { swipeDistance+=details.primaryDelta ?? 0; },
+              onHorizontalDragEnd:(details) {
+                final velocity=details.primaryVelocity ?? 0;
+                if(swipeDistance < -40 || velocity < -100) castController.next();
+                if(swipeDistance > 40 || velocity > 100) castController.previous();
+              },
+              child:Image.file(File(castController.currentFilePath!),height:160,width:double.infinity,fit:BoxFit.contain,
+                errorBuilder:(_,error,stack)=>const SizedBox(height:100,child:Center(child:Icon(Icons.image,size:48)))),
+            ),
+            const Text('Deslize para trocar a foto'),
+          ],
+          MediaSessionControls(controller:castController,showTimeline:false),
+          if(castController.isNavigatingPlaylist) const LinearProgressIndicator(),
           // Barra de Progresso / Timeline do Vídeo (Seek)
           if (castController.hasProgress) ...[
             const SizedBox(height: 12),
@@ -537,25 +559,6 @@ class MediaCastDialog extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              // Botão Repetir / Loop (apenas para vídeo e áudio)
-              if (castController.canLoop || castController.isLooping) ...[
-                IconButton.filledTonal(
-                  style: IconButton.styleFrom(
-                    backgroundColor: castController.isLooping
-                        ? highlight.withValues(alpha: 0.25)
-                        : surfaceElevated,
-                    foregroundColor: castController.isLooping ? highlight : textSecondary,
-                  ),
-                  icon: Icon(
-                    Icons.repeat_rounded,
-                    size: 20,
-                    color: castController.isLooping ? highlight : textSecondary,
-                  ),
-                  tooltip: castController.isLooping ? 'Repetição Ativada' : 'Repetir Vídeo',
-                  onPressed: () => castController.toggleLoop(),
-                ),
-              ],
-
               // Botão Parar (Stop)
               IconButton.filledTonal(
                 style: IconButton.styleFrom(

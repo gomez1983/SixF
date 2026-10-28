@@ -63,3 +63,10 @@ app.*.map.json
 # Credenciais locais de assinatura
 /android/key.properties
 *.pfx
+
+### Graphify ###
+graphify-out/
+
+# Local Agent / IDE hooks
+.codex/
+.gemini/

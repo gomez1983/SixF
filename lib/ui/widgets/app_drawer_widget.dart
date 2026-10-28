@@ -1,7 +1,10 @@
+import 'google_tv_adb_dialog.dart';
+import '../../services/drivers/tv_driver.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../controllers/remote_controller.dart';
-import '../../services/drivers/tv_app_info.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
 import 'remote_button.dart';
@@ -13,10 +16,7 @@ import 'remote_button.dart';
 class AppDrawerWidget extends StatefulWidget {
   final bool isEmbeddedInDesktop;
 
-  const AppDrawerWidget({
-    super.key,
-    this.isEmbeddedInDesktop = false,
-  });
+  const AppDrawerWidget({super.key, this.isEmbeddedInDesktop = false});
 
   /// Exibe a gaveta de aplicativos como um Modal BottomSheet moderno.
   static Future<void> showAsBottomSheet(BuildContext context) {
@@ -70,15 +70,20 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     final isLoading = controller.isLoadingApps;
     final apps = controller.installedApps;
 
-    final filteredApps = apps.where((app) {
-      if (_favoritesOnly && !controller.isFavoriteApp(app.id)) return false;
-      if (_searchQuery.isEmpty) return true;
-      return app.name.toLowerCase().contains(_searchQuery) ||
-          app.id.toLowerCase().contains(_searchQuery);
-    }).toList()..sort((a, b) {
-      final favoriteOrder = (controller.isFavoriteApp(b.id) ? 1 : 0) - (controller.isFavoriteApp(a.id) ? 1 : 0);
-      return favoriteOrder != 0 ? favoriteOrder : a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    final filteredApps =
+        apps.where((app) {
+          if (_favoritesOnly && !controller.isFavoriteApp(app.id)) return false;
+          if (_searchQuery.isEmpty) return true;
+          return app.name.toLowerCase().contains(_searchQuery) ||
+              app.id.toLowerCase().contains(_searchQuery);
+        }).toList()..sort((a, b) {
+          final favoriteOrder =
+              (controller.isFavoriteApp(b.id) ? 1 : 0) -
+              (controller.isFavoriteApp(a.id) ? 1 : 0);
+          return favoriteOrder != 0
+              ? favoriteOrder
+              : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -89,18 +94,45 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. Barra Superior: Título, Filtro de Busca e Botão Atualizar
-          _buildHeaderBar(context, controller, isConnected, isLoading, apps.length),
+          _buildHeaderBar(
+            context,
+            controller,
+            isConnected,
+            isLoading,
+            apps.length,
+          ),
 
           SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
 
+          if (controller.currentBrand == TvBrand.googleTv)
+            TextButton.icon(
+              icon: const Icon(Icons.settings_ethernet),
+              label: const Text('Configurar aplicativos via ADB'),
+              onPressed: () async {
+                final host = controller.ipAddress;
+                final configured = await showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => GoogleTvAdbDialog(host: host),
+                );
+                if (configured == true &&
+                    mounted &&
+                    controller.ipAddress == host) {
+                  await controller.fetchInstalledApps(forceRefresh: true);
+                }
+              },
+            ),
           // 2. Campo de Pesquisa Instantânea
           if (isConnected && apps.isNotEmpty) ...[
             _buildSearchField(context),
-            Align(alignment: Alignment.centerLeft, child: FilterChip(
-              label: const Text('Favoritos'),
-              selected: _favoritesOnly,
-              onSelected: (value) => setState(() => _favoritesOnly = value),
-            )),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                label: const Text('Favoritos'),
+                selected: _favoritesOnly,
+                onSelected: (value) => setState(() => _favoritesOnly = value),
+              ),
+            ),
             SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
           ],
 
@@ -146,7 +178,13 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Aplicativos & Atalhos',
+                controller.currentBrand == TvBrand.googleTv
+                    ? (controller.installedApps.any(
+                            (a) => a.id.startsWith('adb:'),
+                          )
+                          ? 'Aplicativos do Chromecast'
+                          : 'Atalhos do Chromecast')
+                    : 'Aplicativos & Atalhos',
                 style: TextStyle(
                   color: AppColors.textPrimaryOf(context),
                   fontSize: 16,
@@ -157,7 +195,13 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
               const SizedBox(height: 2),
               Text(
                 isConnected
-                    ? '${controller.driver.brandDisplayName} • $totalApps aplicativo${totalApps == 1 ? '' : 's'}'
+                    ? (controller.currentBrand == TvBrand.googleTv
+                          ? (controller.installedApps.any(
+                                  (a) => a.id.startsWith('adb:'),
+                                )
+                                ? '$totalApps aplicativos • ADB'
+                                : 'Configure ADB para listar os apps instalados')
+                          : '${controller.driver.brandDisplayName} • $totalApps aplicativo${totalApps == 1 ? '' : 's'}')
                     : 'Desconectado da Smart TV',
                 style: TextStyle(
                   color: AppColors.textMutedOf(context),
@@ -260,13 +304,21 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: AppColors.borderSubtleOf(context)),
                   foregroundColor: AppColors.iconHighlightOf(context),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 icon: const Icon(Icons.cast_connected_rounded, size: 14),
-                label: const Text('Conectar TV', style: TextStyle(fontSize: 11)),
+                label: const Text(
+                  'Conectar TV',
+                  style: TextStyle(fontSize: 11),
+                ),
                 onPressed: () => DeviceDiscoveryDialog.show(context),
               ),
             ],
@@ -322,7 +374,10 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                 ),
                 icon: const Icon(Icons.cast_connected_rounded, size: 16),
                 label: const Text(
@@ -431,101 +486,130 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     TvAppInfo app,
   ) {
     final isDesktop = widget.isEmbeddedInDesktop;
-    final brandColor = app.brandColor ?? AppColors.surfaceInteractiveOf(context);
-    final hasRemoteIcon = app.iconUrl != null &&
-        (app.iconUrl!.startsWith('http://') || app.iconUrl!.startsWith('https://'));
+    final brandColor =
+        app.brandColor ?? AppColors.surfaceInteractiveOf(context);
+    final hasRemoteIcon =
+        app.iconUrl != null &&
+        (app.iconUrl!.startsWith('http://') ||
+            app.iconUrl!.startsWith('https://'));
 
     final iconBoxSize = isDesktop ? 36.0 : 44.0;
     final iconInnerSize = isDesktop ? 18.0 : 22.0;
 
-    return Stack(children: [
-      Positioned.fill(child: Material(
-      color: AppColors.surfaceCardOf(context),
-      borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
-        onTap: () => controller.openApp(app.id, appName: app.name),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: 4,
-            vertical: isDesktop ? 4 : 8,
-          ),
-          decoration: BoxDecoration(
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Material(
+            color: AppColors.surfaceCardOf(context),
             borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
-            border: Border.all(
-              color: AppColors.borderSubtleOf(context),
-              width: 1,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Ícone do App
-              Container(
-                width: iconBoxSize,
-                height: iconBoxSize,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
+              onTap: () => controller.openApp(app.id, appName: app.name),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: isDesktop ? 4 : 8,
+                ),
                 decoration: BoxDecoration(
-                  color: hasRemoteIcon ? Colors.transparent : brandColor.withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(isDesktop ? 10 : 12),
+                  borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
                   border: Border.all(
-                    color: hasRemoteIcon
-                        ? Colors.transparent
-                        : (app.brandColor ?? AppColors.borderSubtleOf(context)).withValues(alpha: 0.5),
+                    color: AppColors.borderSubtleOf(context),
                     width: 1,
                   ),
                 ),
-                alignment: Alignment.center,
-                child: hasRemoteIcon
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(isDesktop ? 8 : 10),
-                        child: Image.network(
-                          app.iconUrl!,
-                          width: iconBoxSize - 4,
-                          height: iconBoxSize - 4,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => Icon(
-                            app.fallbackIcon,
-                            size: iconInnerSize,
-                            color: app.brandColor ?? AppColors.iconHighlightOf(context),
-                          ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Ícone do App
+                    Container(
+                      width: iconBoxSize,
+                      height: iconBoxSize,
+                      decoration: BoxDecoration(
+                        color: hasRemoteIcon
+                            ? Colors.transparent
+                            : brandColor.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(
+                          isDesktop ? 10 : 12,
                         ),
-                      )
-                    : Icon(
-                        app.fallbackIcon,
-                        size: iconInnerSize,
-                        color: app.brandColor ?? AppColors.iconHighlightOf(context),
+                        border: Border.all(
+                          color: hasRemoteIcon
+                              ? Colors.transparent
+                              : (app.brandColor ??
+                                        AppColors.borderSubtleOf(context))
+                                    .withValues(alpha: 0.5),
+                          width: 1,
+                        ),
                       ),
-              ),
+                      alignment: Alignment.center,
+                      child: hasRemoteIcon
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                isDesktop ? 8 : 10,
+                              ),
+                              child: Image.network(
+                                app.iconUrl!,
+                                width: iconBoxSize - 4,
+                                height: iconBoxSize - 4,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, _, _) => Icon(
+                                  app.fallbackIcon,
+                                  size: iconInnerSize,
+                                  color:
+                                      app.brandColor ??
+                                      AppColors.iconHighlightOf(context),
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              app.fallbackIcon,
+                              size: iconInnerSize,
+                              color:
+                                  app.brandColor ??
+                                  AppColors.iconHighlightOf(context),
+                            ),
+                    ),
 
-              SizedBox(height: isDesktop ? 4 : 6),
+                    SizedBox(height: isDesktop ? 4 : 6),
 
-              // Nome do App
-              Text(
-                app.name,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textPrimaryOf(context),
-                  fontSize: isDesktop ? 10 : 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.1,
+                    // Nome do App
+                    Text(
+                      app.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textPrimaryOf(context),
+                        fontSize: isDesktop ? 10 : 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
-      ),
-      )),
-      Positioned(top: 0, right: 0, child: IconButton(
-        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-        padding: EdgeInsets.zero,
-        iconSize: 18,
-        tooltip: controller.isFavoriteApp(app.id) ? 'Remover ${app.name} dos favoritos' : 'Favoritar ${app.name}',
-        icon: Icon(controller.isFavoriteApp(app.id) ? Icons.star_rounded : Icons.star_outline_rounded,
-          color: AppColors.iconHighlightOf(context)),
-        onPressed: () => controller.toggleFavoriteApp(app.id),
-      )),
-    ]);
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            padding: EdgeInsets.zero,
+            iconSize: 18,
+            tooltip: controller.isFavoriteApp(app.id)
+                ? 'Remover ${app.name} dos favoritos'
+                : 'Favoritar ${app.name}',
+            icon: Icon(
+              controller.isFavoriteApp(app.id)
+                  ? Icons.star_rounded
+                  : Icons.star_outline_rounded,
+              color: AppColors.iconHighlightOf(context),
+            ),
+            onPressed: () => controller.toggleFavoriteApp(app.id),
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -2,7 +2,7 @@
 
 ## Implementado no código
 
-- [x] Windows e Android; drivers LG webOS e Samsung Tizen.
+- [x] Windows e Android; drivers LG webOS, Samsung Tizen e Google TV (Remote Service v2).
 - [x] Sessões independentes, aparelhos salvos e alternância de controle ativo.
 - [x] Credenciais por marca/IP, cancelamento e limpeza de operações.
 - [x] Arquivos locais via SSAP/DLNA, URL exclusiva, HEAD/Range e revogação ao encerrar.
@@ -31,4 +31,6 @@ Implementado não equivale a homologado em todos os modelos de TV. Consulte docs
 - [ ] Captura/espelhamento de tela e eventual transcodificação: recursos distintos, não implementados.
 - [ ] Monetização, Apple TV, Roku e automações: propostas sem implementação.
 
-Android TV/Google Cast permanece descontinuado. iOS não possui projeto/plataforma neste checkout.
+Google TV retomado com identidade persistente e protocolo Remote Service v2 (6466/6467), pendente de homologação física. Google Cast para fotos/vídeos e controles de reprodução implementado; Chromecast clássico não oferece o controle de navegação Remote Service v2. iOS não possui projeto/plataforma neste checkout.
+
+Versão 1.0.6: inventário e abertura de apps via ADB autorizados e validados com 23 apps no Chromecast. Transporte de voz corrigido e reconhecimento sintético confirmado; captura física Windows/Android permanece para reteste.

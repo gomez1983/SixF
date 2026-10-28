@@ -1,3 +1,4 @@
+import '../services/drivers/google_tv_driver.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
@@ -91,6 +92,12 @@ class RemoteController extends ChangeNotifier {
   // Estado de Tema e Preferências Globais
   ThemeMode _themeMode = ThemeMode.dark;
   bool _isHapticEnabled = true;
+  bool _backButtonOnRight=false;
+  bool get backButtonOnRight => _backButtonOnRight;
+  Future<void> setBackButtonOnRight(bool value) async {
+    _backButtonOnRight=value; notifyListeners();
+    await storageService.setBackButtonOnRight(value);
+  }
 
   // Estado Multi-Device e Sessões Concorrentes
   final Map<String, DeviceSession> _sessions = {};
@@ -136,11 +143,11 @@ class RemoteController extends ChangeNotifier {
   bool get isConnected => activeSession?.isConnected ?? _isConnected;
   bool get isConnecting => activeSession?.isConnecting ?? _isConnecting;
   bool get isPoweredOn => activeSession?.isPoweredOn ?? _isPoweredOn;
-  bool get isMuted => activeSession?.isMuted ?? _isMuted;
+  bool get isMuted => _volumeSession?.isMuted ?? _isMuted;
   bool get isWaitingPairing => activeSession?.isWaitingPairing ?? _isWaitingPairing;
   bool get isScanningTvs => _isScanningTvs;
   bool get shouldMaintainConnection => activeSession?.shouldMaintainConnection ?? _shouldMaintainConnection;
-  int get volumeLevel => activeSession?.volumeLevel ?? _volumeLevel;
+  int get volumeLevel => _volumeSession?.volumeLevel ?? _volumeLevel;
   int get currentChannel => activeSession?.currentChannel ?? _currentChannel;
   String get ipAddress => activeSession?.device.ip ?? _ipAddress;
   String get macAddress => activeSession?.device.mac ?? _macAddress;
@@ -242,6 +249,7 @@ class RemoteController extends ChangeNotifier {
       await storageService.init();
       if (_disposed) return;
 
+      _backButtonOnRight=storageService.getBackButtonOnRight();
       // Carrega preferências de tema e haptic
       final savedTheme = storageService.getThemeMode();
       _themeMode = (savedTheme == 'light') ? ThemeMode.light : ThemeMode.dark;
@@ -358,7 +366,7 @@ class RemoteController extends ChangeNotifier {
       if (isNowConnected) {
         session.connectionError = null;
         session.reconnecting = false;
-        session.isPoweredOn = true;
+        session.isPoweredOn = driver is GoogleTvDriver ? driver.isOn : true;
         session.shouldMaintainConnection = true;
         _logAction('${driver.brandDisplayName} Conectada e Autenticada', {
           'dispositivo': session.device.name,
@@ -375,7 +383,7 @@ class RemoteController extends ChangeNotifier {
         _isConnected = isNowConnected;
         _isConnecting = isNowConnecting;
         _isWaitingPairing = isNowPairing;
-        if (isNowConnected) _isPoweredOn = true;
+        if (isNowConnected) _isPoweredOn = session.isPoweredOn;
       }
 
       notifyListeners();
@@ -556,6 +564,9 @@ class RemoteController extends ChangeNotifier {
     final session = _sessions[deviceId]!;
     _driver = session.driver;
     _syncActiveFields();
+    if (session.isWaitingPairing && session.driver.supportsPairingPin) {
+      onPinPromptRequested?.call(true);
+    }
 
     HapticService.selectionClick();
     _logAction('Controle alternado para: ${session.device.name}', {
@@ -635,7 +646,7 @@ class RemoteController extends ChangeNotifier {
       ip: session.device.ip,
       deviceId: session.device.id,
     );
-    final timeoutDuration = session.device.brand == TvBrand.samsungTizen
+    final timeoutDuration = session.device.brand != TvBrand.lgWebOs
         ? const Duration(seconds: 10)
         : const Duration(seconds: 4);
 
@@ -702,7 +713,7 @@ class RemoteController extends ChangeNotifier {
       }
 
       if (success && driver.isConnected) {
-        session.isPoweredOn = true;
+        session.isPoweredOn = driver is GoogleTvDriver ? driver.isOn : true;
         session.shouldMaintainConnection = true;
         _fetchAppsForSession(session);
       } else if (!success && !session.isWaitingPairing) {
@@ -1047,6 +1058,12 @@ class RemoteController extends ChangeNotifier {
     final session = activeSession;
     final targetMac = session?.device.mac ?? _macAddress;
 
+    if (currentBrand == TvBrand.googleTv) {
+      driver.sendKey(RemoteKey.power);
+      _logAction('Energia do Google TV acionada');
+      return;
+    }
+
     if (isPoweredOn) {
       _shouldMaintainConnection = false;
       if (session != null) session.shouldMaintainConnection = false;
@@ -1065,10 +1082,33 @@ class RemoteController extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? get volumeTargetId {
+    final active = activeSession;
+    if(active == null || currentBrand != TvBrand.googleTv) return activeDeviceId;
+    final saved = storageService.getVolumeTarget(active.device.id);
+    if(saved != null && _sessions.containsKey(saved)) return saved;
+    final televisions = _sessions.values.where((s)=>s.device.brand != TvBrand.googleTv).toList();
+    return televisions.length == 1 ? televisions.single.device.id : activeDeviceId;
+  }
+  DeviceSession? get _volumeSession => _sessions[volumeTargetId];
+  Future<void> setVolumeTarget(String id) async {
+    final active=activeDeviceId;
+    if(active==null || !_sessions.containsKey(id)) return;
+    await storageService.setVolumeTarget(active,id); notifyListeners();
+  }
+  bool _prepareVolume() {
+    final target=_volumeSession;
+    if(target==null || !target.isConnected) {
+      _logAction('Conecte o aparelho escolhido para controlar o volume.'); return false;
+    }
+    return true;
+  }
+
   // --- Volume, Canal e Mudo ---
 
   void volumeUp() {
-    final session = activeSession;
+    if (currentBrand == TvBrand.googleTv && !_prepareVolume()) return;
+    final session = _volumeSession;
     if (session != null) {
       if (session.volumeLevel < 100) {
         session.volumeLevel++;
@@ -1082,13 +1122,14 @@ class RemoteController extends ChangeNotifier {
         if (_isMuted) _isMuted = false;
       }
     }
-    driver.sendKey(RemoteKey.volumeUp);
+    (session?.driver ?? driver).sendKey(RemoteKey.volumeUp);
     _logAction('Volume Up', {'level': volumeLevel, 'muted': isMuted});
     notifyListeners();
   }
 
   void volumeDown() {
-    final session = activeSession;
+    if (currentBrand == TvBrand.googleTv && !_prepareVolume()) return;
+    final session = _volumeSession;
     if (session != null) {
       if (session.volumeLevel > 0) {
         session.volumeLevel--;
@@ -1102,19 +1143,20 @@ class RemoteController extends ChangeNotifier {
         if (_isMuted) _isMuted = false;
       }
     }
-    driver.sendKey(RemoteKey.volumeDown);
+    (session?.driver ?? driver).sendKey(RemoteKey.volumeDown);
     _logAction('Volume Down', {'level': volumeLevel, 'muted': isMuted});
     notifyListeners();
   }
 
   void toggleMute() {
-    final session = activeSession;
+    if (currentBrand == TvBrand.googleTv && !_prepareVolume()) return;
+    final session = _volumeSession;
     final newMute = !isMuted;
     if (session != null) {
       session.isMuted = newMute;
     }
     _isMuted = newMute;
-    driver.setMute(newMute);
+    (session?.driver ?? driver).setMute(newMute);
     _logAction('Mute Toggle', {'isMuted': newMute});
     notifyListeners();
   }
@@ -1123,7 +1165,7 @@ class RemoteController extends ChangeNotifier {
 
   void triggerVoice() {
     HapticService.buttonPress();
-    driver.triggerVoice();
+    if (driver is! GoogleTvDriver) driver.triggerVoice();
     _logAction('Comando de Voz / Microfone acionado', {
       'marca': driver.brandDisplayName,
     });
@@ -1241,6 +1283,13 @@ class RemoteController extends ChangeNotifier {
   }
 
   // --- Controles Multimídia ---
+
+  final Map<String, String> _mediaSelections = {};
+  String? get selectedMediaAction => _mediaSelections['${currentBrand.id}:$ipAddress'];
+  void selectMediaAction(String action) {
+    _mediaSelections['${currentBrand.id}:$ipAddress'] = action;
+    notifyListeners();
+  }
 
   void mediaPlay() {
     driver.sendKey(RemoteKey.play);
@@ -1399,7 +1448,7 @@ class RemoteController extends ChangeNotifier {
 
   Future<void> sendPairingPin(String pin) async {
     await driver.sendPairingPin(pin);
-    _logAction('PIN enviado', {'pin': pin});
+    _logAction('Código de pareamento enviado');
   }
 
   // --- Gerenciamento e Atalhos de Aplicativos ---

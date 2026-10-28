@@ -191,9 +191,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                           ),
                                           child: Center(
                                             child: Text(
-                                              brand == TvBrand.lgWebOs
-                                                  ? 'LG webOS'
-                                                  : 'Samsung Tizen',
+                                              brand.displayName,
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -215,6 +213,24 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
 
                         const SizedBox(height: 12),
 
+                        if (controller.currentBrand == TvBrand.googleTv) ...[
+                          SwitchListTile.adaptive(
+                            contentPadding:EdgeInsets.zero,
+                            title:const Text('Voltar à direita do D-pad'),
+                            subtitle:const Text('Desative para usar à esquerda'),
+                            value:controller.backButtonOnRight,
+                            onChanged:controller.setBackButtonOnRight,
+                          ),
+                          DropdownButtonFormField<String>(
+                            initialValue: controller.volumeTargetId,
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'Controlar volume de'),
+                            items: controller.savedDevices.map((device) => DropdownMenuItem(
+                              value: device.id, child: Text(device.name, overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: (id) { if(id != null) controller.setVolumeTarget(id); },
+                          ),
+                          const SizedBox(height:12),
+                        ],
                         // Aviso de Pareamento na TV quando aplicável
                         if (isWaitingPairing) ...[
                           Container(

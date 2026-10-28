@@ -1,7 +1,11 @@
+import '../../services/drivers/google_tv_driver.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../controllers/remote_controller.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../../services/haptic_service.dart';
@@ -68,11 +72,16 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
   VoiceIntent? _classifiedIntent;
   String _selectedLocale = 'pt_BR';
   bool _isMicListening = false;
+  GoogleTvDriver? _googleVoice;
+  bool _voiceClosed = false;
+  bool _isFinishingGoogleVoice = false;
   String? _executionFeedback;
 
   @override
   void initState() {
     super.initState();
+    final target = context.read<RemoteController>().driver;
+    if (target is GoogleTvDriver) _googleVoice = target;
     VoiceListeningOverlay.onPttReleaseCallback = handlePttRelease;
 
     _textController = TextEditingController();
@@ -119,9 +128,29 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
 
   void _startAudioCapture() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
+      if (!mounted || _voiceClosed) return;
       final controller = Provider.of<RemoteController>(context, listen: false);
 
+      if (_googleVoice != null) {
+        try {
+          await _googleVoice!.startVoice();
+          if (_voiceClosed) {
+            await _googleVoice!.stopVoice();
+            return;
+          }
+          if (mounted) setState(() => _isMicListening = true);
+        } catch (e) {
+          if (mounted) {
+            setState(
+              () => _executionFeedback = e.toString().replaceFirst(
+                'Bad state: ',
+                '',
+              ),
+            );
+          }
+        }
+        return;
+      }
       final ok = await controller.voiceService.startListening(
         localeId: _selectedLocale,
         onResult: (words) {
@@ -150,6 +179,11 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
   }
 
   void _stopListeningAudio() {
+    _voiceClosed = true;
+    if (_googleVoice != null) {
+      unawaited(_googleVoice!.stopVoice().catchError((Object _) {}));
+      return;
+    }
     try {
       final controller = Provider.of<RemoteController>(context, listen: false);
       controller.voiceService.stopListening();
@@ -177,6 +211,10 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
 
   /// Trata a liberação do botão Push-to-Talk disparada pelo overlay
   void handlePttRelease() {
+    if (_googleVoice != null) {
+      unawaited(_finishGoogleVoice());
+      return;
+    }
     _stopListeningAudio();
     final text = _textController.text.trim();
 
@@ -187,7 +225,8 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
     }
 
     final controller = Provider.of<RemoteController>(context, listen: false);
-    final intent = _classifiedIntent ??
+    final intent =
+        _classifiedIntent ??
         VoiceService.classifyIntent(
           text,
           installedApps: controller.installedApps,
@@ -197,7 +236,8 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
       // Executa ação direta
       controller.executeVoiceIntent(intent);
       setState(() {
-        _executionFeedback = 'Comando "${intent.displayDescription}" executado!';
+        _executionFeedback =
+            'Comando "${intent.displayDescription}" executado!';
       });
       Future.delayed(const Duration(milliseconds: 700), () {
         _close();
@@ -232,7 +272,30 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
     _close();
   }
 
+  Future<void> _finishGoogleVoice() async {
+    if (_isFinishingGoogleVoice) return;
+    _isFinishingGoogleVoice = true;
+    _voiceClosed = true;
+    if (mounted) setState(() => _executionFeedback = 'Enviando o fim da fala…');
+    try {
+      await _googleVoice!.stopVoice();
+      if (mounted) _close();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _executionFeedback = 'Não foi possível enviar a fala. Confira o microfone e tente novamente.',
+        );
+      }
+    } finally {
+      _isFinishingGoogleVoice = false;
+    }
+  }
+
   void _close() {
+    if (_googleVoice != null && !_voiceClosed) {
+      unawaited(_finishGoogleVoice());
+      return;
+    }
     _stopListeningAudio();
     if (VoiceListeningOverlay.onPttReleaseCallback == handlePttRelease) {
       VoiceListeningOverlay.onPttReleaseCallback = null;
@@ -246,6 +309,10 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
 
   @override
   void dispose() {
+    _voiceClosed = true;
+    if (_googleVoice != null) {
+      unawaited(_googleVoice!.stopVoice().catchError((Object _) {}));
+    }
     if (VoiceListeningOverlay.onPttReleaseCallback == handlePttRelease) {
       VoiceListeningOverlay.onPttReleaseCallback = null;
     }
@@ -261,6 +328,27 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
 
   @override
   Widget build(BuildContext context) {
+    if (_googleVoice != null) {
+      return AlertDialog(
+        title: const Text('Microfone do Google TV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LinearProgressIndicator(value: _googleVoice!.voiceInputLevel),
+            const SizedBox(height: 12),
+            Text(
+              _executionFeedback ??
+                  (_isMicListening
+                      ? (_googleVoice!.voiceCapturedBytes == 0
+                            ? 'Aguardando áudio do microfone…'
+                            : 'Microfone captando. Aguardando reconhecimento na TV.')
+                      : 'Preparando microfone…'),
+            ),
+          ],
+        ),
+        actions: [TextButton(onPressed: _close, child: const Text('Encerrar'))],
+      );
+    }
     final controller = context.watch<RemoteController>();
     final brandName = controller.currentBrand.displayName;
     final tvName = controller.connectedTvName ?? 'Smart TV';
@@ -327,10 +415,11 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: (isConnected
-                                          ? AppColors.statusConnected
-                                          : highlightColor)
-                                      .withValues(alpha: 0.6),
+                                  color:
+                                      (isConnected
+                                              ? AppColors.statusConnected
+                                              : highlightColor)
+                                          .withValues(alpha: 0.6),
                                   blurRadius: 6,
                                   spreadRadius: 1,
                                 ),
@@ -343,8 +432,8 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                               isLocked
                                   ? '🔒 MÃOS LIVRES (TRAVADO)'
                                   : (widget.isPushToTalk
-                                      ? 'PUSH-TO-TALK ATIVO'
-                                      : 'MICROFONE ATIVO'),
+                                        ? 'PUSH-TO-TALK ATIVO'
+                                        : 'MICROFONE ATIVO'),
                               style: TextStyle(
                                 color: highlightColor,
                                 fontSize: 9.5,
@@ -439,8 +528,9 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color:
-                                        highlightColor.withValues(alpha: 0.35),
+                                    color: highlightColor.withValues(
+                                      alpha: 0.35,
+                                    ),
                                     blurRadius: 14,
                                     spreadRadius: 2,
                                   ),
@@ -475,9 +565,11 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                     children: List.generate(7, (index) {
                       final factor = _isMicListening
                           ? math
-                              .sin((_waveController.value * math.pi) +
-                                  (index * 0.5))
-                              .abs()
+                                .sin(
+                                  (_waveController.value * math.pi) +
+                                      (index * 0.5),
+                                )
+                                .abs()
                           : 0.15;
                       final height = 6.0 + (factor * 14.0);
                       return Container(
@@ -514,8 +606,8 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                 isLocked
                     ? 'Modo mãos livres ativo.\nFale livremente ou digite com o teclado.'
                     : (widget.isPushToTalk
-                        ? 'Segure enquanto fala.\nSolte para enviar ou revisar o comando.'
-                        : 'Fale ou digite para pesquisar ou controlar sua $brandName.'),
+                          ? 'Segure enquanto fala.\nSolte para enviar ou revisar o comando.'
+                          : 'Fale ou digite para pesquisar ou controlar sua $brandName.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textSecondaryOf(context),
@@ -573,10 +665,7 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color: highlightColor,
-                      width: 1.5,
-                    ),
+                    borderSide: BorderSide(color: highlightColor, width: 1.5),
                   ),
                 ),
                 onSubmitted: (_) => _sendToTv(),
@@ -587,8 +676,10 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
               // Feedback de Classificação de Intenção ou Execução
               if (_executionFeedback != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.statusConnected.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -623,8 +714,10 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                 )
               else if (intent != null)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: intent.isCommand
                         ? Colors.amber.withValues(alpha: 0.15)
@@ -678,9 +771,7 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                 )
               else ...[
                 Text(
-                  isConnected
-                      ? '$tvName ($brandName)'
-                      : '$brandName (Pronta)',
+                  isConnected ? '$tvName ($brandName)' : '$brandName (Pronta)',
                   style: TextStyle(
                     color: AppColors.textSecondaryOf(context),
                     fontSize: 11,
@@ -694,7 +785,10 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                   children: [
                     _buildCommandHintChip('🔊 Volume +5 / -5', highlightColor),
                     _buildCommandHintChip('🔇 Mudo', highlightColor),
-                    _buildCommandHintChip('🚀 Abrir YouTube / Netflix', highlightColor),
+                    _buildCommandHintChip(
+                      '🚀 Abrir YouTube / Netflix',
+                      highlightColor,
+                    ),
                     _buildCommandHintChip('⚡ Desligar TV', highlightColor),
                   ],
                 ),
@@ -725,8 +819,9 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                       onPressed: _close,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textSecondaryOf(context),
-                        side:
-                            BorderSide(color: AppColors.borderSubtleOf(context)),
+                        side: BorderSide(
+                          color: AppColors.borderSubtleOf(context),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -783,8 +878,9 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: highlightColor,
                         foregroundColor: Colors.black,
-                        disabledBackgroundColor:
-                            highlightColor.withValues(alpha: 0.25),
+                        disabledBackgroundColor: highlightColor.withValues(
+                          alpha: 0.25,
+                        ),
                         disabledForegroundColor: Colors.black38,
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         elevation: 0,
@@ -811,7 +907,11 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
     );
   }
 
-  Widget _buildLocaleChip(String localeCode, String label, Color highlightColor) {
+  Widget _buildLocaleChip(
+    String localeCode,
+    String label,
+    Color highlightColor,
+  ) {
     final isSelected = _selectedLocale == localeCode;
     return GestureDetector(
       onTap: () => _toggleLocale(localeCode),
@@ -879,10 +979,7 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
       height: currentRadius * 2,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: color.withValues(alpha: opacity),
-          width: 1.5,
-        ),
+        border: Border.all(color: color.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }
@@ -891,8 +988,9 @@ class _VoiceListeningDialogState extends State<VoiceListeningDialog>
 /// Gerenciador de overlay para exibição Push-to-Talk e Slide-to-Lock instantânea.
 class VoiceListeningOverlay {
   static OverlayEntry? _entry;
-  static final ValueNotifier<bool> isLockedNotifier =
-      ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> isLockedNotifier = ValueNotifier<bool>(
+    false,
+  );
   static VoidCallback? onPttReleaseCallback;
 
   static bool get isVisible => _entry != null;

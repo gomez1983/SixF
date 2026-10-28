@@ -43,6 +43,12 @@ class StorageService {
     await _prefs!.setBool('pref_client_keys_migrated_v2', true);
   }
 
+  bool getBackButtonOnRight() => _prefs?.getBool('back_button_on_right') ?? false;
+  Future<void> setBackButtonOnRight(bool value) async { await init(); await _prefs!.setBool('back_button_on_right',value); }
+  String? getVolumeTarget(String deviceId) => _prefs?.getString('volume_target_$deviceId');
+  Future<void> setVolumeTarget(String deviceId, String targetId) async {
+    await init(); await _prefs!.setString('volume_target_$deviceId',targetId);
+  }
   Set<String> getFavoriteApps(String deviceId, TvBrand brand) =>
       (_prefs?.getStringList('pref_favorites_${brand.id}_$deviceId') ?? []).toSet();
 

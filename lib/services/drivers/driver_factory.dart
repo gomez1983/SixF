@@ -1,3 +1,4 @@
+import 'google_tv_driver.dart';
 import 'lg_webos_driver.dart';
 import 'samsung_tizen_driver.dart';
 import 'tv_driver.dart';
@@ -11,6 +12,8 @@ class DriverFactory {
         return LgWebOsDriver();
       case TvBrand.samsungTizen:
         return SamsungTizenDriver();
+      case TvBrand.googleTv:
+        return GoogleTvDriver();
     }
   }
 }

@@ -6,6 +6,7 @@ export 'tv_app_info.dart';
 enum TvBrand {
   lgWebOs,
   samsungTizen,
+  googleTv,
 }
 
 extension TvBrandExtension on TvBrand {
@@ -15,6 +16,8 @@ extension TvBrandExtension on TvBrand {
         return 'LG webOS';
       case TvBrand.samsungTizen:
         return 'Samsung Tizen';
+      case TvBrand.googleTv:
+        return 'Google TV';
     }
   }
 
@@ -24,6 +27,8 @@ extension TvBrandExtension on TvBrand {
         return 'lg_webos';
       case TvBrand.samsungTizen:
         return 'samsung_tizen';
+      case TvBrand.googleTv:
+        return 'google_tv';
     }
   }
 }

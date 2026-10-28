@@ -1,3 +1,5 @@
+import '../widgets/google_tv_pairing_dialog.dart';
+import '../../services/drivers/tv_driver.dart';
 import '../../services/desktop_window_service.dart';
 import '../widgets/compact_remote.dart';
 import 'dart:io';
@@ -41,6 +43,32 @@ class _RemoteViewState extends State<RemoteView> {
   int _lastRepeat = -120;
   final Map<LogicalKeyboardKey, Object> _heldKeyTargets = {};
   final DesktopWindowService _windowService = DesktopWindowService();
+  RemoteController? _pairingController;
+  bool _pairingDialogOpen = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = context.read<RemoteController>();
+    if (identical(_pairingController,controller)) return;
+    _pairingController?.onPinPromptRequested = null;
+    _pairingController = controller;
+    controller.onPinPromptRequested = _onPairingPrompt;
+  }
+  void _onPairingPrompt(bool prompt) {
+    final controller = _pairingController;
+    if (!prompt || controller == null || controller.currentBrand != TvBrand.googleTv || _pairingDialogOpen) return;
+    final deviceId = controller.activeDeviceId;
+    final driver = controller.driver;
+    if (deviceId == null) return;
+    _pairingDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showDialog<void>(context:context, barrierDismissible:false,
+        builder: (_) => PopScope(canPop:false,child:GoogleTvPairingDialog(
+          controller:controller,deviceId:deviceId,driver:driver)));
+      _pairingDialogOpen = false;
+    });
+  }
   bool _compact = false;
   bool _changingWindow = false;
 
@@ -66,6 +94,7 @@ class _RemoteViewState extends State<RemoteView> {
 
   @override
   void dispose() {
+    _pairingController?.onPinPromptRequested = null;
     _focusNode.dispose();
     super.dispose();
   }
@@ -369,7 +398,7 @@ class _RemoteViewState extends State<RemoteView> {
                 const SizedBox(height: 16),
 
                 // 3. Roda D-Pad com HDMI 1 à esquerda e TV Digital à direita
-                DPadWidget(size: (constraints.maxWidth - 172).clamp(128.0, 210.0)),
+                DPadWidget(size: (constraints.maxWidth - (context.watch<RemoteController>().currentBrand==TvBrand.googleTv ? 64 : 172)).clamp(128.0, 210.0)),
 
                 const SizedBox(height: 12),
 
