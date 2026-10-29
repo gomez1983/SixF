@@ -1,5 +1,15 @@
 # SixF — validação e distribuição
 
+## Pareamento persistente e ícones — 29/10/2026
+
+Correção de colisão entre identidades do controle Google TV: novos certificados têm subject distinto por chave pública. Reconexões preservam certificados aceitos; EOF isolado não inicia novo PIN. Certificados legados só são adaptados quando um novo pareamento é necessário, preservando a chave privada. Menus do aparelho oferecem Refazer pareamento para recuperação explícita.
+
+Catálogo local com 13 ícones de aplicativos reconhecidos, disponível offline no Windows e Android. Imagens fornecidas pela TV continuam prioritárias; em caso de falha, usa-se o catálogo e depois o ícone alternativo. Aplicativos ADB desconhecidos não recebem marca por aproximação do nome. Origem e licença em assets/app_icons/ATTRIBUTION.md. Nenhum aplicativo é inventado pelo catálogo: o inventário continua vindo do Chromecast via ADB.
+
+Controle remoto e inventário ADB têm autorizações separadas por instalação. O usuário confirmou que a lista completa apareceu no Android após configurar o ADB. Favoritos permanecem locais. Ambiente informado: Windows, Galaxy S23 Ultra e um Galaxy S9 (possivelmente S9+); a confirmação geral de funcionamento não especificou uma matriz completa de reinicializações e alternância entre os três clientes.
+
+Validação: 217 testes aprovados, análise estática dos arquivos alterados limpa e Graphify atualizado. Windows Release e APK Android debug recompilados; 13 PNGs conferidos em ambos os pacotes. Executável: build/windows/x64/runner/Release/sixf_remote.exe. APK: build/app/outputs/flutter-apk/app-debug.apk. Mantida versão 1.0.6+8 e assinatura de teste existente para atualização por cima da instalação atual, sem desinstalar. Usuário confirmou que funcionou e autorizou commit/envio ao GitHub. Auditoria flutter-security-audit recomendada e não executada nesta rodada.
+
 ## Voz, galeria e mídia — 27/10/2026
 
 Windows Release atualizado no caminho do atalho e APK Android debug gerado; pacotes verificados em dist/1.0.4. Microfone físico e reprodução real continuam pendentes de teste no aparelho.

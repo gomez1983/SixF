@@ -101,7 +101,6 @@ class GoogleTvDriver extends TvDriver {
   Timer? _reconnectTimer;
   bool _keepConnected = false;
   bool _authenticationRejected = false;
-  bool _receivedControlMessage = false;
   int _reconnectAttempts = 0;
   static bool _isCertificateRejection(Object error) {
     final text = error.toString().toUpperCase();
@@ -154,9 +153,11 @@ class GoogleTvDriver extends TvDriver {
       if (generation != _generation) return false;
     }
     // The TLS alert can arrive after SecureSocket.connect has already completed.
-    // Ask for a PIN again with the same identity, never silently rotate keys.
+    // Only an explicit certificate rejection warrants another PIN. Preserve
+    // the private key; upgrade a colliding legacy subject only for this pairing.
     _keepConnected = false;
     _closeChannel();
+    _credentials = _credentials!.forPairing();
     await _openPairing(generation);
     return false;
   }
@@ -224,6 +225,7 @@ class GoogleTvDriver extends TvDriver {
     required String ipAddress,
     String? authToken,
     Duration timeout = const Duration(seconds: 10),
+    bool pairAgain = false,
   }) async {
     disconnect();
     final generation = _generation;
@@ -241,8 +243,8 @@ class GoogleTvDriver extends TvDriver {
           ? GoogleTvCredentials.decode(authToken)
           : await _credentialsFactory();
       if (generation != _generation) return false;
-      _credentials = credentials;
-      if (authToken != null && authToken.isNotEmpty) {
+      _credentials = pairAgain ? credentials.forPairing() : credentials;
+      if (!pairAgain && authToken != null && authToken.isNotEmpty) {
         return await _connectPaired(generation);
       }
       await _openPairing(generation);
@@ -262,7 +264,6 @@ class GoogleTvDriver extends TvDriver {
     void Function(Map<int, Object>) handler,
   ) async {
     _authenticationRejected = false;
-    _receivedControlMessage = false;
     final socket = await SecureSocket.connect(
       _host,
       port,
@@ -290,11 +291,8 @@ class GoogleTvDriver extends TvDriver {
       },
       onDone: () {
         if (generation == _generation && identical(_socket, socket)) {
-          // Some TLS stacks report a rejected client certificate as EOF.
-          // Retry pairing only if the control handshake never received a frame.
-          if (port == controlPort && !isConnected && !_receivedControlMessage) {
-            _authenticationRejected = true;
-          }
+          // EOF also happens while Remote Service starts or restarts. It is
+          // not evidence that a saved certificate was rejected.
           _fail(
             'A conexão com o Google TV foi encerrada. Reconecte para continuar.',
           );
@@ -429,7 +427,6 @@ class GoogleTvDriver extends TvDriver {
   }
 
   void _handleControl(Map<int, Object> fields) {
-    _receivedControlMessage = true;
     _touchActivity();
     if (fields.containsKey(1)) {
       final cfg = TvWire.message(fields, 1);

@@ -301,6 +301,16 @@ class DeviceSelectorBar extends StatelessWidget {
                   },
                 ),
 
+                if (device.brand == TvBrand.googleTv)
+                  ListTile(
+                    leading: const Icon(Icons.phonelink_lock_rounded),
+                    title: const Text('Refazer pareamento'),
+                    onTap: () {
+                      Navigator.of(modalContext).pop();
+                      controller.repairGoogleTvPairing(device.id);
+                    },
+                  ),
+
                 // Definir como padrão
                 if (!device.isDefault)
                   ListTile(

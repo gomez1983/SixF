@@ -23,12 +23,34 @@ class GoogleTvCredentials {
   }
   static GoogleTvCredentials generate() {
     final pair = CryptoUtils.generateRSAKeyPair(keySize: 2048);
-    final subject = {'CN': 'SixF Remote', 'O': 'SixF'};
-    final csr = X509Utils.generateRsaCsrPem(
-      subject,
+    return _issue(
       pair.privateKey as RSAPrivateKey,
       pair.publicKey as RSAPublicKey,
     );
+  }
+
+  /// Only upgrade a legacy identity when pairing is already required. Reissuing
+  /// an accepted certificate would itself invalidate the saved pairing.
+  GoogleTvCredentials forPairing() {
+    final subject = X509Utils.x509CertificateFromPem(certificate)
+        .tbsCertificate!
+        .subject;
+    if (subject['2.5.4.3'] != 'SixF Remote') return this;
+    return _issue(
+      CryptoUtils.rsaPrivateKeyFromPem(privateKey),
+      publicKey(CryptoUtils.getBytesFromPEMString(certificate)),
+    );
+  }
+
+  static GoogleTvCredentials _issue(RSAPrivateKey key, RSAPublicKey public) {
+    // Remote Service removes older certificates with the same X.500 subject.
+    // Distinguish installations by their public key, even across PC and phone.
+    final identity = sha256
+        .convert(unsigned(public.modulus!))
+        .toString()
+        .substring(0, 32);
+    final subject = {'CN': 'SixF Remote $identity', 'O': 'SixF'};
+    final csr = X509Utils.generateRsaCsrPem(subject, key, public);
     final random = Random.secure();
     final serial = BigInt.parse(
       List.generate(
@@ -38,17 +60,14 @@ class GoogleTvCredentials {
       radix: 16,
     );
     final cert = X509Utils.generateSelfSignedCertificate(
-      pair.privateKey,
+      key,
       csr,
       3650,
       serialNumber: serial.toString(),
       issuer: subject,
       notBefore: DateTime.now().toUtc().subtract(const Duration(days: 1)),
     );
-    return GoogleTvCredentials(
-      cert,
-      CryptoUtils.encodeRSAPrivateKeyToPem(pair.privateKey as RSAPrivateKey),
-    );
+    return GoogleTvCredentials(cert, CryptoUtils.encodeRSAPrivateKeyToPem(key));
   }
 
   SecurityContext context() => SecurityContext(withTrustedRoots: false)

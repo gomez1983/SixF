@@ -489,9 +489,10 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     final brandColor =
         app.brandColor ?? AppColors.surfaceInteractiveOf(context);
     final hasRemoteIcon =
-        app.iconUrl != null &&
-        (app.iconUrl!.startsWith('http://') ||
-            app.iconUrl!.startsWith('https://'));
+        app.iconAsset != null ||
+        (app.iconUrl != null &&
+            (app.iconUrl!.startsWith('http://') ||
+                app.iconUrl!.startsWith('https://')));
 
     final iconBoxSize = isDesktop ? 36.0 : 44.0;
     final iconInnerSize = isDesktop ? 18.0 : 22.0;
@@ -546,18 +547,11 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                               borderRadius: BorderRadius.circular(
                                 isDesktop ? 8 : 10,
                               ),
-                              child: Image.network(
-                                app.iconUrl!,
-                                width: iconBoxSize - 4,
-                                height: iconBoxSize - 4,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, _, _) => Icon(
-                                  app.fallbackIcon,
-                                  size: iconInnerSize,
-                                  color:
-                                      app.brandColor ??
-                                      AppColors.iconHighlightOf(context),
-                                ),
+                              child: _buildAppImage(
+                                context,
+                                app,
+                                iconBoxSize - 4,
+                                iconInnerSize,
                               ),
                             )
                           : Icon(
@@ -610,6 +604,40 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAppImage(
+    BuildContext context,
+    TvAppInfo app,
+    double size,
+    double fallbackSize,
+  ) {
+    Widget fallback() => Icon(
+      app.fallbackIcon,
+      size: fallbackSize,
+      color: app.brandColor ?? AppColors.iconHighlightOf(context),
+    );
+    Widget bundled() => app.iconAsset == null
+        ? fallback()
+        : Image.asset(
+            app.iconAsset!,
+            width: size,
+            height: size,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+    final url = app.iconUrl;
+    if (url == null ||
+        !(url.startsWith('http://') || url.startsWith('https://'))) {
+      return bundled();
+    }
+    return Image.network(
+      url,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => bundled(),
     );
   }
 }

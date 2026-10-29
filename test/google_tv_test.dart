@@ -102,6 +102,117 @@ void main() {
     );
   });
 
+  test('independent installations have distinct certificate subjects', () {
+    String? subject(GoogleTvCredentials identity) =>
+        X509Utils.x509CertificateFromPem(identity.certificate)
+            .tbsCertificate!
+            .subject['2.5.4.3'];
+    expect(subject(client), isNot(subject(server)));
+    expect(subject(client), startsWith('SixF Remote '));
+    expect(subject(client)!.length, lessThanOrEqualTo(64));
+    expect(identical(client.forPairing(), client), isTrue);
+    expect(
+      GoogleTvCredentials.decode(client.encode()).encode(),
+      client.encode(),
+    );
+  });
+
+  test('legacy subject upgrades only for pairing and retains the RSA key', () {
+    final key = CryptoUtils.rsaPrivateKeyFromPem(client.privateKey);
+    final public = GoogleTvCredentials.publicKey(
+      CryptoUtils.getBytesFromPEMString(client.certificate),
+    );
+    final subject = {'CN': 'SixF Remote', 'O': 'SixF'};
+    final csr = X509Utils.generateRsaCsrPem(subject, key, public);
+    final cert = X509Utils.generateSelfSignedCertificate(
+      key,
+      csr,
+      3650,
+      issuer: subject,
+    );
+    final legacy = GoogleTvCredentials(cert, client.privateKey);
+    final restored = GoogleTvCredentials.decode(legacy.encode());
+    expect(restored.certificate, cert);
+    final upgraded = restored.forPairing();
+    expect(upgraded.privateKey, legacy.privateKey);
+    expect(upgraded.certificate, isNot(cert));
+    expect(
+      GoogleTvCredentials.publicKey(
+        CryptoUtils.getBytesFromPEMString(upgraded.certificate),
+      ).modulus,
+      public.modulus,
+    );
+    expect(identical(upgraded.forPairing(), upgraded), isTrue);
+  });
+
+  test(
+    'EOF before the first frame preserves pairing for a later reconnect',
+    () async {
+      final context = server.context()
+        ..setTrustedCertificatesBytes(utf8.encode(client.certificate));
+      final control = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        context,
+        requestClientCertificate: true,
+        requireClientCertificate: true,
+      );
+      final pairing = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      var pairConnections = 0;
+      var attempts = 0;
+      var prompts = 0;
+      final sockets = <SecureSocket>[];
+      final sub = control.listen((socket) {
+        sockets.add(socket);
+        socket.listen((_) {}, onError: (Object _) {});
+        if (++attempts == 1) {
+          socket.close();
+        } else {
+          socket.add(TvWire.frame(TvWire.bytes(40, TvWire.number(1, 1))));
+        }
+      }, onError: (Object _) {});
+      final pairingSub = pairing.listen((socket) {
+        pairConnections++;
+        socket.destroy();
+      });
+      final driver = GoogleTvDriver(
+        controlPort: control.port,
+        pairingPort: pairing.port,
+        credentialsFactory: () async =>
+            throw StateError('Must reuse saved key'),
+      );
+      driver.onPinPromptRequested = (_) => prompts++;
+      addTearDown(() async {
+        driver.disconnect();
+        for (final socket in sockets) {
+          socket.destroy();
+        }
+        await sub.cancel();
+        await pairingSub.cancel();
+        await control.close();
+        await pairing.close();
+      });
+      expect(
+        await driver.connect(
+          ipAddress: '127.0.0.1',
+          authToken: client.encode(),
+        ),
+        isFalse,
+      );
+      expect(driver.connectionState, DeviceConnectionState.disconnected);
+      expect(
+        await driver.connect(
+          ipAddress: '127.0.0.1',
+          authToken: client.encode(),
+        ),
+        isTrue,
+      );
+      expect(pairConnections, 0);
+      expect(prompts, 0);
+      expect(attempts, 2);
+    },
+  );
+
   test(
     'TLS pairing, persistent reconnect, ping echo, keys and text counters',
     () async {
@@ -338,7 +449,7 @@ void main() {
   );
 
   test(
-    'saved identity rejected asynchronously by TLS returns to PIN pairing',
+    'TLS refusal needs an explicit alert or user request to start pairing',
     () async {
       // Trust no client certificate on the control endpoint, simulating a revoked pairing.
       final control = await SecureServerSocket.bind(
@@ -385,6 +496,8 @@ void main() {
           return client;
         },
       );
+      final errors = <String>[];
+      driver.onError = errors.add;
       addTearDown(() async {
         driver.disconnect();
         for (final socket in sockets) {
@@ -399,6 +512,22 @@ void main() {
         await driver.connect(
           ipAddress: '127.0.0.1',
           authToken: client.encode(),
+        ),
+        isFalse,
+      );
+      // Windows may expose a TLS denial only as EOF. Do not confuse that
+      // ambiguous transport failure with proven certificate rejection.
+      expect(
+        driver.connectionState,
+        errors.any((e) => e.contains('foi encerrada'))
+            ? DeviceConnectionState.disconnected
+            : DeviceConnectionState.pairingPrompt,
+      );
+      expect(
+        await driver.connect(
+          ipAddress: '127.0.0.1',
+          authToken: client.encode(),
+          pairAgain: true,
         ),
         isFalse,
       );
@@ -455,6 +584,64 @@ void main() {
     expect(sockets, hasLength(3));
     expect(driver.isConnected, isFalse);
   });
+
+  test(
+    'restart EOF during automatic reconnect retries without requesting PIN',
+    () async {
+      final context = server.context()
+        ..setTrustedCertificatesBytes(utf8.encode(client.certificate));
+      final control = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        context,
+        requestClientCertificate: true,
+        requireClientCertificate: true,
+      );
+      final sockets = <SecureSocket>[];
+      final sub = control.listen((socket) {
+        sockets.add(socket);
+        expect(
+          socket.peerCertificate!.der,
+          CryptoUtils.getBytesFromPEMString(client.certificate),
+        );
+        socket.listen((_) {}, onError: (Object _) {});
+        if (sockets.length == 2) {
+          socket.close();
+        } else {
+          socket.add(TvWire.frame(TvWire.bytes(40, TvWire.number(1, 1))));
+        }
+      }, onError: (Object _) {});
+      var prompts = 0;
+      final driver = GoogleTvDriver(
+        controlPort: control.port,
+        reconnectDelays: const [
+          Duration(milliseconds: 20),
+          Duration(milliseconds: 40),
+        ],
+        credentialsFactory: () async =>
+            throw StateError('Identity must persist'),
+      );
+      driver.onPinPromptRequested = (_) => prompts++;
+      addTearDown(() async {
+        driver.disconnect();
+        for (final socket in sockets) {
+          socket.destroy();
+        }
+        await sub.cancel();
+        await control.close();
+      });
+      expect(
+        await driver.connect(
+          ipAddress: '127.0.0.1',
+          authToken: client.encode(),
+        ),
+        isTrue,
+      );
+      sockets.first.destroy();
+      await eventually(() => sockets.length == 3 && driver.isConnected);
+      expect(prompts, 0);
+    },
+  );
 
   test('outgoing commands prevent idle timeout; real idle disconnect remains bounded', () async {
     final context = server.context()

@@ -628,7 +628,11 @@ class RemoteController extends ChangeNotifier {
   }
 
   /// Conecta um dispositivo salvo específico sem desconectar os outros.
-  Future<void> connectDevice(String deviceId, {bool allowDiscoveryFallback = true}) async {
+  Future<void> connectDevice(
+    String deviceId, {
+    bool allowDiscoveryFallback = true,
+    bool repairPairing = false,
+  }) async {
     await ready;
     if (_disposed) return;
     final session = _sessions[deviceId];
@@ -657,16 +661,26 @@ class RemoteController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      var success = await operation.wait(driver.connect(
-        ipAddress: session.device.ip,
-        authToken: savedKey,
-        timeout: timeoutDuration,
-      ));
+      var success = await operation.wait(
+        driver is GoogleTvDriver && repairPairing
+            ? driver.connect(
+                ipAddress: session.device.ip,
+                authToken: savedKey,
+                timeout: timeoutDuration,
+                pairAgain: true,
+              )
+            : driver.connect(
+                ipAddress: session.device.ip,
+                authToken: savedKey,
+                timeout: timeoutDuration,
+              ),
+      );
       if (!_isCurrent(session, operation)) return;
 
       // Se falhou em conectar no IP antigo (ex: DHCP mudou o IP da TV na LAN) e temos credencial salva,
       // faz uma varredura rápida para reconciliar o novo IP mantendo a credencial pareada.
       if (!success &&
+          !repairPairing &&
           !session.isWaitingPairing &&
           allowDiscoveryFallback &&
           savedKey != null &&
@@ -729,6 +743,15 @@ class RemoteController extends ChangeNotifier {
       _syncActiveFields();
     }
     notifyListeners();
+  }
+
+  /// Recupera um pareamento recusado sem apagar o cadastro nem a chave privada.
+  Future<void> repairGoogleTvPairing(String deviceId) async {
+    await ready;
+    if (_disposed || _sessions[deviceId]?.driver is! GoogleTvDriver) return;
+    disconnectDevice(deviceId);
+    setActiveDevice(deviceId);
+    await connectDevice(deviceId, repairPairing: true);
   }
 
   /// Desconecta um dispositivo específico mantendo as outras conexões ativas.

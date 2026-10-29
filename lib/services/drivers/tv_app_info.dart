@@ -14,6 +14,39 @@ class TvAppInfo {
   /// Chave identificadora para estilização e ícone padrão de marcas conhecidas.
   final String? iconKey;
 
+  /// Bundled logos work offline; unknown ADB packages keep their fallback icon.
+  String? get iconAsset {
+    const packages = {
+      'com.google.android.youtube.tv': 'youtube',
+      'com.google.android.youtube.tvmusic': 'youtube-music',
+      'com.netflix.ninja': 'netflix',
+      'com.amazon.amazonvideo.livingroom': 'prime-video',
+      'com.disney.disneyplus': 'disney-plus',
+      'com.spotify.tv.android': 'spotify',
+      'com.apple.atve.androidtv.appletv': 'apple-tv-plus',
+      'com.wbd.stream': 'max',
+      'com.plexapp.android': 'plex',
+      'com.android.vending': 'google-play',
+      'com.google.android.play.games': 'google-play-games',
+      'com.google.android.videos': 'google-tv',
+      'tv.twitch.android.app': 'twitch',
+    };
+    const brands = {
+      'youtube': 'youtube',
+      'netflix': 'netflix',
+      'prime': 'prime-video',
+      'disney': 'disney-plus',
+      'spotify': 'spotify',
+      'appletv': 'apple-tv-plus',
+      'max': 'max',
+      'twitch': 'twitch',
+    };
+    final logo = id.startsWith('adb:')
+        ? packages[id.substring(4).split('/').first]
+        : brands[iconKey ?? resolveIconKey(id, name)];
+    return logo == null ? null : 'assets/app_icons/$logo.png';
+  }
+
   /// Cor de destaque temático para o card do app.
   final Color? brandColor;
 

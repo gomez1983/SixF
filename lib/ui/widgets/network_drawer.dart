@@ -902,9 +902,16 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                       _showEditDeviceDialog(device, controller);
                     } else if (val == 'delete') {
                       controller.removeSavedDevice(device.id);
+                    } else if (val == 'repair') {
+                      controller.repairGoogleTvPairing(device.id);
                     }
                   },
                   itemBuilder: (_) => [
+                    if (device.brand == TvBrand.googleTv)
+                      const PopupMenuItem(
+                        value: 'repair',
+                        child: Text('Refazer pareamento'),
+                      ),
                     if (!device.isDefault)
                       const PopupMenuItem(
                         value: 'default',
