@@ -128,3 +128,30 @@ ScrollConfiguration(
 
 ### Soluções Obrigatórias
 - Envolver a coluna de conteúdo ou o card afetado em um `SingleChildScrollView` ou utilizar `Flexible`/`Expanded` e ajustar os paddings verticais para acomodar diferentes tamanhos de tela e densidades de pixels sem estourar o layout.
+
+---
+
+## 9. Harmonização Estética dos Botões de Mídia ("Teclas & Mídia")
+
+### Sintoma
+- Existe uma disparidade/dessincronização visual nos botões de controle de mídia:
+  - Os botões de transporte e busca (Recuar 10s, Pause/Play, Stop, Avançar 10s) estão no formato circular;
+  - Logo abaixo, os botões de **Repetir arquivo (Loop)** e **Ordem aleatória (Shuffle)** estão isolados dentro de uma barra/retângulo separado, quebrando a harmonia e o alinhamento da interface.
+
+### Soluções Obrigatórias
+- Integrar os botões de Repetir e Shuffle no mesmo agrupamento visual e padrão estético circular/Liquid Glass dos demais controles de transporte, eliminando a caixa retangular isolada e mantendo um conjunto limpo, coeso e harmonioso.
+
+---
+
+## 10. Ausência de Áudio em Arquivos MKV (ex: Episódios do Chaves) no Chromecast
+
+### Sintoma
+- Ao reproduzir determinados arquivos MKV de séries (como episódios do Chaves), o vídeo é transmitido normalmente, mas o som **não sai na TV/Chromecast**.
+
+### Causa Provável
+- Codec de áudio não suportado nativamente pelo decodificador do Chromecast (por exemplo: áudio em **MP2**, **AC3**, **WMA**, **FLAC** ou faixa de áudio em multicanal sem transcode automático).
+- Falha na detecção da necessidade de transcode de áudio ou o remux está copiando o fluxo de áudio incompatível (`-c:a copy`) em vez de recodificar para **AAC estéreo** (`-c:a aac -b:a 192k -ac 2`).
+
+### Soluções Obrigatórias
+- Verificar os codecs de áudio aceitos pelo Chromecast em `MediaDetails.isChromecastAudioCompatible`.
+- Garantir que qualquer faixa de áudio não nativamente suportada seja forçada para transcodificação AAC stereo durante o remux no `MediaRemuxService`.
