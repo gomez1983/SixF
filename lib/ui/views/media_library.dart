@@ -62,9 +62,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
   final search = TextEditingController();
   final photoScroll = ScrollController();
 
-  // Estado do visualizador de fotos integrado (com espelhamento simultâneo na TV)
+  // Estado do visualizador de fotos/vídeos integrado (com espelhamento simultâneo na TV)
   List<LibraryEntry> activePhotos = [];
   int activePhotoIndex = 0;
+  LibraryEntry? activeMediaItem;
   File? viewedPhotoFile;
   bool loadingPhotoPreview = false;
   Directory? _photoCache;
@@ -202,6 +203,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       casting = false;
       loadingPhotoPreview = false;
       activePhotos = [];
+      activeMediaItem = null;
       viewedPhotoFile = null;
       failedEntryIds.clear();
       if (clearQueueItems) {
@@ -488,9 +490,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
   }
 
   void _syncActivePhotosForTab(int targetTab, {LibraryEntry? preferredPhoto}) {
-    if (activePhotos.isEmpty && preferredPhoto == null) return;
+    if (activePhotos.isEmpty &&
+        activeMediaItem == null &&
+        preferredPhoto == null) {
+      return;
+    }
     final current =
         preferredPhoto ??
+        activeMediaItem ??
         ((activePhotoIndex >= 0 && activePhotoIndex < activePhotos.length)
             ? activePhotos[activePhotoIndex]
             : null);
@@ -507,9 +514,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
     if (sourceList.isEmpty) {
       sourceList = [current];
-    } else if (!sourceList.any(
-      (e) => e.id == current.id && e.source == current.source,
-    )) {
+    } else if (current.isImage &&
+        !sourceList.any(
+          (e) => e.id == current.id && e.source == current.source,
+        )) {
       sourceList = [...sourceList, current];
     }
 
@@ -717,6 +725,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       }
       activePhotos = photos;
       activePhotoIndex = idx;
+      activeMediaItem = tappedPhoto;
       loadingPhotoPreview = true;
     });
     if (syncToQueue) {
@@ -738,6 +747,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
     setState(() {
       _ensureEntryInQueue(currentPhoto);
+      activeMediaItem = currentPhoto;
       loadingPhotoPreview = true;
       casting = false;
     });
@@ -819,10 +829,46 @@ class _MediaLibraryState extends State<MediaLibrary> {
   }
 
   Future<void> navigateActivePhoto(int delta) async {
+    if (activeMediaItem != null && !activeMediaItem!.isImage) {
+      final carouselItems = _carouselContextItems();
+      final curIdx = carouselItems.indexWhere(
+        (e) =>
+            e.id == activeMediaItem!.id && e.source == activeMediaItem!.source,
+      );
+      final nextIdx = curIdx + delta;
+      if (curIdx < 0 || nextIdx < 0 || nextIdx >= carouselItems.length) return;
+      HapticService.selectionClick();
+      final nextItem = carouselItems[nextIdx];
+      if (nextItem.isImage) {
+        await openPhotoAndMirror(
+          carouselItems,
+          nextItem,
+          syncToQueue: tab != 1,
+        );
+      } else {
+        await play(
+          tab == 1 ? queue : [nextItem],
+          start: tab == 1
+              ? queue
+                    .indexWhere(
+                      (q) =>
+                          q.id == nextItem.id && q.source == nextItem.source,
+                    )
+                    .clamp(0, queue.length - 1)
+              : 0,
+          sourceTitle: tab == 1 ? queueTitle : nextItem.name,
+          syncToQueue: tab != 1,
+        );
+      }
+      return;
+    }
     final nextIdx = activePhotoIndex + delta;
     if (nextIdx < 0 || nextIdx >= activePhotos.length) return;
     HapticService.selectionClick();
-    setState(() => activePhotoIndex = nextIdx);
+    setState(() {
+      activePhotoIndex = nextIdx;
+      activeMediaItem = activePhotos[nextIdx];
+    });
     await _loadAndMirrorActivePhoto();
   }
 
@@ -868,10 +914,31 @@ class _MediaLibraryState extends State<MediaLibrary> {
     }
 
     _clearPhotoCache();
-    setState(() {
-      activePhotos = [];
-      viewedPhotoFile = null;
-    });
+    if (items[safeStart].isVideo) {
+      final contextMedia = (tab == 2 && entries.isNotEmpty)
+          ? _visibleFolderEntries()
+                .where((e) => !e.folder && (e.isImage || e.isVideo))
+                .toList()
+          : (tab == 1 && queue.isNotEmpty)
+          ? queue.where((e) => !e.folder && (e.isImage || e.isVideo)).toList()
+          : items.where((e) => !e.folder && (e.isImage || e.isVideo)).toList();
+      final imageItems = contextMedia.where((e) => e.isImage).toList();
+      setState(() {
+        activeMediaItem = items[safeStart];
+        activePhotos = imageItems.isNotEmpty
+            ? imageItems
+            : (contextMedia.isNotEmpty ? contextMedia : [items[safeStart]]);
+        activePhotoIndex = 0;
+        viewedPhotoFile = null;
+        loadingPhotoPreview = false;
+      });
+    } else {
+      setState(() {
+        activeMediaItem = null;
+        activePhotos = [];
+        viewedPhotoFile = null;
+      });
+    }
     // Cancela qualquer preparação anterior para não travar a fila
     final currentPlayGen = ++_playGeneration;
     sources.abortActiveOperations();
@@ -1323,16 +1390,85 @@ class _MediaLibraryState extends State<MediaLibrary> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
-  /// Painel integrado de visualização de fotos no app com espelhamento simultâneo na TV.
-  Widget _buildPhotoViewerCard(RemoteController tv) {
-    if (activePhotos.isEmpty) return const SizedBox.shrink();
-    final safeIdx = activePhotoIndex.clamp(0, activePhotos.length - 1);
-    final current = activePhotos[safeIdx];
-    final carouselItems = _carouselContextItems();
+  Widget _buildLargeVideoThumbnail(LibraryEntry entry, {double height = 200}) {
     final highlight = AppColors.iconHighlightOf(context);
-    final canPrev = safeIdx > 0 && !loadingPhotoPreview;
-    final canNext =
-        safeIdx + 1 < activePhotos.length && !loadingPhotoPreview;
+    if (entry.source == LibrarySource.local) {
+      return FutureBuilder<String?>(
+        future: MediaRemuxService.extractVideoThumbnail(entry.id),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.file(
+              File(snapshot.data!),
+              width: double.infinity,
+              height: height,
+              fit: BoxFit.contain,
+              cacheWidth: 640,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => _buildVideoFallback(120, highlight),
+            );
+          }
+          return _buildVideoFallback(120, highlight);
+        },
+      );
+    }
+    final netThumb = entry.thumbnailUrl;
+    if (netThumb != null) {
+      final token = LibrarySources.currentTokenForSource(entry.source);
+      return Image.network(
+        netThumb,
+        headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+        width: double.infinity,
+        height: height,
+        fit: BoxFit.contain,
+        cacheWidth: 640,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (_, _, _) => _buildVideoFallback(120, highlight),
+      );
+    }
+    return _buildVideoFallback(120, highlight);
+  }
+
+  /// Painel integrado de visualização de fotos e vídeos no app com carrossel e espelhamento na TV.
+  Widget _buildPhotoViewerCard(
+    RemoteController tv,
+    MediaCastController? cast,
+    bool isStreamingToTarget,
+  ) {
+    if (activePhotos.isEmpty && activeMediaItem == null) {
+      return const SizedBox.shrink();
+    }
+    final safeIdx = activePhotos.isNotEmpty
+        ? activePhotoIndex.clamp(0, activePhotos.length - 1)
+        : 0;
+    final carouselItems = _carouselContextItems();
+    LibraryEntry current = activeMediaItem ?? activePhotos[safeIdx];
+    if (!current.isImage &&
+        cast != null &&
+        isStreamingToTarget &&
+        cast.currentFileName != null) {
+      final matched = carouselItems
+          .where((e) => e.name == cast.currentFileName)
+          .firstOrNull;
+      if (matched != null) {
+        current = matched;
+      }
+    }
+    final highlight = AppColors.iconHighlightOf(context);
+    final curCarouselIdx = carouselItems.indexWhere(
+      (e) => e.id == current.id && e.source == current.source,
+    );
+    final canPrev = current.isImage
+        ? (safeIdx > 0 && !loadingPhotoPreview)
+        : (curCarouselIdx > 0 && !loadingPhotoPreview);
+    final canNext = current.isImage
+        ? (safeIdx + 1 < activePhotos.length && !loadingPhotoPreview)
+        : (curCarouselIdx >= 0 &&
+              curCarouselIdx + 1 < carouselItems.length &&
+              !loadingPhotoPreview);
+    final isCurrentVideoStreaming =
+        cast != null &&
+        isStreamingToTarget &&
+        cast.currentFileName == current.name;
 
     return Focus(
       autofocus: true,
@@ -1358,7 +1494,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
           children: [
             Row(
               children: [
-                Icon(Icons.photo_library_rounded, color: highlight, size: 18),
+                Icon(
+                  current.isImage
+                      ? Icons.photo_library_rounded
+                      : Icons.movie_creation_outlined,
+                  color: highlight,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -1375,7 +1517,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Foto ${safeIdx + 1} de ${activePhotos.length} · ${tab == 1 ? 'Fila de reprodução' : 'Arquivos da pasta'} · ${tv.isConnected ? 'Destino: ${tv.connectedTvName ?? tv.ipAddress}' : 'Visualização no aplicativo'}',
+                        current.isImage
+                            ? 'Foto ${safeIdx + 1} de ${activePhotos.length} · ${tab == 1 ? 'Fila de reprodução' : 'Arquivos da pasta'} · ${tv.isConnected ? 'Destino: ${tv.connectedTvName ?? tv.ipAddress}' : 'Visualização no aplicativo'}'
+                            : 'Vídeo ${curCarouselIdx >= 0 ? curCarouselIdx + 1 : 1} de ${carouselItems.isNotEmpty ? carouselItems.length : 1} · ${tab == 1 ? 'Fila de reprodução' : 'Arquivos da pasta'} · ${tv.isConnected ? 'Destino: ${tv.connectedTvName ?? tv.ipAddress}' : 'Visualização no aplicativo'}',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondaryOf(context),
@@ -1387,11 +1531,32 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Enviar foto à TV',
+                  tooltip: current.isImage
+                      ? 'Enviar foto à TV'
+                      : 'Enviar vídeo à TV',
                   icon: const Icon(Icons.cast_rounded),
                   onPressed: loadingPhotoPreview
                       ? null
-                      : _loadAndMirrorActivePhoto,
+                      : () {
+                          if (current.isImage) {
+                            _loadAndMirrorActivePhoto();
+                          } else {
+                            play(
+                              tab == 1 ? queue : [current],
+                              start: tab == 1
+                                  ? queue
+                                        .indexWhere(
+                                          (q) =>
+                                              q.id == current.id &&
+                                              q.source == current.source,
+                                        )
+                                        .clamp(0, queue.length - 1)
+                                  : 0,
+                              sourceTitle: tab == 1 ? queueTitle : current.name,
+                              syncToQueue: tab != 1,
+                            );
+                          }
+                        },
                 ),
                 IconButton(
                   tooltip: 'Fechar visualizador de fotos',
@@ -1400,6 +1565,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     _clearPhotoCache();
                     setState(() {
                       activePhotos = [];
+                      activeMediaItem = null;
                       viewedPhotoFile = null;
                     });
                   },
@@ -1416,7 +1582,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   alignment: Alignment.center,
                   children: [
                     Container(color: Colors.black26),
-                    if (loadingPhotoPreview)
+                    if (!current.isImage)
+                      _buildLargeVideoThumbnail(current, height: 200)
+                    else if (loadingPhotoPreview)
                       const CircularProgressIndicator()
                     else if (viewedPhotoFile != null &&
                         viewedPhotoFile!.existsSync())
@@ -1457,6 +1625,99 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 ),
               ),
             ),
+            if (!current.isImage) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevatedOf(
+                    context,
+                  ).withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        IconButton.filledTonal(
+                          tooltip: 'Reproduzir vídeo',
+                          isSelected:
+                              isCurrentVideoStreaming && cast.isPlaying,
+                          onPressed: !tv.isConnected
+                              ? null
+                              : () {
+                                  if (cast != null &&
+                                      isCurrentVideoStreaming &&
+                                      (cast.isPaused || cast.canPlay)) {
+                                    cast.play();
+                                  } else {
+                                    play(
+                                      tab == 1 ? queue : [current],
+                                      start: tab == 1
+                                          ? queue
+                                                .indexWhere(
+                                                  (q) =>
+                                                      q.id == current.id &&
+                                                      q.source ==
+                                                          current.source,
+                                                )
+                                                .clamp(0, queue.length - 1)
+                                          : 0,
+                                      sourceTitle: tab == 1
+                                          ? queueTitle
+                                          : current.name,
+                                      syncToQueue: tab != 1,
+                                    );
+                                  }
+                                },
+                          icon: const Icon(Icons.play_arrow_rounded),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Pausar vídeo',
+                          isSelected:
+                              isCurrentVideoStreaming && cast.isPaused,
+                          onPressed: cast != null &&
+                                  isCurrentVideoStreaming &&
+                                  (cast.isPlaying || cast.canPause)
+                              ? cast.pause
+                              : null,
+                          icon: const Icon(Icons.pause_rounded),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Repetir vídeo',
+                          isSelected: cast != null && cast.isLooping,
+                          onPressed: cast != null &&
+                                  isStreamingToTarget &&
+                                  (cast.canLoop || cast.isLooping)
+                              ? cast.toggleLoop
+                              : null,
+                          icon: const Icon(Icons.repeat_rounded),
+                        ),
+                      ],
+                    ),
+                    if (cast != null &&
+                        isStreamingToTarget &&
+                        cast.hasProgress)
+                      MediaSessionControls(
+                        controller: cast,
+                        enabled: true,
+                        showTimeline: true,
+                        showTransportControls: false,
+                        showPlaybackModes: false,
+                      ),
+                  ],
+                ),
+              ),
+            ],
             if (carouselItems.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
@@ -1497,8 +1758,12 @@ class _MediaLibraryState extends State<MediaLibrary> {
                                   e.id == item.id && e.source == item.source,
                             );
                             if (targetIdx >= 0 &&
-                                targetIdx != activePhotoIndex) {
-                              setState(() => activePhotoIndex = targetIdx);
+                                (targetIdx != activePhotoIndex ||
+                                    activeMediaItem?.isImage != true)) {
+                              setState(() {
+                                activePhotoIndex = targetIdx;
+                                activeMediaItem = activePhotos[targetIdx];
+                              });
                               _loadAndMirrorActivePhoto();
                             } else if (targetIdx < 0) {
                               openPhotoAndMirror(carouselItems, item);
@@ -1683,11 +1948,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
               // Seletor de 3 seções no padrão Liquid Glass idêntico ao seletor de dispositivos
               _buildSectionSelector(context, tv),
 
-              // Visualizador de fotos integrado (quando uma foto está aberta)
-              if (activePhotos.isNotEmpty) _buildPhotoViewerCard(tv),
+              // Visualizador de fotos e vídeos integrado com carrossel
+              if (activePhotos.isNotEmpty || activeMediaItem != null)
+                _buildPhotoViewerCard(tv, cast, isStreamingToTarget),
 
-              // Pastilha / Banner de controle da sessão remota ativa (quando reproduzindo vídeo/áudio)
-              if (isStreamingToTarget && activePhotos.isEmpty)
+              // Pastilha / Banner de controle da sessão remota ativa (quando reproduzindo áudio ou sem carrossel aberto)
+              if (isStreamingToTarget &&
+                  activePhotos.isEmpty &&
+                  activeMediaItem == null)
                 _buildActivePlaybackCard(cast, tv),
 
               if (casting)

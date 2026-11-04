@@ -192,6 +192,13 @@ void main() {
       await waitPhoto('second.png');
       await tester.tap(find.byTooltip('Imagem anterior'));
       await waitPhoto('photo.png');
+      await tester.tap(find.byKey(const ValueKey('media-thumbnail-0')));
+      await waitPhoto('clip.mp4');
+      await tester.pump();
+      expect(find.byTooltip('Reproduzir vídeo'), findsOneWidget);
+      expect(find.byTooltip('Pausar vídeo'), findsOneWidget);
+      expect(find.byTooltip('Repetir vídeo'), findsOneWidget);
+      expect(find.byKey(const ValueKey('photo-thumbnail-0')), findsOneWidget);
       await tester.runAsync(media.stop);
       await tester.pump();
     },
