@@ -42,11 +42,7 @@ class HeaderBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-      ),
+      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
       child: Row(
         children: [
           if (onToggleCompact != null) IconButton(
@@ -103,10 +99,10 @@ class HeaderBar extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
+                          Text(
                             'SixF',
                             style: TextStyle(
-                              color: Color(0xFF00E5FF),
+                              color: AppColors.iconHighlightOf(context),
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.8,

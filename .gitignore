@@ -70,3 +70,9 @@ graphify-out/
 # Local Agent / IDE hooks
 .codex/
 .gemini/
+
+# Configuração OAuth local do SixF
+/.local-secrets/
+/client_secret_*.json
+
+

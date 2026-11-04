@@ -97,22 +97,9 @@ class VolumeChannelControls extends StatelessWidget {
     required String plusTooltip,
     required String minusTooltip,
   }) {
-    final isDark = AppColors.isDark(context);
-
     return Container(
       width: 58,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? Colors.black26 : Colors.black12,
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: AppColors.glassCardDecoration(context, borderRadius: 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

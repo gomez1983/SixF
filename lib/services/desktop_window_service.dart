@@ -43,7 +43,7 @@ class DesktopWindowService {
     final bounds = _bounds;
     if (bounds == null) return;
     await window.setAlwaysOnTop(_alwaysOnTop);
-    await window.setMinimumSize(const Size(320, 420));
+    await window.setMinimumSize(const Size(360, 640));
     await window.setBounds(bounds);
     if (_maximized) await window.maximize();
     _bounds = null;

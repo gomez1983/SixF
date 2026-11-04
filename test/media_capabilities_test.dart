@@ -498,7 +498,8 @@ void main() {
         expect(find.text('Nativo'), findsOneWidget);
         expect(find.byType(Slider), findsNothing);
         expect(find.byIcon(Icons.repeat_rounded), findsNothing);
-        expect(find.byTooltip('Enviar pausa'), findsOneWidget);
+        expect(find.byTooltip('Reproduzir'), findsOneWidget);
+        expect(find.byTooltip('Pausar'), findsNothing);
         expect(find.byTooltip('Parar Transmissão'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -552,6 +553,10 @@ void main() {
         await tester.tap(find.text('Magic Trackpad'));
         await tester.pumpAndSettle();
       }
+      remote.selectBrand(TvBrand.googleTv);
+      await tester.pumpAndSettle();
+      expect(find.text('Magic Trackpad', skipOffstage: false), findsNothing);
+      expect(find.byType(TrackpadWidget, skipOffstage: false), findsNothing);
       remote.selectBrand(TvBrand.samsungTizen);
       await tester.pumpAndSettle();
       expect(find.byType(TrackpadWidget, skipOffstage: false), findsNothing);

@@ -1,3 +1,4 @@
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,11 +85,18 @@ void main() {
       controller.disconnect();
       expect(controller.isConnected, isFalse);
 
-      await controller.connect(ip: '192.168.1.200', mac: 'BB:CC:DD:EE:FF:00', tvName: 'André TV');
+      await controller.connect(
+        ip: '192.168.1.200',
+        mac: 'BB:CC:DD:EE:FF:00',
+        tvName: 'André TV',
+      );
       expect(controller.ipAddress, '192.168.1.200');
       expect(controller.macAddress, 'BB:CC:DD:EE:FF:00');
       expect(controller.connectedTvName, 'André TV');
-      expect(controller.isConnected, isFalse); // Sem TV física respondendo no teste, permanece falso
+      expect(
+        controller.isConnected,
+        isFalse,
+      ); // Sem TV física respondendo no teste, permanece falso
     });
 
     test('Disparo de trackpad registra ação', () {
@@ -101,41 +109,46 @@ void main() {
   });
 
   group('Widget Tests & Responsividade', () {
-    testWidgets('Carrega a interface do controle remoto LG sem erros em tela padrão', (WidgetTester tester) async {
-      await tester.pumpWidget(const SixFRemoteApp());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Carrega a interface do controle remoto LG sem erros em tela padrão',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const SixFRemoteApp());
+        await tester.pumpAndSettle();
 
-      // Verifica presença dos textos da marca e cabeçalho
-      expect(find.text('SixF'), findsOneWidget);
-      expect(find.text('Remote'), findsOneWidget);
-      expect(find.text('Desconectado'), findsOneWidget);
+        // Verifica presença dos textos da marca e cabeçalho
+        expect(find.text('SixF'), findsOneWidget);
+        expect(find.text('Remote'), findsOneWidget);
+        expect(find.text('Desconectado'), findsOneWidget);
 
-      // Verifica presença de botões essenciais
-      expect(find.text('HOME'), findsOneWidget);
-      expect(find.text('MENU'), findsOneWidget);
-      expect(find.text('VOLTAR'), findsOneWidget);
-      expect(find.text('EXIT'), findsOneWidget);
-      expect(find.text('VOL'), findsOneWidget);
-      expect(find.text('CH'), findsOneWidget);
-      expect(find.text('MUTE'), findsOneWidget);
-      expect(find.text('VOZ'), findsOneWidget);
-      expect(find.text('OK'), findsOneWidget);
+        // Verifica presença de botões essenciais
+        expect(find.text('HOME'), findsOneWidget);
+        expect(find.text('MENU'), findsOneWidget);
+        expect(find.text('VOLTAR'), findsOneWidget);
+        expect(find.text('EXIT'), findsOneWidget);
+        expect(find.text('VOL'), findsOneWidget);
+        expect(find.text('CH'), findsOneWidget);
+        expect(find.text('MUTE'), findsOneWidget);
+        expect(find.text('VOZ'), findsOneWidget);
+        expect(find.text('OK'), findsOneWidget);
 
-      // Verifica botões de entrada ao lado do D-Pad (Aba 1)
-      expect(find.text('HDMI 1'), findsOneWidget);
-      expect(find.text('TV Digital'), findsOneWidget);
+        // Verifica botões de entrada ao lado do D-Pad (Aba 1)
+        expect(find.text('HDMI 1'), findsOneWidget);
+        expect(find.text('TV Digital'), findsOneWidget);
 
-      // Alterna para a Aba 2 (Teclas & Mídia) e verifica botões coloridos
-      await tester.tap(find.text('Teclas & Mídia'));
-      await tester.pumpAndSettle();
+        // Alterna para a Aba 2 (Teclas & Mídia) e verifica botões coloridos
+        await tester.tap(find.text('Teclas & Mídia'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('VERMELHO'), findsOneWidget);
-      expect(find.text('VERDE'), findsOneWidget);
-      expect(find.text('AMARELO'), findsOneWidget);
-      expect(find.text('AZUL'), findsOneWidget);
-    });
+        expect(find.text('VERMELHO'), findsOneWidget);
+        expect(find.text('VERDE'), findsOneWidget);
+        expect(find.text('AMARELO'), findsOneWidget);
+        expect(find.text('AZUL'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Alterna entre Tema Escuro e Claro pelo botão do cabeçalho', (WidgetTester tester) async {
+    testWidgets('Alterna entre Tema Escuro e Claro pelo botão do cabeçalho', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
@@ -157,28 +170,35 @@ void main() {
       expect(find.byTooltip('Mudar para Modo Claro'), findsOneWidget);
     });
 
-    testWidgets('Abre o modal de busca de dispositivos pelo botão Cast do cabeçalho', (WidgetTester tester) async {
-      await tester.pumpWidget(const SixFRemoteApp());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Abre o modal de busca de dispositivos pelo botão Cast do cabeçalho',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const SixFRemoteApp());
+        await tester.pumpAndSettle();
 
-      final castBtn = find.byTooltip('Desconectado - Clique para Buscar e Conectar TVs LG');
-      expect(castBtn, findsOneWidget);
+        final castBtn = find.byTooltip(
+          'Desconectado - Clique para Buscar e Conectar TVs LG',
+        );
+        expect(castBtn, findsOneWidget);
 
-      await tester.tap(castBtn);
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(castBtn);
+        await tester.pump(const Duration(milliseconds: 300));
 
-      // Modal de descoberta aberto
-      expect(find.text('Dispositivos na Rede'), findsOneWidget);
-      expect(find.text('Aparelhos compatíveis'), findsOneWidget);
-      expect(find.text('Buscar'), findsOneWidget);
+        // Modal de descoberta aberto
+        expect(find.text('Dispositivos na Rede'), findsOneWidget);
+        expect(find.text('Aparelhos compatíveis'), findsOneWidget);
+        expect(find.text('Buscar'), findsOneWidget);
 
-      // Fecha o modal
-      await tester.tap(find.byIcon(Icons.close_rounded));
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Dispositivos na Rede'), findsNothing);
-    });
+        // Fecha o modal
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Dispositivos na Rede'), findsNothing);
+      },
+    );
 
-    testWidgets('Auto-ajuste à janela (sem overflow em janelas compactas)', (WidgetTester tester) async {
+    testWidgets('Auto-ajuste à janela (sem overflow em janelas compactas)', (
+      WidgetTester tester,
+    ) async {
       // Simula uma janela com altura baixa de 580px
       tester.view.physicalSize = const Size(400, 580);
       tester.view.devicePixelRatio = 1.0;
@@ -198,20 +218,31 @@ void main() {
       expect(find.text('AZUL'), findsOneWidget);
     });
 
-    testWidgets('Suporta redimensionamento para tela ampla (Desktop Dual-Pane)', (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'Suporta redimensionamento para tela ampla (Desktop Dual-Pane)',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(const SixFRemoteApp());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(const SixFRemoteApp());
+        await tester.pumpAndSettle();
 
-      expect(find.text('LG Magic Pointer (Trackpad Virtual)'), findsOneWidget);
-      expect(find.text('Atalhos de Teclado Físico (Desktop)'), findsOneWidget);
-      expect(find.byType(TrackpadWidget), findsOneWidget);
-    });
+        expect(
+          find.text('LG Magic Pointer (Trackpad Virtual)'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Atalhos de Teclado Físico (Desktop)'),
+          findsOneWidget,
+        );
+        expect(find.byType(TrackpadWidget), findsOneWidget);
+      },
+    );
 
-    testWidgets('Abre e interage com o NetworkDrawer e switch de tema', (WidgetTester tester) async {
+    testWidgets('Abre e interage com o NetworkDrawer e switch de tema', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
 
@@ -239,7 +270,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Alterna entre modo D-Pad e Magic Trackpad no modo compacto', (WidgetTester tester) async {
+    testWidgets('Alterna entre modo D-Pad e Magic Trackpad no modo compacto', (
+      WidgetTester tester,
+    ) async {
       tester.view.physicalSize = const Size(480, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -251,7 +284,10 @@ void main() {
       await tester.tap(find.text('Magic Trackpad').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('Arraste para mover o cursor • Toque para clicar'), findsOneWidget);
+      expect(
+        find.text('Arraste para mover o cursor • Toque para clicar'),
+        findsOneWidget,
+      );
 
       // Simula gesto de arrasto no Trackpad
       await tester.drag(find.byType(TrackpadWidget), const Offset(40, -30));
@@ -262,83 +298,96 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Responde a atalhos do teclado físico', (WidgetTester tester) async {
+    testWidgets('Responde a atalhos do teclado físico', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
+
+      final controller = tester
+          .element(find.byType(TrackpadWidget, skipOffstage: false))
+          .read<RemoteController>();
+      expect(find.text('ÚLTIMO COMANDO EXECUTADO'), findsNothing);
 
       // Dispara seta para cima
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
-      expect(find.textContaining('D-Pad UP'), findsOneWidget);
+      expect(controller.lastActionMessage, contains('D-Pad UP'));
 
       // Dispara número 7
       await tester.sendKeyEvent(LogicalKeyboardKey.digit7);
       await tester.pumpAndSettle();
-      expect(find.textContaining('Keypad Digit'), findsOneWidget);
+      expect(controller.lastActionMessage, contains('Keypad Digit'));
 
       // Dispara Enter
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(find.textContaining('D-Pad OK'), findsOneWidget);
+      expect(controller.lastActionMessage, contains('D-Pad OK'));
     });
 
-    testWidgets('Suporta Push-to-Talk no botão de microfone (abre ao pressionar, fecha ao soltar)', (WidgetTester tester) async {
-      await tester.pumpWidget(const SixFRemoteApp());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Suporta Push-to-Talk no botão de microfone (abre ao pressionar, fecha ao soltar)',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const SixFRemoteApp());
+        await tester.pumpAndSettle();
 
-      final micBtn = find.byIcon(Icons.mic_rounded);
-      expect(micBtn, findsOneWidget);
+        final micBtn = find.byIcon(Icons.mic_rounded);
+        expect(micBtn, findsOneWidget);
 
-      // Pressiona e segura o botão (Push-to-Talk)
-      final gesture = await tester.press(micBtn);
-      await tester.pump(const Duration(milliseconds: 100));
+        // Pressiona e segura o botão (Push-to-Talk)
+        final gesture = await tester.press(micBtn);
+        await tester.pump(const Duration(milliseconds: 100));
 
-      // Verifica exibição do overlay com status Push-to-Talk
-      expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
-      expect(find.text('Ouvindo...'), findsOneWidget);
-      expect(find.textContaining('Solte para enviar'), findsOneWidget);
+        // Verifica exibição do overlay com status Push-to-Talk
+        expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
+        expect(find.text('Ouvindo...'), findsOneWidget);
+        expect(find.textContaining('Solte para enviar'), findsOneWidget);
 
-      // Solta o botão (Release)
-      await gesture.up();
-      await tester.pumpAndSettle();
+        // Solta o botão (Release)
+        await gesture.up();
+        await tester.pumpAndSettle();
 
-      // O overlay deve fechar imediatamente ao soltar o dedo/botão
-      expect(find.text('PUSH-TO-TALK ATIVO'), findsNothing);
-    });
+        // O overlay deve fechar imediatamente ao soltar o dedo/botão
+        expect(find.text('PUSH-TO-TALK ATIVO'), findsNothing);
+      },
+    );
 
-    testWidgets('Suporta Slide-to-Lock (deslizar para travar no modo Mãos Livres e parar pelo botão)', (WidgetTester tester) async {
-      await tester.pumpWidget(const SixFRemoteApp());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Suporta Slide-to-Lock (deslizar para travar no modo Mãos Livres e parar pelo botão)',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const SixFRemoteApp());
+        await tester.pumpAndSettle();
 
-      final micBtn = find.byIcon(Icons.mic_rounded);
-      expect(micBtn, findsOneWidget);
+        final micBtn = find.byIcon(Icons.mic_rounded);
+        expect(micBtn, findsOneWidget);
 
-      // Pressiona o botão
-      final gesture = await tester.press(micBtn);
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
-      expect(find.textContaining('Deslize para travar'), findsOneWidget);
+        // Pressiona o botão
+        final gesture = await tester.press(micBtn);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.text('PUSH-TO-TALK ATIVO'), findsOneWidget);
+        expect(find.textContaining('Deslize para travar'), findsOneWidget);
 
-      // Desliza 45px para a direita (arrastar para travar)
-      await gesture.moveBy(const Offset(45, 0));
-      await tester.pump(const Duration(milliseconds: 100));
+        // Desliza 45px para a direita (arrastar para travar)
+        await gesture.moveBy(const Offset(45, 0));
+        await tester.pump(const Duration(milliseconds: 100));
 
-      // Verifica transição para Modo Mãos Livres Travado
-      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
+        // Verifica transição para Modo Mãos Livres Travado
+        expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
 
-      // Solta o dedo (Release) - o popup deve PERMANECER na tela!
-      await gesture.up();
-      await tester.pump(const Duration(milliseconds: 200));
+        // Solta o dedo (Release) - o popup deve PERMANECER na tela!
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
-      expect(find.text('Parar Microfone'), findsOneWidget);
-      expect(find.text('Cancelar'), findsOneWidget);
+        expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsOneWidget);
+        expect(find.text('Parar Microfone'), findsOneWidget);
+        expect(find.text('Cancelar'), findsOneWidget);
 
-      // Clica no botão "Parar Microfone" para finalizar
-      await tester.tap(find.text('Parar Microfone'));
-      await tester.pumpAndSettle();
+        // Clica no botão "Parar Microfone" para finalizar
+        await tester.tap(find.text('Parar Microfone'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsNothing);
-    });
+        expect(find.text('🔒 MÃOS LIVRES (TRAVADO)'), findsNothing);
+      },
+    );
   });
 }

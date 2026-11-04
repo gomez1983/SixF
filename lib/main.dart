@@ -1,8 +1,10 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+
 import 'controllers/media_cast_controller.dart';
 import 'controllers/remote_controller.dart';
 import 'services/tray_service.dart';
@@ -12,8 +14,17 @@ import 'ui/views/remote_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+  if (!kIsWeb &&
+      Platform.isWindows &&
+      !Platform.environment.containsKey('FLUTTER_TEST')) {
     await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(440, 860),
+        minimumSize: Size(360, 640),
+        center: true,
+      ),
+    );
   }
   runApp(const SixFRemoteApp());
 }
@@ -26,7 +37,8 @@ class SixFRemoteApp extends StatefulWidget {
   State<SixFRemoteApp> createState() => _SixFRemoteAppState();
 }
 
-class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, WidgetsBindingObserver {
+class _SixFRemoteAppState extends State<SixFRemoteApp>
+    with WindowListener, WidgetsBindingObserver {
   late final RemoteController _remoteController;
   late final MediaCastController _mediaCastController;
 
@@ -49,7 +61,9 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
   }
 
   void _initDesktopFeatures() async {
-    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    if (!kIsWeb &&
+        Platform.isWindows &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
       try {
         windowManager.addListener(this);
         await windowManager.setPreventClose(true);
@@ -68,7 +82,9 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
 
   @override
   void onWindowClose() async {
-    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    if (!kIsWeb &&
+        Platform.isWindows &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
       final isPreventClose = await windowManager.isPreventClose();
       if (isPreventClose) {
         await windowManager.hide();
@@ -83,7 +99,9 @@ class _SixFRemoteAppState extends State<SixFRemoteApp> with WindowListener, Widg
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (!kIsWeb && Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    if (!kIsWeb &&
+        Platform.isWindows &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
       windowManager.removeListener(this);
     }
     VolumeKeyService().dispose();

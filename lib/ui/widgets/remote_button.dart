@@ -19,9 +19,9 @@ enum HapticType {
   none,
 }
 
-/// Botão modular estilizado para o controle remoto universal SixF.
+/// Botão modular com acabamento Liquid Glass para o controle remoto universal SixF.
 ///
-/// Oferece suporte a feedback visual imediato (highlight e splash sutil),
+/// Oferece suporte a feedback visual imediato (gradiente vítreo, reflexo superior e splash sutil),
 /// resposta tátil de vibração via [HapticService] e estados de hover desktop.
 class RemoteButton extends StatelessWidget {
   final VoidCallback? onPressed;
@@ -58,7 +58,7 @@ class RemoteButton extends StatelessWidget {
     this.foregroundColor,
     this.borderColor,
     this.customShape,
-    this.borderRadius = 12,
+    this.borderRadius = 13,
     this.padding,
     this.isSelected = false,
     this.isCircular = false,
@@ -86,18 +86,22 @@ class RemoteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
     final bg = backgroundColor ?? AppColors.surfaceInteractiveOf(context);
-    final fg = foregroundColor ?? AppColors.textPrimaryOf(context);
-    final border =
-        borderColor ??
+    final fg = foregroundColor ??
         (isSelected
             ? AppColors.iconHighlightOf(context)
+            : AppColors.textPrimaryOf(context));
+    final border = borderColor ??
+        (isSelected
+            ? AppColors.iconHighlightOf(context).withValues(alpha: isDark ? 0.55 : 0.65)
             : AppColors.borderSubtleOf(context));
 
-    final shape =
-        customShape ??
+    final isTransparent = bg.a == 0 && (borderColor?.a ?? 1) == 0;
+
+    final shape = customShape ??
         (isCircular
-            ? const CircleBorder()
+            ? CircleBorder(side: BorderSide(color: border, width: 1))
             : RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(borderRadius),
                 side: BorderSide(color: border, width: 1),
@@ -139,24 +143,70 @@ class RemoteButton extends StatelessWidget {
       content = const SizedBox.shrink();
     }
 
-    Widget buttonCore = Material(
-      color: isSelected ? AppColors.surfaceElevatedOf(context) : bg,
-      shape: shape,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed != null ? _handlePress : null,
-        hoverColor: AppColors.surfaceInteractiveHoverOf(context),
-        splashColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
-            .withValues(alpha: 0.2),
-        highlightColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
-            .withValues(alpha: 0.1),
-        customBorder: shape,
-        child: Container(
-          width: width,
-          height: height,
-          padding: padding ?? const EdgeInsets.all(8),
-          alignment: Alignment.center,
-          child: FittedBox(fit: BoxFit.scaleDown, child: content),
+    Gradient? glassGradient;
+    List<BoxShadow>? glassShadows;
+
+    if (!isTransparent) {
+      if (isSelected) {
+        glassGradient = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0x40D2B0F0), Color(0x35A777D9), Color(0x249362D7)]
+              : const [Color(0xE8FFFFFF), Color(0x48B788E8), Color(0x30A777D9)],
+        );
+        glassShadows = [
+          BoxShadow(
+            color: isDark ? const Color(0x28000000) : const Color(0x1E7441A5),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ];
+      } else if (backgroundColor == null) {
+        glassGradient = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF342E44), Color(0xFF272234)]
+              : const [Color(0xFAFFFFFF), Color(0xE8F1ECF9)],
+        );
+        glassShadows = [
+          BoxShadow(
+            color: isDark ? const Color(0x26000000) : const Color(0x0A48406C),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ];
+      }
+    }
+
+    Widget buttonCore = DecoratedBox(
+      decoration: BoxDecoration(
+        shape: isCircular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: isCircular ? null : BorderRadius.circular(borderRadius),
+        gradient: glassGradient,
+        color: glassGradient == null ? bg : null,
+        boxShadow: glassShadows,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed != null ? _handlePress : null,
+          hoverColor: AppColors.surfaceInteractiveHoverOf(context),
+          splashColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
+              .withValues(alpha: 0.18),
+          highlightColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
+              .withValues(alpha: 0.10),
+          customBorder: shape,
+          child: Container(
+            width: width,
+            height: height,
+            padding: padding ?? const EdgeInsets.all(8),
+            alignment: Alignment.center,
+            child: FittedBox(fit: BoxFit.scaleDown, child: content),
+          ),
         ),
       ),
     );

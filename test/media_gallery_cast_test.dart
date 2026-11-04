@@ -4,12 +4,31 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sixf_remote/controllers/media_cast_controller.dart';
 import 'package:sixf_remote/services/google_cast_media.dart';
+import 'package:sixf_remote/services/media_remux_service.dart';
 import 'package:sixf_remote/services/drivers/tv_driver.dart';
 
 import 'security_lifecycle_test.dart' show LocalMediaServer, RealHttp;
 
 class SimulatedCast extends GoogleCastMedia {
   int reloads = 0;
+  Duration? loadedDuration;
+  String? loadedUrl;
+  Duration? segmentDuration;
+  final remuxUrls = <String>[];
+  @override
+  Future<void> replaceRemux(
+    String url,
+    Duration duration, {
+    bool autoplay = true,
+  }) async {
+    remuxUrls.add(url);
+    segmentDuration = duration;
+    if (pendingSeek != null) await pendingSeek!.future;
+    if (rejectSeek) throw StateError('Recusado');
+    id++;
+    emit(autoplay ? 'PLAYING' : 'PAUSED', position: 0);
+  }
+
   int id = 1;
   bool closed = false;
   bool rejectSeek = false;
@@ -31,7 +50,17 @@ class SimulatedCast extends GoogleCastMedia {
   }
 
   @override
-  Future<void> load(String host, String url, String title, String mime) async {
+  Future<void> load(
+    String host,
+    String url,
+    String title,
+    String mime, {
+    List<Map<String, dynamic>>? tracks,
+    List<int>? activeTrackIds,
+    Duration? duration,
+  }) async {
+    loadedDuration = duration;
+    loadedUrl = url;
     emit('PLAYING');
   }
 
@@ -93,6 +122,70 @@ void main() {
     ),
     RealHttp(),
   );
+  test('remux uses source duration, fresh URLs and absolute position across seeks and replay', () async {
+    controller.dispose();
+    final server = LocalMediaServer();
+    controller = MediaCastController(
+      serverService: server,
+      castFactory: () {
+        final cast = SimulatedCast();
+        casts.add(cast);
+        return cast;
+      },
+      probeMedia: (_) async =>
+          const MediaDetails(tracks: [], duration: Duration(seconds: 7200)),
+    );
+    await load([await file('movie.mkv')]);
+    final cast = casts.single;
+    expect(cast.loadedDuration, const Duration(seconds: 7200));
+    expect(controller.totalDuration, const Duration(seconds: 7200));
+    expect(await controller.seekTo(const Duration(seconds: 3600)), isTrue);
+    expect(server.remuxStart, const Duration(seconds: 3600));
+    expect(controller.currentPosition, const Duration(seconds: 3600));
+    expect(cast.segmentDuration, const Duration(seconds: 3600));
+    expect(cast.remuxUrls.last, isNot(cast.loadedUrl));
+    cast.emit('PLAYING', position: 12);
+    expect(controller.currentPosition, const Duration(seconds: 3612));
+    expect(controller.totalDuration, const Duration(seconds: 7200));
+    await controller.pause();
+    expect(await controller.seekTo(const Duration(seconds: 60)), isTrue);
+    expect(controller.isPaused, isTrue);
+    expect(controller.currentPosition, const Duration(seconds: 60));
+    expect(cast.remuxUrls.toSet(), hasLength(2));
+    expect(cast.commands.where((s) => s.startsWith('SEEK')), isEmpty);
+    cast.emit('IDLE', reason: 'FINISHED');
+    await controller.play();
+    expect(server.remuxStart, Duration.zero);
+    expect(controller.currentPosition, Duration.zero);
+    controller.toggleLoop();
+    cast.emit('IDLE', reason: 'FINISHED');
+    await Future<void>.delayed(Duration.zero);
+    expect(server.remuxStart, Duration.zero);
+    expect(cast.remuxUrls, hasLength(4));
+  });
+  test('stop during remux reload ignores late completion', () async {
+    controller.dispose();
+    controller = MediaCastController(
+      serverService: LocalMediaServer(),
+      castFactory: () {
+        final cast = SimulatedCast();
+        casts.add(cast);
+        return cast;
+      },
+      probeMedia: (_) async =>
+          const MediaDetails(tracks: [], duration: Duration(seconds: 7200)),
+    );
+    await load([await file('movie.mkv')]);
+    final cast = casts.single;
+    cast.pendingSeek = Completer<void>();
+    final seeking = controller.seekTo(const Duration(seconds: 60));
+    await Future<void>.delayed(Duration.zero);
+    await controller.stop();
+    cast.pendingSeek!.complete();
+    expect(await seeking, isFalse);
+    expect(controller.hasProgress, isFalse);
+    expect(controller.status, MediaCastStatus.idle);
+  });
   test(
     'Cast telemetry enables timeline, seek, pause and replay only with support',
     () async {
@@ -145,10 +238,10 @@ void main() {
     expect(controller.currentFilePath, a.path);
     controller.toggleShuffle();
     expect(controller.isShuffling, isTrue);
-    casts.last.emit('IDLE',reason:'FINISHED');
+    casts.last.emit('IDLE', reason: 'FINISHED');
     await Future<void>.delayed(Duration.zero);
-    expect(controller.currentFilePath,a.path);
-    expect(casts.length,3);
+    expect(controller.currentFilePath, a.path);
+    expect(casts.length, 3);
     await HttpOverrides.runWithHttpOverrides(controller.next, RealHttp());
     expect(controller.currentFilePath, isNot(a.path));
     await controller.stop();

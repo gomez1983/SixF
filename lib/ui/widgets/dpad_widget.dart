@@ -1,5 +1,3 @@
-import '../../services/drivers/tv_driver.dart';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,8 +5,8 @@ import '../../controllers/remote_controller.dart';
 import '../theme/app_colors.dart';
 import 'remote_button.dart';
 
-/// D-Pad clássico ergonômico com direcionais (Cima, Baixo, Esquerda, Direita)
-/// e botão central OK / Enter simulando o disco do Magic Remote da LG.
+/// D-Pad ergonômico padronizado em Liquid Glass com direcionais (Cima, Baixo, Esquerda, Direita),
+/// botão central OK / Enter e posicionamento simétrico consistente entre todas as marcas de dispositivos.
 class DPadWidget extends StatelessWidget {
   final double size;
 
@@ -21,267 +19,255 @@ class DPadWidget extends StatelessWidget {
       (c) => (c.isConnected, c.driver),
     );
     final supportsInputs = context.select<RemoteController, bool>(
-      (controller) => controller.supportsDirectInputs,
-    );
-    final buttonSize = size * 0.28;
-    final centerSize = size * 0.36;
-
-    final google = context.select<RemoteController, bool>(
-      (c) => c.currentBrand == TvBrand.googleTv,
+      (c) => c.supportsDirectInputs,
     );
     final right = context.select<RemoteController, bool>(
       (c) => c.backButtonOnRight,
     );
-    Widget buildBack({double width = 58, double height = 64}) => RemoteButton(
-      width: width,
-      height: height,
-      borderRadius: google ? 12 : 16,
-      backgroundColor: AppColors.surfaceCardOf(context),
-      borderColor: AppColors.borderSubtleOf(context),
-      foregroundColor: AppColors.textPrimaryOf(context),
-      icon: Icons.undo_rounded,
-      label: 'VOLTAR',
-      iconSize: google ? 18 : 22,
-      tooltip: 'Voltar à tela anterior (Esc ou Backspace)',
-      onPressed: () => controller.pressBack(),
-    );
-    final wheel = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.surfaceCardOf(context),
-        border: Border.all(
-          color: AppColors.borderSubtleOf(context),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.isDark(context) ? Colors.black26 : Colors.black12,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Anel decorativo sutil
-          Container(
-            width: size * 0.82,
-            height: size * 0.82,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.borderSubtleOf(context).withValues(alpha: 0.5),
-              ),
-            ),
-          ),
+    final isDark = AppColors.isDark(context);
 
-          // Botão CIMA
-          Positioned(
-            top: 8,
-            child: RemoteButton(
-              width: buttonSize * 1.5,
-              height: buttonSize,
-              borderRadius: 14,
-              backgroundColor: Colors.transparent,
-              borderColor: Colors.transparent,
-              foregroundColor: AppColors.textPrimaryOf(context),
-              icon: Icons.keyboard_arrow_up_rounded,
-              iconSize: 28,
-              tooltip: 'Navegar para Cima (Seta Cima)',
-              onPressed: () => controller.dpadUp(),
-              repeatOnHold: controller.isConnected,
-              repeatToken: controller.driver,
-            ),
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const sideSlotWidth = 58.0;
+        const sideGap = 12.0;
+        const totalHorizontalExtras = (sideSlotWidth + sideGap) * 2;
 
-          // Botão BAIXO
-          Positioned(
-            bottom: 8,
-            child: RemoteButton(
-              width: buttonSize * 1.5,
-              height: buttonSize,
-              borderRadius: 14,
-              backgroundColor: Colors.transparent,
-              borderColor: Colors.transparent,
-              foregroundColor: AppColors.textPrimaryOf(context),
-              icon: Icons.keyboard_arrow_down_rounded,
-              iconSize: 28,
-              tooltip: 'Navegar para Baixo (Seta Baixo)',
-              onPressed: () => controller.dpadDown(),
-              repeatOnHold: controller.isConnected,
-              repeatToken: controller.driver,
-            ),
-          ),
+        final maxAvailableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : (size + totalHorizontalExtras);
+        final effectiveSize = (maxAvailableWidth - totalHorizontalExtras)
+            .clamp(120.0, size);
 
-          // Botão ESQUERDA
-          Positioned(
-            left: 8,
-            child: RemoteButton(
-              width: buttonSize,
-              height: buttonSize * 1.5,
-              borderRadius: 14,
-              backgroundColor: Colors.transparent,
-              borderColor: Colors.transparent,
-              foregroundColor: AppColors.textPrimaryOf(context),
-              icon: Icons.keyboard_arrow_left_rounded,
-              iconSize: 28,
-              tooltip: 'Navegar para Esquerda (Seta Esquerda)',
-              onPressed: () => controller.dpadLeft(),
-              repeatOnHold: controller.isConnected,
-              repeatToken: controller.driver,
-            ),
-          ),
+        final buttonSize = effectiveSize * 0.28;
+        final centerSize = effectiveSize * 0.36;
 
-          // Botão DIREITA
-          Positioned(
-            right: 8,
-            child: RemoteButton(
-              width: buttonSize,
-              height: buttonSize * 1.5,
-              borderRadius: 14,
-              backgroundColor: Colors.transparent,
-              borderColor: Colors.transparent,
-              foregroundColor: AppColors.textPrimaryOf(context),
-              icon: Icons.keyboard_arrow_right_rounded,
-              iconSize: 28,
-              tooltip: 'Navegar para Direita (Seta Direita)',
-              onPressed: () => controller.dpadRight(),
-              repeatOnHold: controller.isConnected,
-              repeatToken: controller.driver,
-            ),
+        final backButton = KeyedSubtree(
+          key: const Key('chromecast-back'),
+          child: RemoteButton(
+            width: sideSlotWidth,
+            height: 64,
+            borderRadius: 16,
+            foregroundColor: AppColors.textPrimaryOf(context),
+            icon: Icons.undo_rounded,
+            label: 'VOLTAR',
+            iconSize: 22,
+            tooltip: 'Voltar à tela anterior (Esc ou Backspace)',
+            onPressed: () => controller.pressBack(),
           ),
+        );
 
-          // Botão Central OK / Enter (Magic Wheel)
-          Container(
-            width: centerSize,
-            height: centerSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  AppColors.surfaceElevatedOf(context),
-                  AppColors.surfaceInteractiveOf(context),
+        final inputsColumn = supportsInputs
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RemoteButton(
+                    width: sideSlotWidth,
+                    height: 52,
+                    borderRadius: 14,
+                    foregroundColor: AppColors.textPrimaryOf(context),
+                    icon: Icons.live_tv_rounded,
+                    label: 'TV Digital',
+                    iconSize: 20,
+                    tooltip: 'Sintonizar TV Digital / Antena',
+                    onPressed: () => controller.switchTvDigital(),
+                  ),
+                  const SizedBox(height: 8),
+                  RemoteButton(
+                    width: sideSlotWidth,
+                    height: 52,
+                    borderRadius: 14,
+                    foregroundColor: AppColors.textPrimaryOf(context),
+                    icon: Icons.settings_input_hdmi_rounded,
+                    label: 'HDMI 1',
+                    iconSize: 20,
+                    tooltip: 'Alternar Entrada para HDMI 1',
+                    onPressed: () => controller.switchHdmi1(),
+                  ),
                 ],
+              )
+            : const SizedBox(width: sideSlotWidth, height: 64);
+
+        final wheel = Container(
+          key: const Key('chromecast-dpad'),
+          width: effectiveSize,
+          height: effectiveSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? const [Color(0xF52D273B), Color(0xE6211D2C)]
+                  : const [Color(0xFAFFFFFF), Color(0xE6F2EDF9)],
+            ),
+            border: Border.all(
+              color: isDark ? const Color(0x28FFFFFF) : const Color(0xFFDCD3EC),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark ? const Color(0x45000000) : const Color(0x1448406C),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.isDark(context)
-                      ? Colors.black38
-                      : Colors.black12,
-                  blurRadius: 6,
-                  spreadRadius: -1,
-                ),
-              ],
-            ),
-            child: RemoteButton(
-              isCircular: true,
-              backgroundColor: Colors.transparent,
-              borderColor: AppColors.borderActiveOf(context),
-              foregroundColor: AppColors.textPrimaryOf(context),
-              label: 'OK',
-              tooltip: 'Confirmar / OK (Enter ou Espaço)',
-              onPressed: () => controller.dpadOk(),
-            ),
+              BoxShadow(
+                color: isDark ? const Color(0x10FFFFFF) : const Color(0xCCFFFFFF),
+                blurRadius: 1,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    if (google) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.hasBoundedWidth
-              ? constraints.maxWidth
-              : size;
-          return SizedBox(
-            width: width,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  key: const Key('chromecast-dpad'),
-                  width: size,
-                  height: size,
-                  child: wheel,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: right
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: KeyedSubtree(
-                      key: const Key('chromecast-back'),
-                      child: buildBack(width: width / 4 - 8, height: 52),
-                    ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Anel decorativo sutil Liquid Glass
+              Container(
+                width: effectiveSize * 0.82,
+                height: effectiveSize * 0.82,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.borderSubtleOf(context).withValues(alpha: 0.6),
                   ),
                 ),
-              ],
-            ),
-          );
-        },
-      );
-    }
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Botão Lateral Esquerdo: VOLTAR
-          buildBack(),
+              ),
 
-          const SizedBox(width: 12),
-
-          // Roda D-Pad Central
-          wheel,
-
-          if (supportsInputs) ...[
-            const SizedBox(width: 12),
-
-            // Botões Laterais Direitos: TV Digital e HDMI 1
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Botão Superior: TV Digital
-                RemoteButton(
-                  width: 58,
-                  height: 52,
+              // Botão CIMA
+              Positioned(
+                top: 8,
+                child: RemoteButton(
+                  width: buttonSize * 1.5,
+                  height: buttonSize,
                   borderRadius: 14,
-                  backgroundColor: AppColors.surfaceCardOf(context),
-                  borderColor: AppColors.borderSubtleOf(context),
+                  backgroundColor: Colors.transparent,
+                  borderColor: Colors.transparent,
                   foregroundColor: AppColors.textPrimaryOf(context),
-                  icon: Icons.live_tv_rounded,
-                  label: 'TV Digital',
-                  iconSize: 20,
-                  tooltip: 'Sintonizar TV Digital / Antena',
-                  onPressed: () => controller.switchTvDigital(),
+                  icon: Icons.keyboard_arrow_up_rounded,
+                  iconSize: 28,
+                  tooltip: 'Navegar para Cima (Seta Cima)',
+                  onPressed: () => controller.dpadUp(),
+                  repeatOnHold: controller.isConnected,
+                  repeatToken: controller.driver,
                 ),
+              ),
 
-                const SizedBox(height: 8),
-
-                // Botão Inferior: HDMI 1
-                RemoteButton(
-                  width: 58,
-                  height: 52,
+              // Botão BAIXO
+              Positioned(
+                bottom: 8,
+                child: RemoteButton(
+                  width: buttonSize * 1.5,
+                  height: buttonSize,
                   borderRadius: 14,
-                  backgroundColor: AppColors.surfaceCardOf(context),
-                  borderColor: AppColors.borderSubtleOf(context),
+                  backgroundColor: Colors.transparent,
+                  borderColor: Colors.transparent,
                   foregroundColor: AppColors.textPrimaryOf(context),
-                  icon: Icons.settings_input_hdmi_rounded,
-                  label: 'HDMI 1',
-                  iconSize: 20,
-                  tooltip: 'Alternar Entrada para HDMI 1',
-                  onPressed: () => controller.switchHdmi1(),
+                  icon: Icons.keyboard_arrow_down_rounded,
+                  iconSize: 28,
+                  tooltip: 'Navegar para Baixo (Seta Baixo)',
+                  onPressed: () => controller.dpadDown(),
+                  repeatOnHold: controller.isConnected,
+                  repeatToken: controller.driver,
                 ),
-              ],
-            ),
-          ],
-        ],
-      ),
+              ),
+
+              // Botão ESQUERDA
+              Positioned(
+                left: 8,
+                child: RemoteButton(
+                  width: buttonSize,
+                  height: buttonSize * 1.5,
+                  borderRadius: 14,
+                  backgroundColor: Colors.transparent,
+                  borderColor: Colors.transparent,
+                  foregroundColor: AppColors.textPrimaryOf(context),
+                  icon: Icons.keyboard_arrow_left_rounded,
+                  iconSize: 28,
+                  tooltip: 'Navegar para Esquerda (Seta Esquerda)',
+                  onPressed: () => controller.dpadLeft(),
+                  repeatOnHold: controller.isConnected,
+                  repeatToken: controller.driver,
+                ),
+              ),
+
+              // Botão DIREITA
+              Positioned(
+                right: 8,
+                child: RemoteButton(
+                  width: buttonSize,
+                  height: buttonSize * 1.5,
+                  borderRadius: 14,
+                  backgroundColor: Colors.transparent,
+                  borderColor: Colors.transparent,
+                  foregroundColor: AppColors.textPrimaryOf(context),
+                  icon: Icons.keyboard_arrow_right_rounded,
+                  iconSize: 28,
+                  tooltip: 'Navegar para Direita (Seta Direita)',
+                  onPressed: () => controller.dpadRight(),
+                  repeatOnHold: controller.isConnected,
+                  repeatToken: controller.driver,
+                ),
+              ),
+
+              // Botão Central OK / Enter (Liquid Glass Wheel)
+              Container(
+                width: centerSize,
+                height: centerSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? const [Color(0xFF3E3552), Color(0xFF2B243A)]
+                        : const [Color(0xFFFFFFFF), Color(0xFFEBE3F7)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? const Color(0x40000000)
+                          : const Color(0x187441A5),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: RemoteButton(
+                  isCircular: true,
+                  backgroundColor: Colors.transparent,
+                  borderColor: AppColors.borderActiveOf(context)
+                      .withValues(alpha: isDark ? 0.55 : 0.65),
+                  foregroundColor: AppColors.textPrimaryOf(context),
+                  label: 'OK',
+                  tooltip: 'Confirmar / OK (Enter ou Espaço)',
+                  onPressed: () => controller.dpadOk(),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Slot Lateral Esquerdo (58px fixos)
+              right ? inputsColumn : backButton,
+
+              const SizedBox(width: sideGap),
+
+              // Roda D-Pad Centralizada
+              wheel,
+
+              const SizedBox(width: sideGap),
+
+              // Slot Lateral Direito (58px fixos para simetria absoluta)
+              right ? backButton : inputsColumn,
+            ],
+          ),
+        );
+      },
     );
   }
 }

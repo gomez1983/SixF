@@ -30,7 +30,7 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
   for (final width in [320.0, 393.0, 1280.0]) {
     testWidgets(
-      'Chromecast D-pad centered at $width and Back switches side below wheel',
+      'D-pad e botão Voltar mantêm posição padronizada na largura $width entre TV e Chromecast',
       (tester) async {
         tester.view.physicalSize = Size(width, 700);
         tester.view.devicePixelRatio = 1;
@@ -59,24 +59,40 @@ void main() {
         await tester.pump();
         final wheel = find.byKey(const Key('chromecast-dpad'));
         final back = find.byKey(const Key('chromecast-back'));
-        expect(tester.getCenter(wheel).dx, closeTo(width / 2, 0.1));
-        expect(tester.getCenter(back).dx, lessThan(width / 2));
         final home = find.byWidgetPredicate(
           (w) => w is RemoteButton && w.label == 'HOME',
         );
-        expect(
-          tester.getTopLeft(back).dx,
-          closeTo(tester.getTopLeft(home).dx, 0.1),
-        );
-        expect(tester.getSize(back), tester.getSize(home));
-        expect(
-          tester.getTopLeft(back).dy,
-          greaterThanOrEqualTo(tester.getBottomLeft(wheel).dy),
-        );
+
+        final googleWheelCenter = tester.getCenter(wheel);
+        final googleWheelSize = tester.getSize(wheel);
+        final googleBackCenter = tester.getCenter(back);
+        final googleBackSize = tester.getSize(back);
+        final googleHomeCenter = tester.getCenter(home);
+
+        // Roda sempre centralizada e Voltar alinhado na lateral esquerda da roda
+        expect(googleWheelCenter.dx, closeTo(width / 2, 0.1));
+        expect(googleBackCenter.dx, lessThan(tester.getTopLeft(wheel).dx));
+        expect(googleBackCenter.dy, closeTo(googleWheelCenter.dy, 0.1));
+
+        // Alternar para LG webOS e Samsung Tizen deve manter a exata mesma posição e tamanho
+        for (final brand in [TvBrand.lgWebOs, TvBrand.samsungTizen]) {
+          controller.selectBrand(brand);
+          await tester.pump();
+          expect(tester.getCenter(wheel).dx, closeTo(googleWheelCenter.dx, 0.1));
+          expect(tester.getCenter(wheel).dy, closeTo(googleWheelCenter.dy, 0.1));
+          expect(tester.getSize(wheel), googleWheelSize);
+          expect(tester.getCenter(back).dx, closeTo(googleBackCenter.dx, 0.1));
+          expect(tester.getCenter(back).dy, closeTo(googleBackCenter.dy, 0.1));
+          expect(tester.getSize(back), googleBackSize);
+          expect(tester.getCenter(home), googleHomeCenter);
+        }
+
+        controller.selectBrand(TvBrand.googleTv);
         await controller.setBackButtonOnRight(true);
         await tester.pump();
         expect(tester.getCenter(wheel).dx, closeTo(width / 2, 0.1));
-        expect(tester.getCenter(back).dx, greaterThan(width / 2));
+        expect(tester.getCenter(back).dx, greaterThan(tester.getTopRight(wheel).dx));
+        expect(tester.getCenter(back).dy, closeTo(googleWheelCenter.dy, 0.1));
         final restored = RemoteController(
           initialDriver: RecordingDriver(TvBrand.googleTv),
         );

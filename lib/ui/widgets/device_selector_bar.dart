@@ -94,23 +94,32 @@ class DeviceSelectorBar extends StatelessWidget {
         HapticService.heavyPress();
         _showDeviceOptionsModal(context, controller, device);
       },
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(13),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(12),
+          color: isActive ? null : bgColor,
+          gradient: isActive
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? const [Color(0x38D2B0F0), Color(0x30A777D9), Color(0x229362D7)]
+                      : const [Color(0xE8FFFFFF), Color(0x45B788E8), Color(0x30A777D9)],
+                )
+              : null,
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
             color: borderColor,
-            width: isActive ? 1.5 : 1.0,
+            width: isActive ? 1.3 : 1.0,
           ),
-          boxShadow: isActive && isConnected
+          boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: highlightColor.withValues(alpha: isDark ? 0.30 : 0.20),
-                    blurRadius: 8,
-                    spreadRadius: 1,
+                    color: highlightColor.withValues(alpha: isDark ? 0.24 : 0.16),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ]
               : null,

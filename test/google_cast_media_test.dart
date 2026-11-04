@@ -33,13 +33,19 @@ void main() {
               jsonDecode(TvWire.string(fields, 6)) as Map<String, dynamic>;
           commands.add(message);
           if (message['requestId'] == null) continue;
-          final Map<String, dynamic> reply = message['type'] == 'LAUNCH'
+          final Map<String, dynamic> reply =
+              message['type'] == 'LAUNCH' ||
+                  (message['type'] == 'STOP' && message['sessionId'] != null)
               ? {
                   'type': 'RECEIVER_STATUS',
                   'requestId': message['requestId'],
                   'status': {
                     'applications': [
-                      {'appId': 'CC1AD845', 'transportId': 'transport-test'},
+                      {
+                        'appId': 'CC1AD845',
+                        'transportId': 'transport-test',
+                        'sessionId': 'receiver-session-test',
+                      },
                     ],
                   },
                 }
@@ -80,11 +86,22 @@ void main() {
       'http://192.168.1.2:8080/token/photo.jpg',
       'Foto',
       'image/jpeg',
+      duration: const Duration(milliseconds: 7200500),
+      tracks: [
+        {
+          'trackId': 7,
+          'type': 'TEXT',
+          'trackContentId': 'http://127.0.0.1/subtitle_7.vtt',
+        },
+      ],
     );
     expect(
       commands.firstWhere((c) => c['type'] == 'LOAD')['media']['contentType'],
       'image/jpeg',
     );
+    final loaded = commands.firstWhere((c) => c['type'] == 'LOAD')['media'];
+    expect(loaded['duration'], 7200.5);
+    expect(loaded['streamType'], 'BUFFERED');
     await cast.command('PAUSE');
     expect(commands.last['mediaSessionId'], 42);
     await cast.command('SEEK', currentTime: 12.5);
@@ -98,8 +115,30 @@ void main() {
       await cast.refresh();
     }
     expect(commands.where((c) => c['type'] == 'LOAD').length, 32);
+    await cast.setActiveTrackIds([7]);
+    await cast.replaceRemux(
+      'http://127.0.0.1/new.mp4',
+      const Duration(seconds: 60),
+      autoplay: false,
+    );
+    expect(commands.last['type'], 'LOAD');
+    expect(commands.last['currentTime'], 0);
+    expect(commands.last['autoplay'], isFalse);
+    expect(commands.last['activeTrackIds'], [7]);
+    expect(
+      Uri.parse(commands.last['media']['tracks'][0]['trackContentId'] as String)
+          .queryParameters['segment'],
+      'http://127.0.0.1/new.mp4',
+    );
+
+    expect(commands.last['media']['duration'], 60);
+    expect(commands.last['media']['contentId'], 'http://127.0.0.1/new.mp4');
     await cast.command('STOP');
     expect(commands.last['type'], 'STOP');
+    await cast.stopReceiver();
+    expect(commands.last['type'], 'STOP');
+    expect(commands.last['sessionId'], 'receiver-session-test');
+    expect(commands.last.containsKey('mediaSessionId'), isFalse);
     cast.close();
     await expectLater(cast.refresh(), throwsStateError);
   });

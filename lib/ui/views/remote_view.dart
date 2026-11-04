@@ -2,11 +2,15 @@ import '../widgets/google_tv_pairing_dialog.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../../services/desktop_window_service.dart';
 import '../widgets/compact_remote.dart';
+
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import 'media_library.dart';
 import '../../controllers/media_cast_controller.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/haptic_service.dart';
@@ -37,6 +41,7 @@ class RemoteView extends StatefulWidget {
 }
 
 class _RemoteViewState extends State<RemoteView> {
+  final GlobalKey _libraryKey = GlobalKey();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _focusNode = FocusNode();
   final Stopwatch _repeatClock = Stopwatch()..start();
@@ -49,26 +54,42 @@ class _RemoteViewState extends State<RemoteView> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final controller = context.read<RemoteController>();
-    if (identical(_pairingController,controller)) return;
+    if (identical(_pairingController, controller)) return;
     _pairingController?.onPinPromptRequested = null;
     _pairingController = controller;
     controller.onPinPromptRequested = _onPairingPrompt;
   }
+
   void _onPairingPrompt(bool prompt) {
     final controller = _pairingController;
-    if (!prompt || controller == null || controller.currentBrand != TvBrand.googleTv || _pairingDialogOpen) return;
+    if (!prompt ||
+        controller == null ||
+        controller.currentBrand != TvBrand.googleTv ||
+        _pairingDialogOpen) {
+      return;
+    }
     final deviceId = controller.activeDeviceId;
     final driver = controller.driver;
     if (deviceId == null) return;
     _pairingDialogOpen = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await showDialog<void>(context:context, barrierDismissible:false,
-        builder: (_) => PopScope(canPop:false,child:GoogleTvPairingDialog(
-          controller:controller,deviceId:deviceId,driver:driver)));
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: GoogleTvPairingDialog(
+            controller: controller,
+            deviceId: deviceId,
+            driver: driver,
+          ),
+        ),
+      );
       _pairingDialogOpen = false;
     });
   }
+
   bool _compact = false;
   bool _changingWindow = false;
 
@@ -76,16 +97,23 @@ class _RemoteViewState extends State<RemoteView> {
     if (_changingWindow) return;
     _changingWindow = true;
     try {
-      if (!Platform.environment.containsKey('FLUTTER_TEST')) await _windowService.setCompact(!_compact);
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+        await _windowService.setCompact(!_compact);
+      }
       if (mounted) setState(() => _compact = !_compact);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível alterar a janela.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível alterar a janela.')),
+        );
+      }
     } finally {
       _changingWindow = false;
     }
   }
 
-  int _selectedTabIndex = 0; // 0: Controle, 1: Teclas & Mídia, 2: Magic Trackpad
+  int _selectedTabIndex =
+      0; // 0: Controle, 1: Teclas & Mídia, 2: Magic Trackpad
 
   @override
   void initState() {
@@ -111,7 +139,8 @@ class _RemoteViewState extends State<RemoteView> {
       return KeyEventResult.ignored;
     }
 
-    final primaryFocusWidget = FocusManager.instance.primaryFocus?.context?.widget;
+    final primaryFocusWidget =
+        FocusManager.instance.primaryFocus?.context?.widget;
     if (primaryFocusWidget is EditableText) {
       return KeyEventResult.ignored;
     }
@@ -121,13 +150,24 @@ class _RemoteViewState extends State<RemoteView> {
     if (event is KeyDownEvent) _heldKeyTargets[key] = controller.driver;
 
     if (event is KeyRepeatEvent) {
-      final repeatable = {LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.add, LogicalKeyboardKey.numpadAdd,
+      final repeatable = {
+        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowLeft,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.add,
+        LogicalKeyboardKey.numpadAdd,
         LogicalKeyboardKey.numpadSubtract,
-        LogicalKeyboardKey.audioVolumeUp, LogicalKeyboardKey.audioVolumeDown,
-        LogicalKeyboardKey.pageUp, LogicalKeyboardKey.pageDown};
-      if (!controller.isConnected || !identical(_heldKeyTargets[key], controller.driver) || !repeatable.contains(key)) return KeyEventResult.ignored;
+        LogicalKeyboardKey.audioVolumeUp,
+        LogicalKeyboardKey.audioVolumeDown,
+        LogicalKeyboardKey.pageUp,
+        LogicalKeyboardKey.pageDown,
+      };
+      if (!controller.isConnected ||
+          !identical(_heldKeyTargets[key], controller.driver) ||
+          !repeatable.contains(key)) {
+        return KeyEventResult.ignored;
+      }
       final now = _repeatClock.elapsedMilliseconds;
       if (now - _lastRepeat < 120) return KeyEventResult.handled;
       _lastRepeat = now;
@@ -221,7 +261,8 @@ class _RemoteViewState extends State<RemoteView> {
     }
 
     // 6. Mídia
-    if (key == LogicalKeyboardKey.mediaPlay || key == LogicalKeyboardKey.mediaPlayPause) {
+    if (key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPlayPause) {
       controller.mediaPlay();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.mediaPause) {
@@ -241,7 +282,8 @@ class _RemoteViewState extends State<RemoteView> {
     }
 
     // 7. Voltar (Backspace / Esc)
-    if (key == LogicalKeyboardKey.backspace || key == LogicalKeyboardKey.escape) {
+    if (key == LogicalKeyboardKey.backspace ||
+        key == LogicalKeyboardKey.escape) {
       controller.pressBack();
       return KeyEventResult.handled;
     }
@@ -269,8 +311,15 @@ class _RemoteViewState extends State<RemoteView> {
               return SizedBox(
                 width: constraints.maxWidth,
                 height: constraints.maxHeight,
-                child: _compact ? CompactRemote(onExpand: _toggleCompact) : isWideScreen
-                    ? _buildDualPaneLayout(constraints)
+                child: _compact
+                    ? CompactRemote(onExpand: _toggleCompact)
+                    : isWideScreen && _selectedTabIndex == 0
+                    ? Column(
+                        children: [
+                          Expanded(child: _buildDualPaneLayout(constraints)),
+                          _buildBottomTabBar(),
+                        ],
+                      )
                     : _buildMobileTabLayout(constraints),
               );
             },
@@ -295,25 +344,22 @@ class _RemoteViewState extends State<RemoteView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Coluna 1: Chassi do Controle Remoto
-                SizedBox(
-                  width: 400,
-                  child: _buildRemoteChassis(),
-                ),
+                SizedBox(width: 400, child: _buildRemoteChassis()),
 
                 const SizedBox(width: 20),
 
-                // Coluna 2: Painel Magic Remote, Aplicativos & Telemetria
+                // Coluna 2: Painel Magic Remote e Aplicativos
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (context.read<RemoteController>().supportsTrackpad) ...[
+                      if (context
+                          .read<RemoteController>()
+                          .supportsTrackpad) ...[
                         _buildTrackpadExpandedCard(),
                         const SizedBox(height: 14),
                       ],
                       _buildDesktopAppsCard(),
-                      const SizedBox(height: 14),
-                      _buildConsoleFeedbackCard(),
                       const SizedBox(height: 14),
                       _buildKeyboardShortcutsHelpCard(),
                     ],
@@ -334,9 +380,11 @@ class _RemoteViewState extends State<RemoteView> {
       children: [
         // 1. Cabeçalho persistente no topo (Status, Cast, Power, Tema, Menu)
         Padding(
-           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: HeaderBar(
-            onToggleCompact: !kIsWeb && Platform.isWindows ? _toggleCompact : null,
+            onToggleCompact: !kIsWeb && Platform.isWindows
+                ? _toggleCompact
+                : null,
             onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ),
@@ -359,11 +407,15 @@ class _RemoteViewState extends State<RemoteView> {
               _buildTab2KeypadAndMedia(),
 
               // Aba 3: Magic Trackpad em Tela Cheia
-              context.read<RemoteController>().supportsTrackpad
-                  ? _buildTab3Trackpad() : const SizedBox.shrink(),
+              context.watch<RemoteController>().supportsTrackpad
+                  ? _buildTab3Trackpad()
+                  : const SizedBox.shrink(),
 
               // Aba 4: Gaveta e Atalhos de Aplicativos
               const AppDrawerWidget(),
+
+              // Aba 5: Biblioteca de Mídia
+              MediaLibrary(key: _libraryKey, embedded: true),
             ],
           ),
         ),
@@ -398,12 +450,17 @@ class _RemoteViewState extends State<RemoteView> {
                 const SizedBox(height: 16),
 
                 // 3. Roda D-Pad com HDMI 1 à esquerda e TV Digital à direita
-                DPadWidget(size: (constraints.maxWidth - (context.watch<RemoteController>().currentBrand==TvBrand.googleTv ? 64 : 172)).clamp(128.0, 210.0)),
+                DPadWidget(
+                  size:
+                      (constraints.maxWidth -
+                              (context.watch<RemoteController>().currentBrand ==
+                                      TvBrand.googleTv
+                                  ? 64
+                                  : 172))
+                          .clamp(128.0, 210.0),
+                ),
 
                 const SizedBox(height: 12),
-
-                // Feedback da última ação discreto
-                _buildConsoleFeedbackCard(),
               ],
             ),
           ),
@@ -441,7 +498,6 @@ class _RemoteViewState extends State<RemoteView> {
           const SizedBox(height: 14),
 
           // Feedback da última ação discreto
-          _buildConsoleFeedbackCard(),
         ],
       ),
     );
@@ -487,7 +543,9 @@ class _RemoteViewState extends State<RemoteView> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isStreaming ? Icons.cast_connected_rounded : Icons.photo_library_rounded,
+                    isStreaming
+                        ? Icons.cast_connected_rounded
+                        : Icons.photo_library_rounded,
                     color: highlight,
                     size: 22,
                   ),
@@ -503,7 +561,8 @@ class _RemoteViewState extends State<RemoteView> {
                           Flexible(
                             child: Text(
                               isStreaming
-                                  ? (castCtrl?.currentFileName ?? 'Mídia em Reprodução')
+                                  ? (castCtrl?.currentFileName ??
+                                        'Mídia em Reprodução')
                                   : 'Transmitir Fotos & Vídeos',
                               style: TextStyle(
                                 fontSize: 13,
@@ -517,13 +576,18 @@ class _RemoteViewState extends State<RemoteView> {
                           if (isStreaming) ...[
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: highlight.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                (castCtrl?.isPlaying ?? false) ? 'AO VIVO' : 'PAUSADO',
+                                (castCtrl?.isPlaying ?? false)
+                                    ? 'AO VIVO'
+                                    : 'PAUSADO',
                                 style: TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.bold,
@@ -572,9 +636,7 @@ class _RemoteViewState extends State<RemoteView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. O Trackpad ocupa TODO o espaço disponível
-          const Expanded(
-            child: TrackpadWidget(),
-          ),
+          const Expanded(child: TrackpadWidget()),
 
           const SizedBox(height: 12),
 
@@ -600,14 +662,16 @@ class _RemoteViewState extends State<RemoteView> {
                 child: RemoteButton(
                   height: 50,
                   borderRadius: 14,
-                  backgroundColor: AppColors.iconHighlightOf(context).withValues(alpha: 0.22),
+                  backgroundColor: AppColors.iconHighlightOf(context)
+                      .withValues(alpha: 0.22),
                   borderColor: AppColors.iconHighlightOf(context),
                   foregroundColor: AppColors.iconHighlightOf(context),
                   icon: Icons.mouse_rounded,
                   label: 'CLIQUE / OK',
                   iconSize: 20,
                   tooltip: 'Clique do Mouse / Confirmar',
-                  onPressed: () => context.read<RemoteController>().sendTrackpadClick(),
+                  onPressed: () =>
+                      context.read<RemoteController>().sendTrackpadClick(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -631,18 +695,16 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Barra de Navegação Inferior das 3 Abas
+  /// Barra de Navegação Inferior
   Widget _buildBottomTabBar() {
     final isDark = AppColors.isDark(context);
+    final supportsTrackpad = context.watch<RemoteController>().supportsTrackpad;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceCardOf(context),
         border: Border(
-          top: BorderSide(
-            color: AppColors.borderSubtleOf(context),
-            width: 1,
-          ),
+          top: BorderSide(color: AppColors.borderSubtleOf(context), width: 1),
         ),
         boxShadow: [
           BoxShadow(
@@ -668,15 +730,21 @@ class _RemoteViewState extends State<RemoteView> {
                 title: 'Teclas & Mídia',
                 icon: Icons.dialpad_rounded,
               ),
-              if (context.read<RemoteController>().supportsTrackpad) _buildBottomNavItem(
-                index: 2,
-                title: 'Magic Trackpad',
-                icon: Icons.touch_app_rounded,
-              ),
+              if (supportsTrackpad)
+                _buildBottomNavItem(
+                  index: 2,
+                  title: 'Magic Trackpad',
+                  icon: Icons.touch_app_rounded,
+                ),
               _buildBottomNavItem(
                 index: 3,
                 title: 'Apps',
                 icon: Icons.apps_rounded,
+              ),
+              _buildBottomNavItem(
+                index: 4,
+                title: 'Biblioteca de mídia',
+                icon: Icons.video_library_outlined,
               ),
             ],
           ),
@@ -746,7 +814,10 @@ class _RemoteViewState extends State<RemoteView> {
       decoration: BoxDecoration(
         color: AppColors.remoteChassisOf(context),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.borderSubtleOf(context), width: 1.5),
+        border: Border.all(
+          color: AppColors.borderSubtleOf(context),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDark ? Colors.black45 : Colors.black12,
@@ -760,7 +831,9 @@ class _RemoteViewState extends State<RemoteView> {
         children: [
           // 1. Cabeçalho / Barra Superior
           HeaderBar(
-            onToggleCompact: !kIsWeb && Platform.isWindows ? _toggleCompact : null,
+            onToggleCompact: !kIsWeb && Platform.isWindows
+                ? _toggleCompact
+                : null,
             onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
 
@@ -803,7 +876,6 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-
   /// Card dedicado de Magic Trackpad expandido (modo tela ampla)
   Widget _buildTrackpadExpandedCard() {
     final isDark = AppColors.isDark(context);
@@ -827,7 +899,11 @@ class _RemoteViewState extends State<RemoteView> {
         children: [
           Row(
             children: [
-              Icon(Icons.mouse_rounded, color: AppColors.iconHighlightOf(context), size: 20),
+              Icon(
+                Icons.mouse_rounded,
+                color: AppColors.iconHighlightOf(context),
+                size: 20,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -874,63 +950,6 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Card que exibe o último comando registrado no console com animação
-  Widget _buildConsoleFeedbackCard() {
-    final controller = context.watch<RemoteController>();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceElevatedOf(context),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.terminal_rounded,
-                size: 16, color: AppColors.iconHighlightOf(context)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'ÚLTIMO COMANDO EXECUTADO',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                    color: AppColors.textMutedOf(context),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  controller.lastActionMessage,
-                  style: TextStyle(
-                    fontFamily: 'Consolas',
-                    fontSize: 12,
-                    color: AppColors.textPrimaryOf(context),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Card informativo de atalhos de teclado desktop
   Widget _buildKeyboardShortcutsHelpCard() {
     return Container(
@@ -946,7 +965,11 @@ class _RemoteViewState extends State<RemoteView> {
         children: [
           Row(
             children: [
-              Icon(Icons.keyboard_outlined, color: AppColors.textSecondaryOf(context), size: 18),
+              Icon(
+                Icons.keyboard_outlined,
+                color: AppColors.textSecondaryOf(context),
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

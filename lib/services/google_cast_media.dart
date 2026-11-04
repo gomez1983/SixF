@@ -6,6 +6,14 @@ import 'dart:typed_data';
 import 'drivers/google_tv/wire.dart';
 import 'network_security_utils.dart';
 
+/// The receiver answered EDIT_TRACKS_INFO with something other than MEDIA_STATUS.
+class CastTrackRefused implements Exception {
+  const CastTrackRefused(this.reason);
+  final String reason;
+  @override
+  String toString() => 'O Chromecast recusou a troca de legenda ($reason).';
+}
+
 /// Google Cast V2 Default Media Receiver. Independent from Remote Service v2.
 class GoogleCastMedia {
   GoogleCastMedia({this.port = 8009});
@@ -22,6 +30,7 @@ class GoogleCastMedia {
   int _request = 0;
   int _generation = 0;
   String _destination = 'receiver-0';
+  String? _receiverSession;
   int? _mediaSession;
   Map<String, dynamic>? _lastLoad;
   bool _loading = false;
@@ -34,7 +43,7 @@ class GoogleCastMedia {
     if (states.isEmpty) return;
     final next = Map<String, dynamic>.from(states.first as Map);
     final id = next['mediaSessionId'] as int?;
-    if (id == null || (_mediaSession != null && id != _mediaSession)) return;
+    if (id == null) return;
     if (_mediaSession != id) _status = {};
     _mediaSession = id;
     _status = {..._status, ...next};
@@ -64,7 +73,7 @@ class GoogleCastMedia {
     Map<String, dynamic> data, {
     String? destination,
   }) async {
-    if (_socket == null) throw StateError('A sessão de mídia foi encerrada.');
+    if (_socket == null) throw StateError('A sessÃ£o de mÃ­dia foi encerrada.');
     final id = ++_request;
     final reply = Completer<Map<String, dynamic>>();
     _pending[id] = reply;
@@ -114,11 +123,19 @@ class GoogleCastMedia {
     }
   }
 
-  Future<void> load(String host, String url, String title, String mime) async {
+  Future<void> load(
+    String host,
+    String url,
+    String title,
+    String mime, {
+    List<Map<String, dynamic>>? tracks,
+    List<int>? activeTrackIds,
+    Duration? duration,
+  }) async {
     close();
     final generation = _generation;
     if (!NetworkSecurityUtils.isLocalNetworkHost(host)) {
-      throw StateError('IP local inválido.');
+      throw StateError('IP local invÃ¡lido.');
     }
     final socket = await SecureSocket.connect(
       host,
@@ -128,7 +145,7 @@ class GoogleCastMedia {
     );
     if (generation != _generation) {
       socket.destroy();
-      throw StateError('Transmissão cancelada.');
+      throw StateError('TransmissÃ£o cancelada.');
     }
     _socket = socket;
     _destination = 'receiver-0';
@@ -154,27 +171,165 @@ class GoogleCastMedia {
       'type': 'LAUNCH',
       'appId': 'CC1AD845',
     }, destination: 'receiver-0');
-    if (generation != _generation) throw StateError('Transmissão cancelada.');
+    if (generation != _generation) throw StateError('TransmissÃ£o cancelada.');
     final status = launched['status'] as Map<String, dynamic>?;
     final apps = status?['applications'] as List? ?? [];
     final matches = apps.where((a) => a['appId'] == 'CC1AD845').toList();
     if (matches.isEmpty) {
-      throw StateError('O Chromecast não abriu o receptor de mídia.');
+      throw StateError('O Chromecast nÃ£o abriu o receptor de mÃ­dia.');
     }
     _destination = matches.first['transportId'] as String;
+    _receiverSession = matches.first['sessionId'] as String?;
     _send(connection, {'type': 'CONNECT'});
+    final mediaMap = <String, dynamic>{
+      'contentId': url,
+      'contentType': mime,
+      'streamType': 'BUFFERED',
+      if (duration != null && duration > Duration.zero)
+        'duration': duration.inMilliseconds / 1000.0,
+      'metadata': {
+        'metadataType': mime.startsWith('image/') ? 4 : 0,
+        'title': title,
+      },
+      'textTrackStyle': {
+        'foregroundColor': '#FFFFFFFF',
+        'backgroundColor': '#00000000',
+        'edgeType': 'DROP_SHADOW',
+        'edgeColor': '#000000FF',
+        'fontScale': 1.0,
+        'fontGenericFamily': 'SANS_SERIF',
+      },
+    };
+    if (tracks != null && tracks.isNotEmpty) {
+      mediaMap['tracks'] = tracks;
+    }
     _lastLoad = {
       'type': 'LOAD',
       'autoplay': true,
       'currentTime': 0,
+      'media': mediaMap,
+      if (activeTrackIds != null && activeTrackIds.isNotEmpty)
+        'activeTrackIds': activeTrackIds,
+    };
+    await reload();
+  }
+
+  Future<void> setActiveTrackIds(List<int> trackIds) async {
+    if (_mediaSession == null || _socket == null) {
+      throw StateError('Sessão encerrada.');
+    }
+    // 1. Tenta envio minimalista (sem textTrackStyle), padrão exigido por muitos receptores
+    final result = await _ask(media, {
+      'type': 'EDIT_TRACKS_INFO',
+      'mediaSessionId': _mediaSession,
+      'activeTrackIds': trackIds,
+    });
+    if (result['type'] == 'MEDIA_STATUS') {
+      if (_lastLoad != null) {
+        _lastLoad = {..._lastLoad!, 'activeTrackIds': trackIds};
+      }
+      _acceptStatus(result);
+      return;
+    }
+    // 2. Se o receptor não respondeu com MEDIA_STATUS, tenta com textTrackStyle
+    final styledResult = await _ask(media, {
+      'type': 'EDIT_TRACKS_INFO',
+      'mediaSessionId': _mediaSession,
+      'activeTrackIds': trackIds,
+      'textTrackStyle': const {
+        'foregroundColor': '#FFFFFFFF',
+        'backgroundColor': '#00000000',
+        'edgeType': 'DROP_SHADOW',
+        'edgeColor': '#000000FF',
+        'fontScale': 1.0,
+        'fontGenericFamily': 'SANS_SERIF',
+      },
+    });
+    if (styledResult['type'] == 'MEDIA_STATUS') {
+      if (_lastLoad != null) {
+        _lastLoad = {..._lastLoad!, 'activeTrackIds': trackIds};
+      }
+      _acceptStatus(styledResult);
+      return;
+    }
+    final reason = styledResult['reason'] ??
+        styledResult['type'] ??
+        result['reason'] ??
+        result['type'] ??
+        'desconhecido';
+    throw StateError('O Chromecast recusou a legenda ($reason).');
+  }
+
+  /// Recarrega a mídia aplicando as faixas ativas e preservando a posição de reprodução.
+  Future<void> reloadWithActiveTracks({
+    required List<int> activeTrackIds,
+    List<Map<String, dynamic>>? tracks,
+    Duration? currentTime,
+    bool autoplay = true,
+  }) async {
+    final last = _lastLoad;
+    if (last == null || _socket == null) {
+      throw StateError('Não há mídia para recarregar.');
+    }
+    final mediaMap = Map<String, dynamic>.from(last['media'] as Map);
+    if (tracks != null && tracks.isNotEmpty) {
+      mediaMap['tracks'] = tracks;
+    }
+    _lastLoad = {
+      ...last,
+      'autoplay': autoplay,
+      if (currentTime != null)
+        'currentTime': currentTime.inMilliseconds / 1000.0,
+      'activeTrackIds': activeTrackIds,
+      'media': mediaMap,
+    };
+    await reload();
+  }
+
+  Future<void> stopReceiver() async {
+    final session = _receiverSession;
+    if (session == null) {
+      await command('STOP');
+      return;
+    }
+    final result = await _ask(receiver, {
+      'type': 'STOP',
+      'sessionId': session,
+    }, destination: 'receiver-0');
+    if (result['type'] != 'RECEIVER_STATUS' && result['type'] != 'CLOSED') {
+      throw StateError('O Chromecast nÃ£o confirmou o encerramento.');
+    }
+  }
+
+  /// Loads a fresh remux URL on the existing receiver without a byte-range seek.
+  Future<void> replaceRemux(
+    String url,
+    Duration duration, {
+    bool autoplay = true,
+  }) async {
+    final previous = _lastLoad;
+    if (previous == null) throw StateError('NÃ£o hÃ¡ mÃ­dia para reposicionar.');
+    final previousMedia = Map<String, dynamic>.from(previous['media'] as Map);
+    final tracks = previousMedia['tracks'] as List?;
+    _lastLoad = {
+      ...previous,
+      'currentTime': 0,
+      'autoplay': autoplay,
       'media': {
+        ...previousMedia,
         'contentId': url,
-        'contentType': mime,
-        'streamType': 'BUFFERED',
-        'metadata': {
-          'metadataType': mime.startsWith('image/') ? 4 : 0,
-          'title': title,
-        },
+        'duration': duration.inMilliseconds / 1000.0,
+        if (tracks != null)
+          'tracks': [
+            for (final track in tracks)
+              {
+                ...Map<String, dynamic>.from(track as Map),
+                if (track['trackContentId'] is String)
+                  'trackContentId': Uri.parse(track['trackContentId'] as String)
+                      .replace(queryParameters: {'segment': url})
+                      .toString(),
+              },
+          ],
       },
     };
     await reload();
@@ -182,7 +337,7 @@ class GoogleCastMedia {
 
   Future<void> reload() async {
     if (_lastLoad == null || _socket == null) {
-      throw StateError('Não há mídia para repetir.');
+      throw StateError('NÃ£o hÃ¡ mÃ­dia para repetir.');
     }
     final generation = _generation;
     _status = {};
@@ -194,13 +349,13 @@ class GoogleCastMedia {
     } finally {
       if (generation == _generation) _loading = false;
     }
-    if (generation != _generation) throw StateError('Transmissão cancelada.');
+    if (generation != _generation) throw StateError('TransmissÃ£o cancelada.');
     final states = result['status'] as List? ?? [];
     if (result['type'] != 'MEDIA_STATUS' ||
         states.isEmpty ||
         states.first['idleReason'] == 'ERROR') {
       throw StateError(
-        'O Chromecast recusou a mídia. Confira o formato e o acesso ao arquivo.',
+        'O Chromecast recusou a mÃ­dia. Confira o formato e o acesso ao arquivo.',
       );
     }
     _acceptStatus(result);
@@ -209,7 +364,7 @@ class GoogleCastMedia {
   Future<void> refresh() async {
     final result = await _ask(media, {'type': 'GET_STATUS'});
     if (result['type'] != 'MEDIA_STATUS') {
-      throw StateError('O Chromecast não informou o estado da reprodução.');
+      throw StateError('O Chromecast nÃ£o informou o estado da reproduÃ§Ã£o.');
     }
     _acceptStatus(result);
   }
@@ -220,7 +375,7 @@ class GoogleCastMedia {
       return;
     }
     if (_mediaSession == null || _socket == null) {
-      throw StateError('A sessão de mídia foi encerrada.');
+      throw StateError('A sessÃ£o de mÃ­dia foi encerrada.');
     }
     final result = await _ask(media, {
       'type': type,
@@ -228,7 +383,7 @@ class GoogleCastMedia {
       'currentTime': ?currentTime,
     });
     if (result['type'] != 'MEDIA_STATUS') {
-      throw StateError('Comando de mídia recusado pelo Chromecast.');
+      throw StateError('Comando de mÃ­dia recusado pelo Chromecast.');
     }
     _acceptStatus(result);
   }
@@ -245,6 +400,7 @@ class GoogleCastMedia {
     _mediaSession = null;
     _status = {};
     _lastLoad = null;
+    _receiverSession = null;
     _loading = false;
     for (final value in _pending.values) {
       if (!value.isCompleted) value.complete({'type': 'CLOSED'});

@@ -23,8 +23,8 @@ class MultimediaControls extends StatelessWidget {
 
     final mediaActions = [
       _MediaButtonData(
-        icon: Icons.fast_rewind_rounded,
-        tooltip: 'Retroceder (<<)',
+        icon: local ? Icons.replay_10 : Icons.fast_rewind_rounded,
+        tooltip: local ? 'Recuar 10 segundos' : 'Retroceder (<<)',
         onPressed: local && !media.canSeek
             ? null
             : () {
@@ -38,35 +38,27 @@ class MultimediaControls extends StatelessWidget {
               },
       ),
       _MediaButtonData(
-        icon: Icons.play_arrow_rounded,
-        tooltip: 'Reproduzir (Play)',
-        isPrimary: controller.selectedMediaAction == 'play',
-        onPressed: local && !media.canPlay
+        icon:
+            (local ? media.isPlaying : controller.selectedMediaAction == 'play')
+            ? Icons.pause_rounded
+            : Icons.play_arrow_rounded,
+        tooltip:
+            (local ? media.isPlaying : controller.selectedMediaAction == 'play')
+            ? 'Pausar (Pause)'
+            : 'Reproduzir (Play)',
+        isPrimary: local && media.isPlaying,
+        onPressed: local && !(media.isPlaying ? media.canPause : media.canPlay)
             ? null
             : () {
+                final pause = local
+                    ? media.isPlaying
+                    : controller.selectedMediaAction == 'play';
                 if (local) {
-                  media.play();
-                  controller.selectMediaAction('play');
+                  pause ? media.pause() : media.play();
                 } else {
-                  controller.mediaPlay();
-                  controller.selectMediaAction('play');
+                  pause ? controller.mediaPause() : controller.mediaPlay();
                 }
-              },
-      ),
-      _MediaButtonData(
-        icon: Icons.pause_rounded,
-        tooltip: 'Pausar (Pause)',
-        isPrimary: controller.selectedMediaAction == 'pause',
-        onPressed: local && !media.canPause
-            ? null
-            : () {
-                if (local) {
-                  media.pause();
-                  controller.selectMediaAction('pause');
-                } else {
-                  controller.mediaPause();
-                  controller.selectMediaAction('pause');
-                }
+                controller.selectMediaAction(pause ? 'pause' : 'play');
               },
       ),
       _MediaButtonData(
@@ -84,8 +76,8 @@ class MultimediaControls extends StatelessWidget {
         },
       ),
       _MediaButtonData(
-        icon: Icons.fast_forward_rounded,
-        tooltip: 'Avançar (>>)',
+        icon: local ? Icons.forward_10 : Icons.fast_forward_rounded,
+        tooltip: local ? 'Avançar 10 segundos' : 'Avançar (>>)',
         onPressed: local && !media.canSeek
             ? null
             : () {
@@ -102,11 +94,7 @@ class MultimediaControls extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-      ),
+      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -135,7 +123,11 @@ class MultimediaControls extends StatelessWidget {
             }).toList(),
           ),
           if (media != null)
-            MediaSessionControls(controller: media, enabled: local),
+            MediaSessionControls(
+              controller: media,
+              enabled: local,
+              showTransportControls: false,
+            ),
           if (!local)
             const Padding(
               padding: EdgeInsets.only(top: 8),

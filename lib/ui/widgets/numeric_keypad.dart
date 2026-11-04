@@ -29,11 +29,7 @@ class NumericKeypad extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSubtleOf(context)),
-      ),
+      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

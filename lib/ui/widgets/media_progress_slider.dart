@@ -20,19 +20,23 @@ class _MediaProgressSliderState extends State<MediaProgressSlider> {
     final max = controller.totalDuration.inMilliseconds.toDouble();
     if (max <= 0) return const SizedBox.shrink();
     if (!controller.canSeek) _preview = null;
-    return Slider(
-      value: (_preview ?? controller.currentPosition.inMilliseconds.toDouble())
-          .clamp(0, max),
-      max: max,
-      onChanged: controller.canSeek
-          ? (value) => setState(() => _preview = value)
-          : null,
-      onChangeEnd: controller.canSeek
-          ? (value) {
-              setState(() => _preview = null);
-              controller.seekTo(Duration(milliseconds: value.round()));
-            }
-          : null,
+    return ExcludeSemantics(
+      child: Slider(
+        value: (_preview ?? controller.currentPosition.inMilliseconds.toDouble())
+            .clamp(0, max),
+        max: max,
+        onChanged: controller.canSeek
+            ? (value) {
+                if (mounted) setState(() => _preview = value);
+              }
+            : null,
+        onChangeEnd: controller.canSeek
+            ? (value) {
+                if (mounted) setState(() => _preview = null);
+                controller.seekTo(Duration(milliseconds: value.round()));
+              }
+            : null,
+      ),
     );
   }
 }
