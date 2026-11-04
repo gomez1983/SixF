@@ -34,6 +34,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final libraryTabLeft = tester
+          .getTopLeft(find.text('Biblioteca de mídia').last)
+          .dx;
+      final appsTabLeft = tester.getTopLeft(find.text('Apps').last).dx;
+      expect(libraryTabLeft, lessThan(appsTabLeft));
       await tester.tap(find.text('Biblioteca de mídia').first);
       await tester.pumpAndSettle();
       expect(find.textContaining('Biblioteca de mídia ·'), findsOneWidget);

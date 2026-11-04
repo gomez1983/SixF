@@ -14,6 +14,7 @@ import '../models/dlna_renderer.dart';
 import '../services/dlna_transport.dart';
 import '../services/drivers/tv_driver.dart';
 import '../services/haptic_service.dart';
+import '../services/library_sources.dart';
 import '../services/media_server_service.dart';
 import '../services/network_operation.dart';
 
@@ -95,6 +96,20 @@ class MediaCastController extends ChangeNotifier {
       _order.insert(0, _playlistIndex);
     }
     notifyListeners();
+    if (!isPhoto &&
+        _status == MediaCastStatus.stopped &&
+        _transport == MediaCastTransport.cast &&
+        (_cast?.status['idleReason'] == 'FINISHED' ||
+            _cast == null ||
+            !_cast!.isConnected) &&
+        _sequential &&
+        canNext &&
+        !_navigating &&
+        !_loopRestarting) {
+      scheduleMicrotask(() {
+        if (!_disposed && !isPhoto && canNext) next();
+      });
+    }
   }
 
   bool get canPrevious =>
@@ -121,11 +136,18 @@ class MediaCastController extends ChangeNotifier {
   Future<bool> previous() => _navigate(-1);
   Future<bool> next() => _navigate(1);
   Future<bool> _navigate(int step) async {
-    if (step < 0 ? !canPrevious : !canNext) return false;
+    if (step < 0) {
+      if (!canPrevious) return false;
+    } else if (step > 0) {
+      if (!canNext) return false;
+    } else if (_navigating || isBusy || !_order.contains(_playlistIndex)) {
+      return false;
+    }
     final target = _playlistTarget;
     if (target == null) return false;
     final selection = _selectionGeneration;
     final playlist = _playlist;
+    final cacheBefore = _sessionCache;
     final index = _order[_order.indexOf(_playlistIndex) + step];
     _navigating = true;
     notifyListeners();
@@ -144,6 +166,9 @@ class MediaCastController extends ChangeNotifier {
     if (_disposed ||
         selection != _selectionGeneration ||
         !identical(playlist, _playlist)) {
+      if (cacheBefore != null && !identical(cacheBefore, _sessionCache)) {
+        unawaited(_removeCache(cacheBefore));
+      }
       _navigating = false;
       if (!_disposed) notifyListeners();
       return false;
@@ -196,12 +221,13 @@ class MediaCastController extends ChangeNotifier {
   }
 
   Directory? _sessionCache;
-  void _replaceCache(Directory? next) {
+  Future<void> _replaceCache(Directory? next) {
     final old = _sessionCache;
     _sessionCache = next;
     if (old != null && old.path != next?.path) {
-      unawaited(_removeCache(old));
+      return _removeCache(old);
     }
+    return Future<void>.value();
   }
 
   Future<void> _removeCache(Directory directory) async {
@@ -239,7 +265,7 @@ class MediaCastController extends ChangeNotifier {
       location: locationUrl,
       driver: activeDriver,
     );
-    return castFile(
+    final ok = await castFile(
       first,
       fileName: names?[startIndex],
       targetTvIp: targetTvIp,
@@ -249,28 +275,10 @@ class MediaCastController extends ChangeNotifier {
       activeDriver: activeDriver,
       preservePlaylist: true,
     );
-  }
-
-  Future<List<File>> _photoSiblings(File first) async {
-    if (!Platform.isWindows) return [first];
-    const extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'};
-    try {
-      final siblings = await first.parent
-          .list(followLinks: false)
-          .where(
-            (e) =>
-                e is File &&
-                extensions.any((ext) => e.path.toLowerCase().endsWith(ext)),
-          )
-          .cast<File>()
-          .toList();
-      siblings.sort(
-        (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
-      );
-      return siblings.any((f) => f.path == first.path) ? siblings : [first];
-    } catch (_) {
-      return [first];
+    if (!ok && identical(_sessionCache, cacheDirectory)) {
+      await _replaceCache(null);
     }
+    return ok;
   }
 
   MediaCastController({
@@ -317,8 +325,71 @@ class MediaCastController extends ChangeNotifier {
       _availableTracks.where((t) => t.type == 'subtitle').toList();
   MediaTrack? get selectedAudioTrack => _selectedAudioTrack;
   MediaTrack? get selectedSubtitleTrack => _selectedSubtitleTrack;
+  Duration _subtitleOffset = Duration.zero;
+  Duration get subtitleOffset => _subtitleOffset;
+  bool get canAdjustSubtitleOffset =>
+      isStreaming &&
+      _transport == MediaCastTransport.cast &&
+      _selectedSubtitleTrack != null &&
+      !_commandPending &&
+      !_isSeeking;
+
+  Future<void> adjustSubtitleOffset(Duration delta) async {
+    final operation = _operation;
+    if (!canAdjustSubtitleOffset || operation == null || !_current(operation)) {
+      return;
+    }
+    final previous = _subtitleOffset;
+    final next = Duration(
+      milliseconds: (previous + delta).inMilliseconds.clamp(-60000, 60000),
+    );
+    if (next == previous) return;
+    final position = _currentPosition;
+    final autoplay = isPlaying;
+    _commandPending = true;
+    _errorMessage = null;
+    _serverService.setSubtitleOffset(next);
+    notifyListeners();
+    try {
+      await _serverService.prepareSubtitle(_selectedSubtitleTrack!.id);
+      operation.check();
+      if (_remuxCast) {
+        await _restartCastRemux(position, operation, autoplay: autoplay);
+      } else {
+        final tracks = await _buildCastTracks(_targetIp!);
+        operation.check();
+        await _cast!.reloadWithActiveTracks(
+          activeTrackIds: [_selectedSubtitleTrack!.id + 1],
+          tracks: tracks,
+          currentTime: position,
+          autoplay: autoplay,
+        );
+      }
+      operation.check();
+      _subtitleOffset = next;
+    } catch (e) {
+      if (_current(operation)) {
+        _serverService.setSubtitleOffset(previous);
+        _errorMessage = 'Não foi possível ajustar a sincronia: $e';
+      }
+      rethrow;
+    } finally {
+      if (_current(operation)) {
+        _commandPending = false;
+        notifyListeners();
+      }
+    }
+  }
 
   Future<void> selectAudioTrack(MediaTrack? track) async {
+    final previousTrack = _selectedAudioTrack;
+    final previousTracks = _availableTracks;
+    final previousPosition = _currentPosition;
+    final previousOffset = _castOffset;
+    final previousStatus = _status;
+    final previousTransport = _transport;
+    final wasPaused = isPaused;
+    final resumePosition = _hasPosition ? _currentPosition : Duration.zero;
     _selectedAudioTrack = track;
     notifyListeners();
     if (isStreaming &&
@@ -327,14 +398,30 @@ class MediaCastController extends ChangeNotifier {
         _targetBrand != null) {
       final file = File(_currentFilePath!);
       if (await file.exists()) {
-        await castFile(
+        final ok = await castFile(
           file,
           fileName: _currentFileName,
           targetTvIp: _targetIp!,
           brand: _targetBrand!,
           tvName: _currentTvName,
+          locationUrl: _playlistTarget?.location,
+          activeDriver: _activeDriver ?? _playlistTarget?.driver,
           preservePlaylist: true,
+          preferredAudioTrackId: track?.id,
+          preferredSubtitleTrackId: _selectedSubtitleTrack?.id,
+          preferredSubtitleOffset: _subtitleOffset,
+          initialPosition: resumePosition,
+          initialAutoplay: !wasPaused,
         );
+        if (!ok && !_disposed) {
+          _availableTracks = previousTracks;
+          _selectedAudioTrack = previousTrack;
+          _currentPosition = previousPosition;
+          _castOffset = previousOffset;
+          _status = previousStatus;
+          _transport = previousTransport;
+          notifyListeners();
+        }
       }
     }
   }
@@ -449,11 +536,11 @@ class MediaCastController extends ChangeNotifier {
           : _actions.contains(action));
 
   String get playbackLabel {
-    if (isPhoto) return 'Imagem enviada Ã  TV';
+    if (isPhoto) return 'Imagem enviada à TV';
     if (_status == MediaCastStatus.playing) return 'Reproduzindo na TV';
     if (_status == MediaCastStatus.paused) return 'Pausado na TV';
     if (_status == MediaCastStatus.stopped) return 'ReproduÃ§Ã£o parada na TV';
-    return _lastCommand ?? 'MÃ­dia enviada Ã  TV';
+    return _lastCommand ?? 'Mídia enviada à TV';
   }
 
   MediaCastStatus get status => _status;
@@ -520,13 +607,10 @@ class MediaCastController extends ChangeNotifier {
       }
 
       if (_disposed || selection != _selectionGeneration) return false;
-      var files = pickedFiles
+      final files = pickedFiles
           .where((f) => f.path != null)
           .map((f) => File(f.path!))
           .toList();
-      if (fileType == FileType.image && files.length == 1) {
-        files = await _photoSiblings(file);
-      }
       if (_disposed || selection != _selectionGeneration) return false;
       return await castPlaylist(
         files,
@@ -565,12 +649,17 @@ class MediaCastController extends ChangeNotifier {
     String? locationUrl,
     TvDriver? activeDriver,
     bool preservePlaylist = false,
+    int? preferredAudioTrackId,
+    int? preferredSubtitleTrackId,
+    Duration? preferredSubtitleOffset,
+    Duration? initialPosition,
+    bool? initialAutoplay,
   }) async {
     if (_disposed) return false;
     _targetIp = targetTvIp;
     _targetBrand = brand;
     if (!preservePlaylist) {
-      _replaceCache(null);
+      unawaited(_replaceCache(null));
       _playlistNames = null;
       _playlist = [() async => file];
       _sequential = false;
@@ -613,6 +702,7 @@ class MediaCastController extends ChangeNotifier {
     _availableTracks = [];
     _selectedAudioTrack = null;
     _selectedSubtitleTrack = null;
+    _subtitleOffset = preferredSubtitleOffset ?? Duration.zero;
     try {
       await closing;
       if (!_current(operation)) return false;
@@ -626,6 +716,10 @@ class MediaCastController extends ChangeNotifier {
           tvName: tvName,
           locationUrl: locationUrl,
           activeDriver: activeDriver,
+          preferredAudioTrackId: preferredAudioTrackId,
+          preferredSubtitleTrackId: preferredSubtitleTrackId,
+          initialPosition: initialPosition,
+          initialAutoplay: initialAutoplay,
         ),
       );
     } on OperationCancelled {
@@ -642,6 +736,10 @@ class MediaCastController extends ChangeNotifier {
     String? tvName,
     String? locationUrl,
     TvDriver? activeDriver,
+    int? preferredAudioTrackId,
+    int? preferredSubtitleTrackId,
+    Duration? initialPosition,
+    bool? initialAutoplay,
   }) async {
     _setErrorMessage(null);
     _activeDriver = activeDriver;
@@ -654,10 +752,29 @@ class MediaCastController extends ChangeNotifier {
       }
 
       final originalPath = file.path;
+      final lowerOrig = originalPath.toLowerCase();
       if (brand == TvBrand.googleTv) {
         file = await MediaRemuxService.convertImageOrAnimationForCast(file);
       }
       operation.check();
+      final lowerResolved = file.path.toLowerCase();
+      final isAnimatedLoop =
+          lowerOrig.endsWith('.gif') ||
+          (lowerOrig.endsWith('.webp') && lowerResolved.endsWith('.mp4'));
+      if (isAnimatedLoop) {
+        _isLooping = true;
+      }
+      final isStaticImage =
+          lowerResolved.endsWith('.jpg') ||
+          lowerResolved.endsWith('.jpeg') ||
+          lowerResolved.endsWith('.png') ||
+          lowerResolved.endsWith('.bmp') ||
+          lowerResolved.endsWith('.ico') ||
+          lowerResolved.endsWith('.heic') ||
+          lowerResolved.endsWith('.tiff') ||
+          lowerResolved.endsWith('.avif') ||
+          lowerResolved.endsWith('.webp') ||
+          lowerResolved.endsWith('.gif');
       _currentFileName = fileName ?? file.uri.pathSegments.last;
       _currentFilePath = file.path;
       _currentFileSize = await file.length();
@@ -675,51 +792,77 @@ class MediaCastController extends ChangeNotifier {
       final probeTarget = cloudDesc != null
           ? cloudDesc['url'] as String?
           : file.path;
-      final probeHeaders = cloudDesc != null && cloudDesc['headers'] is Map
+      final cloudSource = cloudDesc?['source'] as String?;
+      var probeHeaders = cloudDesc != null && cloudDesc['headers'] is Map
           ? Map<String, String>.from(cloudDesc['headers'] as Map)
           : null;
+      if (cloudSource != null) {
+        final freshToken = await LibrarySources.freshTokenForSourceName(
+          cloudSource,
+        );
+        if (freshToken != null && freshToken.isNotEmpty) {
+          probeHeaders = {
+            ...?probeHeaders,
+            'Authorization': 'Bearer $freshToken',
+          };
+        }
+      }
 
       MediaDetails? mediaDetails;
-      if (probeTarget != null) {
-        if (cloudDesc == null) {
-          try {
-            final details = await _probeMedia(probeTarget)
-                .timeout(const Duration(seconds: 4));
-            mediaDetails = details;
-            _availableTracks = details.tracks;
-            _selectedAudioTrack =
-                details.tracks
-                    .where((t) => t.type == 'audio' && t.isDefault)
-                    .firstOrNull ??
-                details.tracks.where((t) => t.type == 'audio').firstOrNull;
-            _selectedSubtitleTrack = details.tracks
-                .where((t) => t.type == 'subtitle' && t.isDefault)
-                .firstOrNull;
-          } catch (_) {}
-        } else {
-          MediaRemuxService.probeMediaDetails(
-                probeTarget,
-                headers: probeHeaders,
-              )
-              .then((details) {
-                if (_currentFilePath == file.path &&
-                    details.tracks.isNotEmpty) {
-                  _availableTracks = details.tracks;
-                  _selectedAudioTrack ??=
-                      details.tracks
-                          .where((t) => t.type == 'audio' && t.isDefault)
-                          .firstOrNull ??
-                      details.tracks
-                          .where((t) => t.type == 'audio')
-                          .firstOrNull;
-                  _selectedSubtitleTrack ??= details.tracks
-                      .where((t) => t.type == 'subtitle' && t.isDefault)
-                      .firstOrNull;
-                  notifyListeners();
-                }
-              })
-              .catchError((_) {});
-        }
+      if (probeTarget != null && !isStaticImage && file.path == originalPath) {
+        try {
+          final details =
+              await (cloudDesc == null
+                      ? _probeMedia(probeTarget)
+                      : MediaRemuxService.probeMediaDetails(
+                          probeTarget,
+                          headers: probeHeaders,
+                        ))
+                  .timeout(
+                    cloudDesc == null
+                        ? const Duration(seconds: 6)
+                        : const Duration(seconds: 10),
+                  );
+          operation.check();
+          mediaDetails = details;
+          _availableTracks = details.tracks;
+          final defaultAudio =
+              details.tracks
+                  .where((t) => t.type == 'audio' && t.isDefault)
+                  .firstOrNull ??
+              details.tracks.where((t) => t.type == 'audio').firstOrNull;
+          final requestedAudio = preferredAudioTrackId != null
+              ? details.tracks
+                    .where(
+                      (t) =>
+                          t.type == 'audio' && t.id == preferredAudioTrackId,
+                    )
+                    .firstOrNull
+              : null;
+          if (preferredAudioTrackId != null &&
+              defaultAudio != null &&
+              requestedAudio == null) {
+            throw StateError('A faixa de áudio selecionada não está disponível.');
+          }
+          _selectedAudioTrack = requestedAudio ?? defaultAudio;
+          _selectedSubtitleTrack =
+              (preferredSubtitleTrackId != null
+                  ? details.tracks
+                        .where(
+                          (t) =>
+                              t.type == 'subtitle' &&
+                              t.id == preferredSubtitleTrackId,
+                        )
+                        .firstOrNull
+                  : null) ??
+              (cloudDesc == null
+                  ? details.tracks
+                        .where((t) => t.type == 'subtitle' && t.isDefault)
+                        .firstOrNull
+                  : null);
+        } on StateError {
+          rethrow;
+        } catch (_) {}
       }
 
       // 1. Inicia ou reutiliza o servidor HTTP local
@@ -730,23 +873,44 @@ class MediaCastController extends ChangeNotifier {
       await _serverService.start();
       operation.check();
 
-      final isMkv = file.path.toLowerCase().endsWith('.mkv');
+      final mediaName = (_currentFileName ?? file.path).toLowerCase();
+      final isMkv = mediaName.endsWith('.mkv');
+      final defaultAudioTrack =
+          mediaDetails?.tracks
+              .where((t) => t.type == 'audio' && t.isDefault)
+              .firstOrNull ??
+          mediaDetails?.tracks.where((t) => t.type == 'audio').firstOrNull;
+      final isNonDefaultAudioSelected =
+          _selectedAudioTrack != null &&
+          defaultAudioTrack != null &&
+          _selectedAudioTrack!.id != defaultAudioTrack.id;
       final needAudioRemux =
-          mediaDetails != null && !mediaDetails.isChromecastAudioCompatible;
+          (mediaDetails != null && !mediaDetails.isChromecastAudioCompatible) ||
+          isNonDefaultAudioSelected;
+      final isVideoFile =
+          !isStaticImage &&
+          (isMkv ||
+              mediaName.endsWith('.mp4') ||
+              mediaName.endsWith('.webm') ||
+              mediaName.endsWith('.avi') ||
+              mediaName.endsWith('.ts') ||
+              mediaName.endsWith('.mov'));
       final needVideoTranscode =
           brand == TvBrand.googleTv &&
+          isVideoFile &&
+          file.path == originalPath &&
           (mediaDetails != null && !mediaDetails.isChromecastVideoCompatible);
-      final isVideoFile =
-          isMkv ||
-          file.path.toLowerCase().endsWith('.mp4') ||
-          file.path.toLowerCase().endsWith('.webm') ||
-          file.path.toLowerCase().endsWith('.avi') ||
-          file.path.toLowerCase().endsWith('.ts') ||
-          file.path.toLowerCase().endsWith('.mov');
       final needRemux =
-          (brand == TvBrand.googleTv &&
-              (needAudioRemux || needVideoTranscode || (isMkv && !isPhoto))) ||
-          (needAudioRemux && isVideoFile);
+          !isStaticImage &&
+          file.path == originalPath &&
+          ((brand == TvBrand.googleTv &&
+                  (needAudioRemux || needVideoTranscode || isMkv)) ||
+              (needAudioRemux && isVideoFile));
+      final remuxMime =
+          mediaDetails?.videoCodec == null &&
+              (mediaDetails?.tracks.any((t) => t.type == 'audio') ?? false)
+          ? 'audio/mp4'
+          : 'video/mp4';
 
       _sourceDuration = mediaDetails?.duration ?? Duration.zero;
       _castOffset = Duration.zero;
@@ -757,19 +921,37 @@ class MediaCastController extends ChangeNotifier {
         file,
         customName: _currentFileName,
         mimeType: needRemux
-            ? 'video/mp4'
+            ? remuxMime
             : file.path != originalPath
             ? (file.path.endsWith('.png') ? 'image/png' : 'video/mp4')
             : null,
         remuxProcessFactory: needRemux
-            ? () => MediaRemuxService.startRemuxProcess(
-                file.path,
-                selectedAudioIndex: _selectedAudioTrack?.id,
-                transcodeVideo: needVideoTranscode,
-                startPosition: _serverService.remuxStart,
-              )
+            ? () async {
+                var activeHeaders = probeHeaders;
+                if (cloudSource != null) {
+                  final fresh = await LibrarySources.freshTokenForSourceName(
+                    cloudSource,
+                  );
+                  if (fresh != null && fresh.isNotEmpty) {
+                    activeHeaders = {
+                      ...?activeHeaders,
+                      'Authorization': 'Bearer $fresh',
+                    };
+                  }
+                }
+                return MediaRemuxService.startRemuxProcess(
+                  probeTarget ?? file.path,
+                  headers: activeHeaders,
+                  selectedAudioIndex: _selectedAudioTrack?.id,
+                  transcodeVideo: needVideoTranscode,
+                  startPosition: _serverService.remuxStart,
+                );
+              }
             : null,
       );
+      if (_subtitleOffset != Duration.zero) {
+        _serverService.setSubtitleOffset(_subtitleOffset);
+      }
       _currentFileSize =
           _serverService.currentContentLength ?? _currentFileSize;
       _currentMimeType = _serverService.currentMimeType;
@@ -795,7 +977,7 @@ class MediaCastController extends ChangeNotifier {
         };
         operation.onCancel(cast.close);
         final castMime = needRemux
-            ? 'video/mp4'
+            ? remuxMime
             : ((_currentMimeType != null &&
                       (_currentMimeType!.startsWith('video/') ||
                           _currentMimeType == 'video/x-matroska'))
@@ -804,15 +986,19 @@ class MediaCastController extends ChangeNotifier {
 
         final castTracks = await _buildCastTracks(targetTvIp);
 
-        if (castTracks.isNotEmpty) {
+        if (castTracks.isNotEmpty && cloudDesc == null) {
           final ptSub = _availableTracks
-              .where((t) =>
-                  t.type == 'subtitle' &&
-                  (t.language == 'por' ||
-                      t.title.toLowerCase().contains('portug')))
+              .where(
+                (t) =>
+                    t.type == 'subtitle' &&
+                    (t.language == 'por' ||
+                        t.title.toLowerCase().contains('portug')),
+              )
               .firstOrNull;
           if (ptSub != null) {
-            unawaited(_serverService.prepareSubtitle(ptSub.id).catchError((_) => ''));
+            unawaited(
+              _serverService.prepareSubtitle(ptSub.id).catchError((_) => ''),
+            );
           }
         }
 
@@ -830,6 +1016,33 @@ class MediaCastController extends ChangeNotifier {
         operation.check();
         _transport = MediaCastTransport.cast;
         _applyCastStatus(cast.status, operation);
+        final resumeOffset =
+            initialPosition != null &&
+                initialPosition > Duration.zero &&
+                (_totalDuration == Duration.zero ||
+                    initialPosition < _totalDuration)
+            ? initialPosition
+            : Duration.zero;
+        final shouldResumePaused = initialAutoplay == false;
+        if (_remuxCast && (resumeOffset > Duration.zero || shouldResumePaused)) {
+          await _restartCastRemux(
+            resumeOffset,
+            operation,
+            autoplay: !shouldResumePaused,
+          );
+        } else {
+          if (resumeOffset > Duration.zero) {
+            await cast.command(
+              'SEEK',
+              currentTime: resumeOffset.inMilliseconds / 1000.0,
+            );
+            operation.check();
+          }
+          if (shouldResumePaused && !isPaused) {
+            await cast.command('PAUSE');
+            operation.check();
+          }
+        }
         if (!isPhoto) _startPositionPolling();
         notifyListeners();
         return true;
@@ -943,8 +1156,33 @@ class MediaCastController extends ChangeNotifier {
     notifyListeners();
     try {
       if (_transport == MediaCastTransport.cast) {
-        if (play && _remuxCast && _cast!.status['idleReason'] == 'FINISHED') {
-          await _restartCastRemux(Duration.zero, operation);
+        if (play &&
+            _status == MediaCastStatus.stopped &&
+            (_shuffling || _sequential) &&
+            canNext &&
+            (_cast?.status['idleReason'] == 'FINISHED' ||
+                _cast == null ||
+                !_cast!.isConnected)) {
+          _commandPending = false;
+          await next();
+          return;
+        }
+        if (play &&
+            _remuxCast &&
+            (_cast!.status['idleReason'] == 'FINISHED' ||
+                _status == MediaCastStatus.sent)) {
+          await _restartCastRemux(
+            _status == MediaCastStatus.sent ? _currentPosition : Duration.zero,
+            operation,
+          );
+        } else if (play &&
+            _status == MediaCastStatus.stopped &&
+            (_cast == null || !_cast!.isConnected) &&
+            _playlist.isNotEmpty &&
+            _playlistTarget != null) {
+          _commandPending = false;
+          await _navigate(0);
+          return;
         } else {
           await _cast!.command(play ? 'PLAY' : 'PAUSE');
         }
@@ -1051,7 +1289,14 @@ class MediaCastController extends ChangeNotifier {
     final previousOffset = _castOffset;
     _castOffset = target;
     try {
-      await cast.replaceRemux(url, _totalDuration - target, autoplay: autoplay);
+      final tracks = await _buildCastTracks(_targetIp!);
+      operation.check();
+      await cast.replaceRemux(
+        url,
+        _totalDuration - target,
+        autoplay: autoplay,
+        tracks: tracks,
+      );
       operation.check();
     } catch (_) {
       if (_current(operation)) _castOffset = previousOffset;
@@ -1254,6 +1499,8 @@ class MediaCastController extends ChangeNotifier {
     _order = [];
     _playlistTarget = null;
     _shuffling = false;
+    final oldCache = _sessionCache;
+    _sessionCache = null;
     _selectionGeneration++;
     _operation?.cancel();
     _cancelTimers();
@@ -1279,6 +1526,7 @@ class MediaCastController extends ChangeNotifier {
     _availableTracks = [];
     _selectedAudioTrack = null;
     _selectedSubtitleTrack = null;
+    _subtitleOffset = Duration.zero;
     _errorMessage = null;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
@@ -1298,6 +1546,9 @@ class MediaCastController extends ChangeNotifier {
       } catch (_) {}
     }
     await closing;
+    if (oldCache != null && _sessionCache?.path != oldCache.path) {
+      await _removeCache(oldCache);
+    }
     if (controlUrl != null && _current(operation)) {
       try {
         await operation.run(() => _dlna.stop(controlUrl));
@@ -1319,7 +1570,13 @@ class MediaCastController extends ChangeNotifier {
     _cast?.close();
     _cast = null;
     _navigating = false;
-    _serverService.stop();
+    final oldCache = _sessionCache;
+    _sessionCache = null;
+    unawaited(
+      _serverService.stop().whenComplete(() {
+        if (oldCache != null) return _removeCache(oldCache);
+      }),
+    );
     super.dispose();
   }
 }

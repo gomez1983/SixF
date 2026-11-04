@@ -1,0 +1,24 @@
+{
+  "fixture": "synthetic 1080p30, H264+AAC, 12s",
+  "scope": "FFmpeg subprocess only, sampled every20ms",
+  "measurements": [
+    {
+      "case": "copy",
+      "source_seconds": 12,
+      "elapsed_seconds": 0.949,
+      "sampled_cpu_seconds": 0.922,
+      "peak_rss_mib": 25.7,
+      "output_mib": 8.32,
+      "exit_code": 0
+    },
+    {
+      "case": "seek",
+      "source_seconds": 8.75,
+      "elapsed_seconds": 0.809,
+      "sampled_cpu_seconds": 4.641,
+      "peak_rss_mib": 183.8,
+      "output_mib": 14.93,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -16,17 +16,31 @@ import 'package:flutter/foundation.dart';
 /// para streaming sob demanda da nuvem (sem precisar baixar o arquivo inteiro no disco).
 class MediaServerService {
   final Map<String, Future<String>> _subtitles = {};
+  NetworkOperation _mediaOperation = NetworkOperation();
+  Duration _subtitleOffset = Duration.zero;
+  int _subtitleRevision = 0;
+  final Map<int, ({Duration start, Duration offset})> _subtitleTimelines = {};
+  Duration get subtitleOffset => _subtitleOffset;
+
+  void setSubtitleOffset(Duration offset) {
+    _subtitleOffset = offset;
+    _subtitleRevision++;
+  }
+
   Future<String> prepareSubtitle(int trackId) {
     final file = _currentFile;
     if (file == null) throw StateError('Nenhum vÃ­deo ativo.');
     final key = '$_currentToken:$trackId';
+    final op = _mediaOperation;
     return _subtitles.putIfAbsent(key, () async {
-      final text = await MediaRemuxService.extractVttSubtitle(
-        _cloudDescriptor?['url'] as String? ?? file.path,
-        trackId,
-        headers: _cloudDescriptor?['headers'] is Map
-            ? Map<String, String>.from(_cloudDescriptor!['headers'] as Map)
-            : null,
+      final text = await op.run(
+        () => MediaRemuxService.extractVttSubtitle(
+          _cloudDescriptor?['url'] as String? ?? file.path,
+          trackId,
+          headers: _cloudDescriptor?['headers'] is Map
+              ? Map<String, String>.from(_cloudDescriptor!['headers'] as Map)
+              : null,
+        ),
       );
       if (text == null) {
         _subtitles.remove(key);
@@ -47,19 +61,31 @@ class MediaServerService {
   String? _mediaPath;
   String? _currentToken;
   Future<Process?> Function()? _remuxProcessFactory;
-  Process? _activeRemuxProcess;
+  static const int maxConcurrentRemuxStreams = 4;
+  final Set<Process> _activeRemuxProcesses = {};
+  int _inFlightRemuxStarts = 0;
   Duration _remuxStart = Duration.zero;
   Duration get remuxStart => _remuxStart;
   bool get isRemuxing => _remuxProcessFactory != null;
   int _remuxRevision = 0;
 
+  void _killActiveRemuxProcesses() {
+    _inFlightRemuxStarts = 0;
+    for (final p in _activeRemuxProcesses.toList()) {
+      try {
+        p.kill();
+      } catch (_) {}
+    }
+    _activeRemuxProcesses.clear();
+  }
+
   void restartRemuxAt(Duration position) {
     if (!isRemuxing || position < Duration.zero) {
       throw StateError('NÃ£o hÃ¡ remux ativo para reposicionar.');
     }
-    _activeRemuxProcess?.kill();
-    _activeRemuxProcess = null;
+    _killActiveRemuxProcesses();
     _remuxStart = position;
+    _subtitleRevision++;
     // A new URL prevents the receiver from reusing the old fragmented buffer.
     _mediaPath =
         '/media/$_currentToken/${++_remuxRevision}/${Uri.encodeComponent(_fileName!)}';
@@ -129,10 +155,14 @@ class MediaServerService {
     String? customName,
     Future<Process?> Function()? remuxProcessFactory,
   }) {
-    _activeRemuxProcess?.kill();
-    _activeRemuxProcess = null;
+    _killActiveRemuxProcesses();
+    _mediaOperation.cancel();
+    _mediaOperation = NetworkOperation();
     _remuxProcessFactory = remuxProcessFactory;
     _subtitles.clear();
+    _subtitleTimelines.clear();
+    _subtitleOffset = Duration.zero;
+    _subtitleRevision = 0;
     _remuxStart = Duration.zero;
     final random = Random.secure();
     final token = List.generate(
@@ -218,10 +248,21 @@ class MediaServerService {
       return null;
     }
     final server = _server;
+    final token = _currentToken;
+    final revision = _subtitleRevision;
+    final start = _remuxStart;
+    final offset = _subtitleOffset;
     final localIp = await getLocalIpForTarget(targetTvIp);
-    if (localIp == null) return null;
+    if (localIp == null ||
+        server != _server ||
+        token != _currentToken ||
+        revision != _subtitleRevision) {
+      return null;
+    }
 
-    return 'http://$localIp:${server!.port}/media/$_currentToken/subtitle_$trackId.vtt';
+    _subtitleTimelines[revision] = (start: start, offset: offset);
+    return 'http://$localIp:${server!.port}/media/$token/subtitle_$trackId.vtt'
+        '?revision=$revision&startUs=${start.inMicroseconds}&offsetUs=${offset.inMicroseconds}';
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -254,7 +295,26 @@ class MediaServerService {
       if (match != null) {
         final trackId = int.tryParse(match.group(1)!);
         if (trackId != null) {
-          final vtt = await prepareSubtitle(trackId);
+          final query = request.uri.queryParameters;
+          final timeline =
+              _subtitleTimelines[int.tryParse(query['revision'] ?? '')];
+          if (timeline == null ||
+              query['startUs'] != '${timeline.start.inMicroseconds}' ||
+              query['offsetUs'] != '${timeline.offset.inMicroseconds}') {
+            res.statusCode = HttpStatus.notFound;
+            await res.close();
+            return;
+          }
+          final original = await prepareSubtitle(trackId);
+          if (token != _currentToken) {
+            res.statusCode = HttpStatus.notFound;
+            await res.close();
+            return;
+          }
+          final vtt = MediaRemuxService.retimeVtt(
+            original,
+            timeline.offset - timeline.start,
+          );
           final bytes = utf8.encode(vtt);
           res.statusCode = HttpStatus.ok;
           res.headers.set(
@@ -269,6 +329,7 @@ class MediaServerService {
           res.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
           res.headers.set('Access-Control-Allow-Headers', '*');
           res.headers.set('Access-Control-Expose-Headers', '*');
+          res.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
           if (request.method != 'HEAD') res.add(bytes);
           await res.close().catchError((_) {});
           return;
@@ -302,29 +363,45 @@ class MediaServerService {
     if (_remuxProcessFactory != null && await file.exists()) {
       if (request.method == 'HEAD') {
         res.statusCode = HttpStatus.ok;
-        res.headers.set(HttpHeaders.contentTypeHeader, 'video/mp4');
+        res.headers.set(HttpHeaders.contentTypeHeader, mime);
         res.headers.set(HttpHeaders.acceptRangesHeader, 'none');
         res.headers.set(HttpHeaders.connectionHeader, 'keep-alive');
         await res.close().catchError((_) {});
         return;
       }
+      final factory = _remuxProcessFactory;
+      if (factory == null ||
+          _activeRemuxProcesses.length + _inFlightRemuxStarts >=
+              maxConcurrentRemuxStreams) {
+        res.statusCode = HttpStatus.serviceUnavailable;
+        await res.close().catchError((_) {});
+        return;
+      }
       Process? process;
+      _inFlightRemuxStarts++;
+      var countedInFlight = true;
       try {
-        final factory = _remuxProcessFactory;
-        process = await factory?.call();
+        process = await factory.call();
+        if (identical(factory, _remuxProcessFactory)) {
+          _inFlightRemuxStarts--;
+        }
+        countedInFlight = false;
         if (process != null) {
-          // A previous HTTP handler must never replace or kill a newer stream.
-          unawaited(process.stderr.drain<void>());
+          // A previous HTTP handler must never replace or kill a newer stream,
+          // and a second reader on the same active URL must not kill the first reader.
+          unawaited(process.stderr.drain<void>().catchError((_) {}));
           if (path != _mediaPath || !identical(factory, _remuxProcessFactory)) {
             process.kill();
-            res.statusCode = HttpStatus.gone;
-            await res.close();
+            try {
+              res.statusCode = HttpStatus.gone;
+              await res.close();
+            } catch (_) {}
             return;
           }
-          _activeRemuxProcess?.kill();
-          _activeRemuxProcess = process;
+          _activeRemuxProcesses.add(process);
+          res.bufferOutput = false;
           res.statusCode = HttpStatus.ok;
-          res.headers.set(HttpHeaders.contentTypeHeader, 'video/mp4');
+          res.headers.set(HttpHeaders.contentTypeHeader, mime);
           res.headers.set(HttpHeaders.acceptRangesHeader, 'none');
           res.headers.set(HttpHeaders.connectionHeader, 'keep-alive');
           res.headers.set('transferMode.dlna.org', 'Streaming');
@@ -333,13 +410,18 @@ class MediaServerService {
           return;
         }
         res.statusCode = HttpStatus.serviceUnavailable;
-        await res.close();
+        await res.close().catchError((_) {});
         return;
       } catch (e) {
         debugPrint('[MediaServer] Erro no streaming remux: $e');
       } finally {
-        process?.kill();
-        if (identical(_activeRemuxProcess, process)) _activeRemuxProcess = null;
+        if (countedInFlight && identical(factory, _remuxProcessFactory)) {
+          _inFlightRemuxStarts--;
+        }
+        if (process != null) {
+          _activeRemuxProcesses.remove(process);
+          process.kill();
+        }
       }
       return;
     }
@@ -696,10 +778,12 @@ class MediaServerService {
 
   /// Encerra o servidor, aborta streams de proxy ativos e libera portas locais.
   Future<void> stop() async {
-    _activeRemuxProcess?.kill();
-    _activeRemuxProcess = null;
+    _killActiveRemuxProcesses();
+    _mediaOperation.cancel();
+    _mediaOperation = NetworkOperation();
     _remuxProcessFactory = null;
     _subtitles.clear();
+    _subtitleTimelines.clear();
     _starting?.cancel();
     _starting = null;
     _startFuture = null;

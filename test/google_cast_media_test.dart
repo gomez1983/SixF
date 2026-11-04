@@ -120,6 +120,13 @@ void main() {
       'http://127.0.0.1/new.mp4',
       const Duration(seconds: 60),
       autoplay: false,
+      tracks: [
+        {
+          'trackId': 7,
+          'type': 'TEXT',
+          'trackContentId': 'http://127.0.0.1/subtitle_7.vtt?revision=1&startUs=12000000&offsetUs=500000',
+        },
+      ],
     );
     expect(commands.last['type'], 'LOAD');
     expect(commands.last['currentTime'], 0);
@@ -127,8 +134,8 @@ void main() {
     expect(commands.last['activeTrackIds'], [7]);
     expect(
       Uri.parse(commands.last['media']['tracks'][0]['trackContentId'] as String)
-          .queryParameters['segment'],
-      'http://127.0.0.1/new.mp4',
+          .queryParameters,
+      {'revision': '1', 'startUs': '12000000', 'offsetUs': '500000'},
     );
 
     expect(commands.last['media']['duration'], 60);

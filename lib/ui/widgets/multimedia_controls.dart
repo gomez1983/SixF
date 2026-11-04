@@ -90,6 +90,20 @@ class MultimediaControls extends StatelessWidget {
                 }
               },
       ),
+      _MediaButtonData(
+        icon: Icons.repeat,
+        tooltip: 'Repetir arquivo',
+        isPrimary: local && media.isLooping,
+        onPressed: local && (media.canLoop || media.isLooping)
+            ? media.toggleLoop
+            : null,
+      ),
+      _MediaButtonData(
+        icon: Icons.shuffle,
+        tooltip: 'Ordem aleatória dos arquivos selecionados',
+        isPrimary: local && media.isShuffling,
+        onPressed: local && media.canShuffle ? media.toggleShuffle : null,
+      ),
     ];
 
     return Container(
@@ -98,8 +112,10 @@ class MultimediaControls extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: mediaActions.map((item) {
               return RemoteButton(
                 width: 46,
@@ -127,6 +143,7 @@ class MultimediaControls extends StatelessWidget {
               controller: media,
               enabled: local,
               showTransportControls: false,
+              showPlaybackModes: false,
             ),
           if (!local)
             const Padding(

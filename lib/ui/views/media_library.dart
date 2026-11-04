@@ -58,6 +58,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
   bool loadFailed = false;
   String filter = '', folderError = '';
   bool sortByExtension = false;
+  bool showThumbnails = true;
   final search = TextEditingController();
   final photoScroll = ScrollController();
 
@@ -78,8 +79,19 @@ class _MediaLibraryState extends State<MediaLibrary> {
     load();
   }
 
+  void _clearPhotoCache() {
+    final old = _photoCache;
+    _photoCache = null;
+    if (old != null) {
+      unawaited(
+        old.delete(recursive: true).catchError((_) => old),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    _clearPhotoCache();
     search.dispose();
     photoScroll.dispose();
     super.dispose();
@@ -116,6 +128,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
       if (data['queueTitle'] is String) {
         queueTitle = data['queueTitle'] as String;
       }
+      if (data['showThumbnails'] is bool) {
+        showThumbnails = data['showThumbnails'] as bool;
+      }
       final savedTrail = [
         for (final v in data['trail'] ?? []) LibraryEntry.fromJson(v),
       ];
@@ -148,6 +163,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       'roots': roots.map((e) => e.toJson()).toList(),
       'queue': queue.map((e) => e.toJson()).toList(),
       'trail': trail.map((e) => e.toJson()).toList(),
+      'showThumbnails': showThumbnails,
       if (queueTitle != null) 'queueTitle': queueTitle,
     });
     try {
@@ -193,6 +209,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
         queueTitle = null;
       }
     });
+    _clearPhotoCache();
     if (clearQueueItems) {
       await save();
     }
@@ -243,9 +260,15 @@ class _MediaLibraryState extends State<MediaLibrary> {
     unawaited(save());
     if (trail.isEmpty) return;
     try {
+      final target = trail.last;
+      if (target.source == LibrarySource.drive ||
+          target.source == LibrarySource.oneDrive) {
+        await sources.token(target.source);
+        if (!mounted || generation != version) return;
+      }
       final items = await sources
-          .list(trail.last)
-          .timeout(const Duration(seconds: 12));
+          .list(target)
+          .timeout(const Duration(seconds: 15));
       await _refreshCloudAuthState();
       if (mounted && generation == version) setState(() => entries = items);
     } catch (e) {
@@ -432,10 +455,97 @@ class _MediaLibraryState extends State<MediaLibrary> {
     message('Adicionado à playlist "${list.name}" e carregado na Fila.');
   }
 
+  List<LibraryEntry> _visibleFolderEntries() {
+    final visible = entries
+        .where((e) => e.name.toLowerCase().contains(filter))
+        .toList();
+    if (sortByExtension) {
+      visible.sort((a, b) {
+        if (a.folder != b.folder) return a.folder ? -1 : 1;
+        final typeA = a.isVideo ? 0 : (a.isImage ? 1 : 2);
+        final typeB = b.isVideo ? 0 : (b.isImage ? 1 : 2);
+        if (typeA != typeB) return typeA.compareTo(typeB);
+        final extA = p.extension(a.name).toLowerCase();
+        final extB = p.extension(b.name).toLowerCase();
+        if (extA != extB) return extA.compareTo(extB);
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    }
+    return visible;
+  }
+
+  List<LibraryEntry> _carouselContextItems() {
+    if (tab == 1) {
+      final queueMedia = queue.where((e) => !e.folder).toList();
+      if (queueMedia.isNotEmpty) return queueMedia;
+    } else if (tab == 2) {
+      final folderMedia = _visibleFolderEntries()
+          .where((e) => !e.folder && (e.isImage || e.isVideo))
+          .toList();
+      if (folderMedia.isNotEmpty) return folderMedia;
+    }
+    return activePhotos;
+  }
+
+  void _syncActivePhotosForTab(int targetTab, {LibraryEntry? preferredPhoto}) {
+    if (activePhotos.isEmpty && preferredPhoto == null) return;
+    final current =
+        preferredPhoto ??
+        ((activePhotoIndex >= 0 && activePhotoIndex < activePhotos.length)
+            ? activePhotos[activePhotoIndex]
+            : null);
+    if (current == null) return;
+
+    List<LibraryEntry> sourceList;
+    if (targetTab == 1 && queue.isNotEmpty) {
+      sourceList = queue.where((e) => e.isImage).toList();
+    } else if (targetTab == 2 && entries.isNotEmpty) {
+      sourceList = _visibleFolderEntries().where((e) => e.isImage).toList();
+    } else {
+      sourceList = activePhotos.where((e) => e.isImage).toList();
+    }
+
+    if (sourceList.isEmpty) {
+      sourceList = [current];
+    } else if (!sourceList.any(
+      (e) => e.id == current.id && e.source == current.source,
+    )) {
+      sourceList = [...sourceList, current];
+    }
+
+    final idx = sourceList.indexWhere(
+      (e) => e.id == current.id && e.source == current.source,
+    );
+    activePhotos = sourceList;
+    activePhotoIndex = idx >= 0 ? idx : 0;
+  }
+
+  Widget _buildViewModeToggleButton() {
+    return IconButton.filledTonal(
+      tooltip: showThumbnails
+          ? 'Modo compacto (somente nomes)'
+          : 'Modo detalhado (miniaturas e nomes)',
+      icon: Icon(
+        showThumbnails
+            ? Icons.view_headline_rounded
+            : Icons.grid_view_rounded,
+        size: 19,
+        color: showThumbnails ? Theme.of(context).colorScheme.primary : null,
+      ),
+      onPressed: () {
+        HapticService.selectionClick();
+        setState(() => showThumbnails = !showThumbnails);
+        save();
+      },
+    );
+  }
+
   void addSelectionToQueue({bool playNow = false}) {
     if (selected.isEmpty) return;
     final newItems = selected.map(_cloneEntry).toList();
     final previousCount = queue.length;
+    final stayInFolderForPhoto =
+        playNow && tab == 2 && newItems.first.isImage;
     setState(() {
       if (queue.isEmpty) {
         queueTitle = 'Arquivos selecionados';
@@ -443,7 +553,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
       queue.addAll(newItems);
       queueExpanded = true;
       selected.clear();
-      tab = 1;
+      if (!stayInFolderForPhoto) {
+        tab = 1;
+      }
     });
     save();
     _syncLiveCastQueue();
@@ -451,12 +563,20 @@ class _MediaLibraryState extends State<MediaLibrary> {
       '${newItems.length} ${newItems.length == 1 ? 'item adicionado' : 'itens adicionados'} à fila de execução.',
     );
     if (playNow) {
-      play(
-        queue,
-        start: previousCount,
-        sourceTitle: queueTitle,
-        syncToQueue: false,
-      );
+      if (stayInFolderForPhoto) {
+        openPhotoAndMirror(
+          _visibleFolderEntries(),
+          newItems.first,
+          syncToQueue: false,
+        );
+      } else {
+        play(
+          queue,
+          start: previousCount,
+          sourceTitle: queueTitle,
+          syncToQueue: false,
+        );
+      }
     }
   }
 
@@ -480,6 +600,21 @@ class _MediaLibraryState extends State<MediaLibrary> {
     message('Playlist "$name" salva com sucesso.');
   }
 
+  void _ensureEntryInQueue(LibraryEntry item, {String? sourceTitle}) {
+    final exists = queue.any(
+      (q) => q.id == item.id && q.source == item.source,
+    );
+    if (!exists) {
+      queue.add(_cloneEntry(item));
+    }
+    if (sourceTitle != null && queue.length == 1) {
+      queueTitle = sourceTitle;
+    } else {
+      queueTitle ??= sourceTitle ?? item.name;
+    }
+    queueExpanded = true;
+  }
+
   Future<void> showFileActions(
     LibraryEntry entry, {
     List<LibraryEntry>? photoContext,
@@ -498,6 +633,11 @@ class _MediaLibraryState extends State<MediaLibrary> {
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.queue_music_rounded),
+              title: const Text('Adicionar à fila'),
+              onTap: () => Navigator.pop(ctx, 'queue'),
+            ),
+            ListTile(
               leading: const Icon(Icons.playlist_add),
               title: const Text('Adicionar à playlist'),
               onTap: () => Navigator.pop(ctx, 'playlist'),
@@ -512,7 +652,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
       ),
     );
     if (!mounted) return;
-    if (action == 'playlist') {
+    if (action == 'queue') {
+      setState(() {
+        _ensureEntryInQueue(entry);
+      });
+      await save();
+      _syncLiveCastQueue();
+      message('1 item adicionado à fila de execução.');
+    } else if (action == 'playlist') {
       final previous = List<LibraryEntry>.of(selected);
       selected
         ..clear()
@@ -527,7 +674,12 @@ class _MediaLibraryState extends State<MediaLibrary> {
       }
     } else if (action == 'play') {
       if (entry.isImage) {
-        await openPhotoAndMirror(photoContext ?? [entry], entry);
+        final effectiveContext =
+            photoContext ??
+            (tab == 2 && entries.isNotEmpty
+                ? _visibleFolderEntries()
+                : (tab == 1 && queue.isNotEmpty ? queue : [entry]));
+        await openPhotoAndMirror(effectiveContext, entry);
       } else {
         await play([entry], sourceTitle: entry.name);
       }
@@ -537,10 +689,21 @@ class _MediaLibraryState extends State<MediaLibrary> {
   /// Abre uma foto no visualizador interno do aplicativo e espelha em tempo real na TV conectada.
   Future<void> openPhotoAndMirror(
     List<LibraryEntry> contextList,
-    LibraryEntry tappedPhoto,
-  ) async {
-    final photos = contextList.where((e) => e.isImage).toList();
+    LibraryEntry tappedPhoto, {
+    bool syncToQueue = true,
+  }) async {
+    final effectiveSource =
+        (tab == 2 && entries.isNotEmpty && contextList.length <= 1)
+        ? _visibleFolderEntries()
+        : (tab == 1 && queue.isNotEmpty && contextList.length <= 1)
+        ? queue
+        : contextList;
+    final photos = effectiveSource.where((e) => e.isImage).toList();
     if (photos.isEmpty) {
+      photos.add(tappedPhoto);
+    } else if (!photos.any(
+      (e) => e.id == tappedPhoto.id && e.source == tappedPhoto.source,
+    )) {
       photos.add(tappedPhoto);
     }
     var idx = photos.indexWhere(
@@ -549,10 +712,16 @@ class _MediaLibraryState extends State<MediaLibrary> {
     if (idx < 0) idx = 0;
 
     setState(() {
+      if (syncToQueue) {
+        _ensureEntryInQueue(tappedPhoto);
+      }
       activePhotos = photos;
       activePhotoIndex = idx;
       loadingPhotoPreview = true;
     });
+    if (syncToQueue) {
+      await save();
+    }
 
     await _loadAndMirrorActivePhoto();
   }
@@ -568,9 +737,11 @@ class _MediaLibraryState extends State<MediaLibrary> {
     sources.abortActiveOperations();
 
     setState(() {
+      _ensureEntryInQueue(currentPhoto);
       loadingPhotoPreview = true;
       casting = false;
     });
+    unawaited(save());
 
     try {
       final cached = _photoCache;
@@ -603,17 +774,27 @@ class _MediaLibraryState extends State<MediaLibrary> {
             .where((e) => e.ip == ip)
             .firstOrNull
             ?.location;
+        final castDir = await LibrarySources.sessionCache();
+        File castFirst = resolved;
+        if (resolved.parent.path == dir.path) {
+          final targetPath = '${castDir.path}/${resolved.uri.pathSegments.last}';
+          castFirst = await resolved.copy(targetPath);
+          final cloudMeta = File('${resolved.path}.cloud.json');
+          if (await cloudMeta.exists()) {
+            await cloudMeta.copy('$targetPath.cloud.json');
+          }
+        }
         final ok = await cast.castResolvedPlaylist(
-          resolved,
-          [for (final item in activePhotos) () => sources.resolve(item, dir)],
+          castFirst,
+          [() => sources.resolve(currentPhoto, castDir)],
           targetTvIp: ip,
           brand: brand,
           tvName: name,
           locationUrl: location,
           activeDriver: driver,
-          startIndex: activePhotoIndex,
-          names: [for (final item in activePhotos) item.name],
-          cacheDirectory: dir,
+          startIndex: 0,
+          names: [currentPhoto.name],
+          cacheDirectory: castDir,
         );
         if (mounted && currentGen == _playGeneration) {
           message(
@@ -657,10 +838,36 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
     // Se o item clicado for uma foto, abre o visualizador rápido com espelhamento em tempo real
     if (items[safeStart].isImage) {
-      await openPhotoAndMirror(items, items[safeStart]);
+      if (syncToQueue) {
+        setState(() {
+          if (items.length == 1) {
+            _ensureEntryInQueue(items.first, sourceTitle: sourceTitle);
+          } else {
+            queue
+              ..clear()
+              ..addAll(items);
+            if (sourceTitle != null) {
+              queueTitle = sourceTitle;
+            }
+            queueExpanded = true;
+          }
+        });
+        await save();
+      }
+      final contextItems = (tab == 2 && entries.isNotEmpty)
+          ? _visibleFolderEntries()
+          : (tab == 1 && queue.isNotEmpty)
+          ? queue
+          : items;
+      await openPhotoAndMirror(
+        contextItems,
+        items[safeStart],
+        syncToQueue: false,
+      );
       return;
     }
 
+    _clearPhotoCache();
     setState(() {
       activePhotos = [];
       viewedPhotoFile = null;
@@ -671,15 +878,19 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
     if (syncToQueue) {
       setState(() {
-        queue
-          ..clear()
-          ..addAll(items);
-        if (sourceTitle != null) {
-          queueTitle = sourceTitle;
-        } else if (queueTitle == null && items.length == 1) {
-          queueTitle = items.first.name;
+        if (items.length == 1) {
+          _ensureEntryInQueue(items.first, sourceTitle: sourceTitle);
+        } else {
+          queue
+            ..clear()
+            ..addAll(items);
+          if (sourceTitle != null) {
+            queueTitle = sourceTitle;
+          } else if (queueTitle == null && items.length == 1) {
+            queueTitle = items.first.name;
+          }
+          queueExpanded = true;
         }
-        queueExpanded = true;
       });
       await save();
     }
@@ -832,7 +1043,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   return InkWell(
                     onTap: () {
                       HapticService.selectionClick();
-                      setState(() => tab = item.index);
+                      setState(() {
+                        tab = item.index;
+                        _syncActivePhotosForTab(item.index);
+                      });
                     },
                     borderRadius: BorderRadius.circular(13),
                     child: AnimatedContainer(
@@ -935,6 +1149,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
             height: size,
             fit: BoxFit.cover,
             cacheWidth: 160,
+            filterQuality: FilterQuality.low,
             errorBuilder: (_, _, _) => Container(
               width: size,
               height: size,
@@ -964,6 +1179,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
             height: size,
             fit: BoxFit.cover,
             cacheWidth: 160,
+            filterQuality: FilterQuality.low,
             errorBuilder: (_, _, _) => Container(
               width: size,
               height: size,
@@ -976,6 +1192,15 @@ class _MediaLibraryState extends State<MediaLibrary> {
           ),
         );
       }
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: highlight.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(Icons.image_outlined, color: highlight, size: 20),
+      );
     }
 
     if (entry.isVideo) {
@@ -995,13 +1220,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
                       height: size,
                       fit: BoxFit.cover,
                       cacheWidth: 160,
+                      filterQuality: FilterQuality.low,
                       errorBuilder: (_, _, _) =>
                           _buildVideoFallback(size, highlight),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.black45,
                       shape: BoxShape.circle,
                     ),
@@ -1016,6 +1242,42 @@ class _MediaLibraryState extends State<MediaLibrary> {
             }
             return _buildVideoFallback(size, highlight);
           },
+        );
+      }
+      final netThumb = entry.thumbnailUrl;
+      if (netThumb != null) {
+        final token = LibrarySources.currentTokenForSource(entry.source);
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                netThumb,
+                headers: token != null
+                    ? {'Authorization': 'Bearer $token'}
+                    : null,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                cacheWidth: 160,
+                filterQuality: FilterQuality.low,
+                errorBuilder: (_, _, _) => _buildVideoFallback(size, highlight),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 14,
+              ),
+            ),
+          ],
         );
       }
       return _buildVideoFallback(size, highlight);
@@ -1064,11 +1326,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
   /// Painel integrado de visualização de fotos no app com espelhamento simultâneo na TV.
   Widget _buildPhotoViewerCard(RemoteController tv) {
     if (activePhotos.isEmpty) return const SizedBox.shrink();
-    final current = activePhotos[activePhotoIndex];
+    final safeIdx = activePhotoIndex.clamp(0, activePhotos.length - 1);
+    final current = activePhotos[safeIdx];
+    final carouselItems = _carouselContextItems();
     final highlight = AppColors.iconHighlightOf(context);
-    final canPrev = activePhotoIndex > 0 && !loadingPhotoPreview;
+    final canPrev = safeIdx > 0 && !loadingPhotoPreview;
     final canNext =
-        activePhotoIndex + 1 < activePhotos.length && !loadingPhotoPreview;
+        safeIdx + 1 < activePhotos.length && !loadingPhotoPreview;
 
     return Focus(
       autofocus: true,
@@ -1111,7 +1375,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Foto ${activePhotoIndex + 1} de ${activePhotos.length} · ${tv.isConnected ? 'Destino: ${tv.connectedTvName ?? tv.ipAddress}' : 'Visualização no aplicativo'}',
+                        'Foto ${safeIdx + 1} de ${activePhotos.length} · ${tab == 1 ? 'Fila de reprodução' : 'Arquivos da pasta'} · ${tv.isConnected ? 'Destino: ${tv.connectedTvName ?? tv.ipAddress}' : 'Visualização no aplicativo'}',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondaryOf(context),
@@ -1133,6 +1397,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   tooltip: 'Fechar visualizador de fotos',
                   icon: const Icon(Icons.close_rounded, size: 20),
                   onPressed: () {
+                    _clearPhotoCache();
                     setState(() {
                       activePhotos = [];
                       viewedPhotoFile = null;
@@ -1192,7 +1457,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 ),
               ),
             ),
-            if (activePhotos.length > 1) ...[
+            if (carouselItems.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
                 height: 46,
@@ -1208,16 +1473,51 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     controller: photoScroll,
                     physics: const BouncingScrollPhysics(),
                     scrollDirection: Axis.horizontal,
-                    itemCount: activePhotos.length,
+                    itemCount: carouselItems.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 6),
                     itemBuilder: (_, i) {
-                      final isCurrent = i == activePhotoIndex;
+                      final item = carouselItems[i];
+                      final isCurrent =
+                          item.id == current.id &&
+                          item.source == current.source;
+                      final photoOrd = item.isImage
+                          ? carouselItems
+                                .take(i)
+                                .where((e) => e.isImage)
+                                .length
+                          : -1;
                       return GestureDetector(
-                        key: ValueKey('photo-thumbnail-$i'),
+                        key: item.isImage
+                            ? ValueKey('photo-thumbnail-$photoOrd')
+                            : ValueKey('media-thumbnail-$i'),
                         onTap: () {
-                          if (i != activePhotoIndex) {
-                            setState(() => activePhotoIndex = i);
-                            _loadAndMirrorActivePhoto();
+                          if (item.isImage) {
+                            final targetIdx = activePhotos.indexWhere(
+                              (e) =>
+                                  e.id == item.id && e.source == item.source,
+                            );
+                            if (targetIdx >= 0 &&
+                                targetIdx != activePhotoIndex) {
+                              setState(() => activePhotoIndex = targetIdx);
+                              _loadAndMirrorActivePhoto();
+                            } else if (targetIdx < 0) {
+                              openPhotoAndMirror(carouselItems, item);
+                            }
+                          } else {
+                            play(
+                              tab == 1 ? queue : [item],
+                              start: tab == 1
+                                  ? queue
+                                        .indexWhere(
+                                          (q) =>
+                                              q.id == item.id &&
+                                              q.source == item.source,
+                                        )
+                                        .clamp(0, queue.length - 1)
+                                  : 0,
+                              sourceTitle: tab == 1 ? queueTitle : item.name,
+                              syncToQueue: tab != 1,
+                            );
                           }
                         },
                         child: Container(
@@ -1229,7 +1529,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                             ),
                           ),
                           child: _buildEntryThumbnail(
-                            activePhotos[i],
+                            item,
                             size: 42,
                           ),
                         ),
@@ -1260,171 +1560,186 @@ class _MediaLibraryState extends State<MediaLibrary> {
         cast.isTarget(tv.ipAddress, tv.currentBrand);
 
     final content = SafeArea(
-      child: Column(
-        children: [
-          // Cabeçalho da Biblioteca com indicação clara do aparelho de destino e botão de limpeza rápida
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevatedOf(context),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.video_library_rounded,
-                    color: AppColors.iconHighlightOf(context),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Biblioteca de mídia · ${tv.connectedTvName ?? tv.currentBrand.displayName}',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimaryOf(context),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+      child: CustomScrollView(
+        slivers: [
+          SliverList.list(
+            children: [
+              // Cabeçalho da Biblioteca com indicação clara do aparelho de destino e botão de limpeza rápida
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceElevatedOf(context),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      Row(
+                      child: Icon(
+                        Icons.video_library_rounded,
+                        color: AppColors.iconHighlightOf(context),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: tv.isConnected
-                                  ? const Color(0xFF22C55E)
-                                  : const Color(0xFFEF4444),
+                          Text(
+                            'Biblioteca de mídia · ${tv.connectedTvName ?? tv.currentBrand.displayName}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimaryOf(context),
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              tv.isConnected
-                                  ? 'Destino ativo: ${tv.connectedTvName ?? tv.ipAddress}'
-                                  : 'Nenhum aparelho conectado',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondaryOf(context),
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: tv.isConnected
+                                      ? const Color(0xFF22C55E)
+                                      : const Color(0xFFEF4444),
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  tv.isConnected
+                                      ? 'Destino ativo: ${tv.connectedTvName ?? tv.ipAddress}'
+                                      : 'Nenhum aparelho conectado',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondaryOf(context),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
+                      ),
+                    ),
+                    if (casting || isStreamingToTarget || queue.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Limpar fila',
+                        onPressed: () =>
+                            abortAndClearQueue(clearQueueItems: true),
+                        icon: const Icon(
+                          Icons.cleaning_services_rounded,
+                          size: 16,
+                          color: AppColors.powerRed,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              if (!tv.isConnected)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          color: Colors.amber,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Conecte um aparelho para reproduzir.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textPrimaryOf(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Seletor de 3 seções no padrão Liquid Glass idêntico ao seletor de dispositivos
+              _buildSectionSelector(context, tv),
+
+              // Visualizador de fotos integrado (quando uma foto está aberta)
+              if (activePhotos.isNotEmpty) _buildPhotoViewerCard(tv),
+
+              // Pastilha / Banner de controle da sessão remota ativa (quando reproduzindo vídeo/áudio)
+              if (isStreamingToTarget && activePhotos.isEmpty)
+                _buildActivePlaybackCard(cast, tv),
+
+              if (casting)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: ExcludeSemantics(
+                          child: LinearProgressIndicator(
+                            semanticsLabel: 'Preparando episódio',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () =>
+                            abortAndClearQueue(clearQueueItems: false),
+                        icon: const Icon(Icons.cancel_outlined, size: 16),
+                        label: const Text('Cancelar'),
                       ),
                     ],
                   ),
                 ),
-                if (casting || isStreamingToTarget || queue.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () => abortAndClearQueue(clearQueueItems: true),
-                    icon: const Icon(
-                      Icons.cleaning_services_rounded,
-                      size: 16,
-                      color: AppColors.powerRed,
-                    ),
-                    label: const Text(
-                      'Limpar fila',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.powerRed,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
-
-          if (!tv.isConnected)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.amber.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline,
-                      color: Colors.amber,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Conecte um aparelho para reproduzir.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textPrimaryOf(context),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          // Keep a usable library viewport below the naturally sized cards.
+          // Short screens and large text scroll the cards instead of squeezing
+          // a fixed-height photo preview into the outer Column.
+          SliverLayoutBuilder(
+            builder: (context, constraints) => SliverToBoxAdapter(
+              child: SizedBox(
+                height:
+                    (constraints.viewportMainAxisExtent -
+                            constraints.precedingScrollExtent)
+                        .clamp(240.0, double.infinity),
+                child: loadFailed
+                    ? const Center(
+                        child: Text('A biblioteca salva não pôde ser lida.'),
+                      )
+                    : !ready
+                    ? const Center(child: CircularProgressIndicator())
+                    : tab == 0
+                    ? playlistView()
+                    : tab == 1
+                    ? queueView(cast, isStreamingToTarget)
+                    : filesView(),
               ),
             ),
-
-          // Seletor de 3 seções no padrão Liquid Glass idêntico ao seletor de dispositivos
-          _buildSectionSelector(context, tv),
-
-          // Visualizador de fotos integrado (quando uma foto está aberta)
-          if (activePhotos.isNotEmpty) _buildPhotoViewerCard(tv),
-
-          // Pastilha / Banner de controle da sessão remota ativa (quando reproduzindo vídeo/áudio)
-          if (isStreamingToTarget && activePhotos.isEmpty)
-            _buildActivePlaybackCard(cast, tv),
-
-          if (casting)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: ExcludeSemantics(
-                      child: LinearProgressIndicator(
-                        semanticsLabel: 'Preparando episódio',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: () => abortAndClearQueue(clearQueueItems: false),
-                    icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Cancelar'),
-                  ),
-                ],
-              ),
-            ),
-
-          Expanded(
-            child: loadFailed
-                ? const Center(
-                    child: Text('A biblioteca salva não pôde ser lida.'),
-                  )
-                : !ready
-                ? const Center(child: CircularProgressIndicator())
-                : tab == 0
-                ? playlistView()
-                : tab == 1
-                ? queueView(cast, isStreamingToTarget)
-                : filesView(),
           ),
         ],
       ),
@@ -1475,7 +1790,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  cast.isPlaying ? 'Reproduzindo' : 'Pausado',
+                  cast.isPlaying
+                      ? 'Reproduzindo'
+                      : cast.isPaused
+                      ? 'Pausado'
+                      : cast.status == MediaCastStatus.stopped
+                      ? 'Parado'
+                      : 'Carregando...',
                   style: TextStyle(
                     fontSize: 10,
                     color: highlight,
@@ -1592,6 +1913,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                       ],
                     ),
                   ),
+                  _buildViewModeToggleButton(),
                   IconButton(
                     tooltip: 'Tocar fila completa',
                     icon: const Icon(Icons.play_circle_fill_rounded, size: 26),
@@ -1662,11 +1984,23 @@ class _MediaLibraryState extends State<MediaLibrary> {
               },
               itemBuilder: (ctx, i) {
                 final item = queue[i];
+                final currentOpenPhoto =
+                    activePhotos.isNotEmpty &&
+                        activePhotoIndex >= 0 &&
+                        activePhotoIndex < activePhotos.length
+                    ? activePhotos[activePhotoIndex]
+                    : null;
                 final isCurrentItem =
-                    isStreamingToTarget && cast?.currentFileName == item.name;
+                    (isStreamingToTarget &&
+                        cast?.currentFileName == item.name) ||
+                    (currentOpenPhoto != null &&
+                        currentOpenPhoto.id == item.id &&
+                        currentOpenPhoto.source == item.source);
                 final hasFailed = failedEntryIds.contains(item.id);
                 return ListTile(
                   key: ObjectKey(item),
+                  dense: !showThumbnails,
+                  visualDensity: showThumbnails ? null : VisualDensity.compact,
                   selected: isCurrentItem,
                   leading: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1678,7 +2012,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                           child: Icon(Icons.drag_handle),
                         ),
                       ),
-                      _buildEntryThumbnail(item, size: 36),
+                      if (showThumbnails) _buildEntryThumbnail(item, size: 36),
                     ],
                   ),
                   title: Text(
@@ -1690,14 +2024,16 @@ class _MediaLibraryState extends State<MediaLibrary> {
                       color: hasFailed ? AppColors.powerRed : null,
                     ),
                   ),
-                  subtitle: Text(
-                    '${i + 1}º na sequência · ${item.source == LibrarySource.drive
-                        ? 'Google Drive (Streaming)'
-                        : item.source == LibrarySource.oneDrive
-                        ? 'OneDrive (Streaming)'
-                        : 'Arquivo local'}${isCurrentItem ? ' · Tocando agora' : ''}${hasFailed ? ' · Arquivo indisponível' : ''}',
-                    style: const TextStyle(fontSize: 11),
-                  ),
+                  subtitle: showThumbnails
+                      ? Text(
+                          '${i + 1}º na sequência · ${item.source == LibrarySource.drive
+                              ? 'Google Drive (Streaming)'
+                              : item.source == LibrarySource.oneDrive
+                              ? 'OneDrive (Streaming)'
+                              : 'Arquivo local'}${isCurrentItem ? ' · Tocando agora' : ''}${hasFailed ? ' · Arquivo indisponível' : ''}',
+                          style: const TextStyle(fontSize: 11),
+                        )
+                      : null,
                   onTap: () => play(
                     queue,
                     start: i,
@@ -2075,6 +2411,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 ),
               ),
               const SizedBox(width: 8),
+              _buildViewModeToggleButton(),
+              const SizedBox(width: 6),
               IconButton.filledTonal(
                 tooltip: sortByExtension
                     ? 'Ordenado por Tipo / Extensão'
@@ -2125,21 +2463,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   ),
                 );
               }
-              var visible = entries
-                  .where((e) => e.name.toLowerCase().contains(filter))
-                  .toList();
-              if (sortByExtension) {
-                visible.sort((a, b) {
-                  if (a.folder != b.folder) return a.folder ? -1 : 1;
-                  final typeA = a.isVideo ? 0 : (a.isImage ? 1 : 2);
-                  final typeB = b.isVideo ? 0 : (b.isImage ? 1 : 2);
-                  if (typeA != typeB) return typeA.compareTo(typeB);
-                  final extA = p.extension(a.name).toLowerCase();
-                  final extB = p.extension(b.name).toLowerCase();
-                  if (extA != extB) return extA.compareTo(extB);
-                  return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-                });
-              }
+              final visible = _visibleFolderEntries();
               if (visible.isEmpty) {
                 return const Center(
                   child: Text('Nenhuma pasta ou mídia encontrada.'),
@@ -2151,7 +2475,17 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   final e = visible[i];
                   if (e.folder) {
                     return ListTile(
-                      leading: _buildEntryThumbnail(e, size: 38),
+                      dense: !showThumbnails,
+                      visualDensity: showThumbnails
+                          ? null
+                          : VisualDensity.compact,
+                      leading: showThumbnails
+                          ? _buildEntryThumbnail(e, size: 38)
+                          : Icon(
+                              Icons.folder_outlined,
+                              size: 20,
+                              color: AppColors.iconHighlightOf(context),
+                            ),
                       title: Text(e.name),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => enter(e),
@@ -2166,51 +2500,58 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
                   if (e.isImage) {
                     return ListTile(
-                      leading: _buildEntryThumbnail(e, size: 42),
+                      dense: !showThumbnails,
+                      visualDensity: showThumbnails
+                          ? null
+                          : VisualDensity.compact,
+                      leading: showThumbnails
+                          ? _buildEntryThumbnail(e, size: 42)
+                          : null,
                       title: Text(e.name),
-                      subtitle: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1.5,
-                            ),
-                            margin: const EdgeInsets.only(right: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: Colors.amberAccent.withValues(
-                                  alpha: 0.7,
+                      subtitle: showThumbnails
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1.5,
+                                  ),
+                                  margin: const EdgeInsets.only(right: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: Colors.amberAccent.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'FOTO • $cleanExt',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: AppColors.textPrimaryOf(context),
+                                    ),
+                                  ),
                                 ),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              'FOTO • $cleanExt',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                                color: AppColors.textPrimaryOf(context),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              e.size != null
-                                  ? '${_formatBytes(e.size!)} · Toque para abrir'
-                                  : 'Toque para abrir e espelhar na TV',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondaryOf(context),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
+                                Text(
+                                  e.size != null
+                                      ? '${_formatBytes(e.size!)} · Toque para abrir'
+                                      : 'Toque para abrir e espelhar na TV',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondaryOf(context),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            )
+                          : null,
                       onTap: () => showFileActions(e, photoContext: visible),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -2237,55 +2578,69 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
                   final isVid = e.isVideo;
                   return ListTile(
+                    dense: !showThumbnails,
+                    visualDensity: showThumbnails
+                        ? null
+                        : VisualDensity.compact,
+                    leading: showThumbnails
+                        ? _buildEntryThumbnail(e, size: 42)
+                        : null,
                     onTap: () => showFileActions(e, photoContext: visible),
                     title: Text(e.name),
-                    subtitle: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1.5,
-                          ),
-                          margin: const EdgeInsets.only(right: 6),
-                          decoration: BoxDecoration(
-                            color: isVid
-                                ? Colors.deepPurple.withValues(alpha: 0.25)
-                                : Colors.teal.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: isVid
-                                  ? Colors.deepPurpleAccent.withValues(
-                                      alpha: 0.7,
-                                    )
-                                  : Colors.tealAccent.withValues(alpha: 0.7),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Text(
-                            isVid ? 'VÍDEO • $cleanExt' : 'ÁUDIO • $cleanExt',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                              color: AppColors.textPrimaryOf(context),
-                            ),
-                          ),
-                        ),
-                        if (e.size != null)
-                          Text(
-                            _formatBytes(e.size!),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondaryOf(context),
-                            ),
-                          ),
-                      ],
-                    ),
+                    subtitle: showThumbnails
+                        ? Wrap(
+                            spacing: 6,
+                            runSpacing: 2,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isVid
+                                      ? Colors.deepPurple.withValues(
+                                          alpha: 0.25,
+                                        )
+                                      : Colors.teal.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isVid
+                                        ? Colors.deepPurpleAccent.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : Colors.tealAccent.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  isVid
+                                      ? 'VÍDEO • $cleanExt'
+                                      : 'ÁUDIO • $cleanExt',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                    color: AppColors.textPrimaryOf(context),
+                                  ),
+                                ),
+                              ),
+                              if (e.size != null)
+                                Text(
+                                  _formatBytes(e.size!),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondaryOf(context),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : null,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildEntryThumbnail(e, size: 38),
-                        const SizedBox(width: 4),
                         IconButton(
                           tooltip: 'Reproduzir no aparelho ativo',
                           icon: const Icon(Icons.play_arrow),

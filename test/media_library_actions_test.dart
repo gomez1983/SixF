@@ -153,6 +153,26 @@ void main() {
       }
       expect(find.byKey(const ValueKey('photo-thumbnail-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('photo-thumbnail-1')), findsOneWidget);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      for (final size in [
+        const Size(393, 600),
+        const Size(320, 480),
+        const Size(740, 360),
+      ]) {
+        for (final scale in [1.0, 1.5, 2.0]) {
+          tester.view.physicalSize = size;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          await tester.pump();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '$size, text scale $scale',
+          );
+        }
+      }
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      tester.view.physicalSize = const Size(600, 1400);
+      await tester.pump();
       Future<void> waitPhoto(String name) async {
         for (var i = 0; i < 50; i++) {
           await tester.pump(const Duration(milliseconds: 30));

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'network_operation.dart';
+
 class MediaTrack {
   const MediaTrack({
     required this.id,
@@ -10,6 +12,8 @@ class MediaTrack {
     required this.title,
     this.language,
     this.codec,
+    this.channels,
+    this.profile,
     this.isDefault = false,
   });
 
@@ -18,6 +22,8 @@ class MediaTrack {
   final String title;
   final String? language;
   final String? codec;
+  final int? channels;
+  final String? profile;
   final bool isDefault;
 
   Map<String, dynamic> toJson() => {
@@ -26,6 +32,8 @@ class MediaTrack {
     'title': title,
     'language': language,
     'codec': codec,
+    'channels': channels,
+    'profile': profile,
     'isDefault': isDefault,
   };
 
@@ -35,6 +43,8 @@ class MediaTrack {
     title: json['title'] as String,
     language: json['language'] as String?,
     codec: json['codec'] as String?,
+    channels: json['channels'] as int?,
+    profile: json['profile'] as String?,
     isDefault: json['isDefault'] == true,
   );
 }
@@ -44,6 +54,7 @@ class MediaDetails {
     required this.tracks,
     this.videoCodec,
     this.videoPixFmt,
+    this.videoBitRate,
     this.width,
     this.height,
     this.duration = Duration.zero,
@@ -52,24 +63,34 @@ class MediaDetails {
   final List<MediaTrack> tracks;
   final String? videoCodec;
   final String? videoPixFmt;
+  final int? videoBitRate;
   final int? width;
   final int? height;
   final Duration duration;
 
-  /// Indica se o codec de vÃ­deo Ã© nativamente suportado pelo decodificador de hardware do Chromecast.
-  /// Formatos como MPEG-4 ASP (XviD/DivX), MPEG-2 e 10-bit H.264 geram apenas Ã¡udio e tela preta no Chromecast.
+  /// Indica se o codec de vídeo é nativamente suportado pelo decodificador de hardware do Chromecast.
+  /// Formatos como MPEG-4 ASP (XviD/DivX), MPEG-2, 10-bit H.264 ou remuxes Blu-ray de altíssimo bitrate exigem transcodificação.
   bool get isChromecastVideoCompatible {
     if (videoCodec == null) return true;
     final codec = videoCodec!.toLowerCase();
-    if (codec == 'mpeg4' ||
-        codec == 'mpeg2video' ||
-        codec == 'msmpeg4v3' ||
-        codec == 'wmv3' ||
-        codec == 'flv1' ||
-        codec == 'webp') {
+    if (codec == 'mjpeg' ||
+        codec == 'png' ||
+        codec == 'bmp' ||
+        codec == 'webp' ||
+        codec == 'gif') {
+      return true;
+    }
+    if (codec != 'h264' && codec != 'vp8') {
       return false;
     }
-    if (videoPixFmt == 'yuv420p10le') return false; // 10-bit H.264 Hi10P
+    if (videoPixFmt != null &&
+        videoPixFmt != 'yuv420p' &&
+        videoPixFmt != 'yuvj420p') {
+      return false;
+    }
+    if (videoBitRate != null && videoBitRate! > 12000000) {
+      return false;
+    }
     return true;
   }
 
@@ -81,82 +102,148 @@ class MediaDetails {
     final defaultAudio =
         audios.where((t) => t.isDefault).firstOrNull ?? audios.first;
     final codec = defaultAudio.codec?.toLowerCase();
-    if (codec == null) return true;
-    if (codec == 'aac' ||
-        codec == 'mp3' ||
-        codec == 'opus' ||
-        codec == 'vorbis') {
-      return true;
-    }
-    return false;
+    // Conservative MP4 baseline, independent of receiver/surround passthrough.
+    // Unknown channel counts/profiles also require normalization.
+    return codec == 'aac' &&
+        defaultAudio.channels == 2 &&
+        defaultAudio.profile?.toLowerCase() == 'lc';
   }
 }
 
 class MediaRemuxService {
   static final Map<String, String> _thumbnailCache = {};
+  static final Map<String, Future<String?>> _inFlightThumbnails = {};
   static final Map<String, String> _convertedMediaCache = {};
   static bool? _hasFfmpeg;
   static bool? _hasFfprobe;
 
+  static Future<({int exitCode, String stdout})?> _runProcess(
+    String executable,
+    List<String> args, {
+    required Duration timeout,
+    bool captureStdout = false,
+  }) async {
+    Process? process;
+    try {
+      final operation = NetworkOperation.current;
+      operation?.check();
+      process = await Process.start(executable, args);
+      operation?.onCancel(() {
+        process?.kill();
+      });
+      unawaited(process.stderr.drain<void>().catchError((_) {}));
+      final Future<String> stdoutFuture = captureStdout
+          ? process.stdout.transform(utf8.decoder).join().catchError((_) => '')
+          : process.stdout.drain<void>().then((_) => '').catchError((_) => '');
+      final exitCode = await process.exitCode.timeout(timeout);
+      final stdoutText = await stdoutFuture.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => '',
+      );
+      operation?.check();
+      return (exitCode: exitCode, stdout: stdoutText);
+    } catch (_) {
+      return null;
+    } finally {
+      if (process != null) {
+        process.kill();
+        try {
+          await process.exitCode.timeout(const Duration(milliseconds: 250));
+        } catch (_) {}
+      }
+    }
+  }
+
   static Future<bool> isFfmpegAvailable() async {
     if (_hasFfmpeg != null) return _hasFfmpeg!;
-    try {
-      final res = await Process.run('ffmpeg', [
-        '-version',
-      ]).timeout(const Duration(seconds: 2));
-      return _hasFfmpeg = (res.exitCode == 0);
-    } catch (_) {
-      return _hasFfmpeg = false;
-    }
+    final res = await _runProcess(
+      'ffmpeg',
+      ['-version'],
+      timeout: const Duration(seconds: 2),
+    );
+    return _hasFfmpeg = (res != null && res.exitCode == 0);
   }
 
   static Future<bool> isFfprobeAvailable() async {
     if (_hasFfprobe != null) return _hasFfprobe!;
-    try {
-      final res = await Process.run('ffprobe', [
-        '-version',
-      ]).timeout(const Duration(seconds: 2));
-      return _hasFfprobe = (res.exitCode == 0);
-    } catch (_) {
-      return _hasFfprobe = false;
-    }
+    final res = await _runProcess(
+      'ffprobe',
+      ['-version'],
+      timeout: const Duration(seconds: 2),
+    );
+    return _hasFfprobe = (res != null && res.exitCode == 0);
   }
 
   /// Extrai miniatura (thumbnail) de vÃ­deo local via FFmpeg de forma ultra-leve.
-  static Future<String?> extractVideoThumbnail(String videoPath) async {
+  static Future<String?> extractVideoThumbnail(String videoPath) {
+    if (_thumbnailCache.containsKey(videoPath)) {
+      return Future<String?>.value(_thumbnailCache[videoPath]);
+    }
+    final inFlight = _inFlightThumbnails[videoPath];
+    if (inFlight != null) return inFlight;
+    late final Future<String?> future;
+    future = _extractVideoThumbnailImpl(videoPath).whenComplete(() {
+      if (identical(_inFlightThumbnails[videoPath], future)) {
+        _inFlightThumbnails.remove(videoPath);
+      }
+    });
+    _inFlightThumbnails[videoPath] = future;
+    return future;
+  }
+
+  static Future<String?> _extractVideoThumbnailImpl(String videoPath) async {
     if (_thumbnailCache.containsKey(videoPath)) {
       return _thumbnailCache[videoPath];
     }
     if (!await isFfmpegAvailable()) return null;
 
+    File? target;
     try {
       final tempDir = Directory.systemTemp;
       final hash = videoPath.hashCode.abs().toString();
-      final target = File('${tempDir.path}\\sixf_thumb_$hash.jpg');
+      target = File('${tempDir.path}\\sixf_thumb_$hash.jpg');
 
       if (await target.exists() && await target.length() > 0) {
         return _thumbnailCache[videoPath] = target.path;
       }
 
-      final res = await Process.run('ffmpeg', [
-        '-ss',
-        '00:00:03',
-        '-i',
-        videoPath,
-        '-vframes',
-        '1',
-        '-vf',
-        'scale=160:-1',
-        '-q:v',
-        '5',
-        '-y',
-        target.path,
-      ]).timeout(const Duration(seconds: 4));
+      final res = await _runProcess(
+        'ffmpeg',
+        [
+          '-ss',
+          '00:00:03',
+          '-i',
+          videoPath,
+          '-vframes',
+          '1',
+          '-vf',
+          'scale=160:-1',
+          '-q:v',
+          '5',
+          '-y',
+          target.path,
+        ],
+        timeout: const Duration(seconds: 4),
+      );
 
-      if (res.exitCode == 0 && await target.exists()) {
+      if (res != null &&
+          res.exitCode == 0 &&
+          await target.exists() &&
+          await target.length() > 0) {
         return _thumbnailCache[videoPath] = target.path;
       }
-    } catch (_) {}
+      if (await target.exists()) {
+        try {
+          await target.delete();
+        } catch (_) {}
+      }
+    } catch (_) {
+      if (target != null) {
+        try {
+          if (await target.exists()) await target.delete();
+        } catch (_) {}
+      }
+    }
     return null;
   }
 
@@ -208,8 +295,9 @@ class MediaRemuxService {
       // Inspeciona se possui mÃºltiplos quadros ou stream de vÃ­deo ativo
       final details = await probeMediaDetails(sourceFile.path);
       final isAnimationOrVideo =
+          path.endsWith('.gif') ||
           details.videoCodec == 'webp' ||
-          (details.videoCodec != null && path.endsWith('.gif'));
+          details.videoCodec == 'gif';
 
       if (isAnimationOrVideo) {
         final targetMp4 = File('${tempDir.path}\\sixf_conv_$hash.mp4');
@@ -218,26 +306,44 @@ class MediaRemuxService {
           return targetMp4;
         }
 
-        final res = await Process.run('ffmpeg', [
-          '-v',
-          'error',
-          '-i',
-          sourceFile.path,
-          '-c:v',
-          'libx264',
-          '-preset',
-          'ultrafast',
-          '-pix_fmt',
-          'yuv420p',
-          '-movflags',
-          'faststart',
-          '-y',
-          targetMp4.path,
-        ]).timeout(const Duration(seconds: 6));
+        final res = await _runProcess(
+          'ffmpeg',
+          [
+            '-v',
+            'error',
+            '-stream_loop',
+            '4',
+            '-t',
+            '12',
+            '-i',
+            sourceFile.path,
+            '-vf',
+            "scale='min(1280,trunc(iw/2)*2)':trunc(ow/a/2)*2",
+            '-c:v',
+            'libx264',
+            '-preset',
+            'ultrafast',
+            '-pix_fmt',
+            'yuv420p',
+            '-movflags',
+            'faststart',
+            '-y',
+            targetMp4.path,
+          ],
+          timeout: const Duration(seconds: 8),
+        );
 
-        if (res.exitCode == 0 && await targetMp4.exists()) {
+        if (res != null &&
+            res.exitCode == 0 &&
+            await targetMp4.exists() &&
+            await targetMp4.length() > 0) {
           _convertedMediaCache[sourceFile.path] = targetMp4.path;
           return targetMp4;
+        }
+        if (await targetMp4.exists()) {
+          try {
+            await targetMp4.delete();
+          } catch (_) {}
         }
       } else {
         final targetPng = File('${tempDir.path}\\sixf_conv_$hash.png');
@@ -246,18 +352,30 @@ class MediaRemuxService {
           return targetPng;
         }
 
-        final res = await Process.run('ffmpeg', [
-          '-v',
-          'error',
-          '-i',
-          sourceFile.path,
-          '-y',
-          targetPng.path,
-        ]).timeout(const Duration(seconds: 4));
+        final res = await _runProcess(
+          'ffmpeg',
+          [
+            '-v',
+            'error',
+            '-i',
+            sourceFile.path,
+            '-y',
+            targetPng.path,
+          ],
+          timeout: const Duration(seconds: 4),
+        );
 
-        if (res.exitCode == 0 && await targetPng.exists()) {
+        if (res != null &&
+            res.exitCode == 0 &&
+            await targetPng.exists() &&
+            await targetPng.length() > 0) {
           _convertedMediaCache[sourceFile.path] = targetPng.path;
           return targetPng;
+        }
+        if (await targetPng.exists()) {
+          try {
+            await targetPng.delete();
+          } catch (_) {}
         }
       }
     } catch (_) {}
@@ -287,23 +405,48 @@ class MediaRemuxService {
         final headerStr = headers.entries
             .map((e) => '${e.key}: ${e.value}\r\n')
             .join();
-        args.addAll(['-headers', headerStr]);
+        args.addAll([
+          '-probesize',
+          '2000000',
+          '-analyzeduration',
+          '2000000',
+          '-headers',
+          headerStr,
+        ]);
       }
       args.add(inputPathOrUrl);
 
-      final res = await Process.run(
+      final res = await _runProcess(
         'ffprobe',
         args,
-      ).timeout(const Duration(seconds: 6));
-      if (res.exitCode != 0) return const MediaDetails(tracks: []);
+        timeout: const Duration(seconds: 6),
+        captureStdout: true,
+      );
+      if (res == null || res.exitCode != 0 || res.stdout.isEmpty) {
+        return const MediaDetails(tracks: []);
+      }
 
-      final data = jsonDecode(res.stdout as String) as Map<String, dynamic>;
+      final data = jsonDecode(res.stdout) as Map<String, dynamic>;
       final streams = (data['streams'] as List?) ?? [];
+      final format = data['format'] as Map?;
+      final formatBitRate = int.tryParse('${format?['bit_rate']}');
       final tracks = <MediaTrack>[];
       String? videoCodec;
       String? videoPixFmt;
+      int? videoBitRate;
       int? width;
       int? height;
+
+      const bitmapSubtitleCodecs = {
+        'hdmv_pgs_subtitle',
+        'pgssub',
+        'dvd_subtitle',
+        'dvdsub',
+        'dvb_subtitle',
+        'dvbsub',
+        'xsub',
+        'hdmv_text_subtitle',
+      };
 
       for (var i = 0; i < streams.length; i++) {
         final s = streams[i] as Map<String, dynamic>;
@@ -314,6 +457,12 @@ class MediaRemuxService {
           videoPixFmt = s['pix_fmt'] as String?;
           width = (s['width'] as num?)?.toInt();
           height = (s['height'] as num?)?.toInt();
+          final vTags = (s['tags'] as Map<String, dynamic>?) ?? {};
+          videoBitRate =
+              int.tryParse('${s['bit_rate']}') ??
+              int.tryParse('${vTags['BPS']}') ??
+              int.tryParse('${vTags['BPS-eng']}') ??
+              formatBitRate;
           continue;
         }
 
@@ -325,6 +474,12 @@ class MediaRemuxService {
         final disp = (s['disposition'] as Map<String, dynamic>?) ?? {};
         final isDef = disp['default'] == 1;
         final codecName = s['codec_name'] as String?;
+
+        if (codecType == 'subtitle' &&
+            codecName != null &&
+            bitmapSubtitleCodecs.contains(codecName.toLowerCase())) {
+          continue;
+        }
 
         String displayTitle;
         if (rawTitle != null && rawTitle.trim().isNotEmpty) {
@@ -352,6 +507,8 @@ class MediaRemuxService {
             title: displayTitle,
             language: lang,
             codec: codecName,
+            channels: (s['channels'] as num?)?.toInt(),
+            profile: s['profile'] as String?,
             isDefault: isDef,
           ),
         );
@@ -362,6 +519,7 @@ class MediaRemuxService {
         tracks: tracks,
         videoCodec: videoCodec,
         videoPixFmt: videoPixFmt,
+        videoBitRate: videoBitRate,
         width: width,
         height: height,
       );
@@ -589,45 +747,102 @@ class MediaRemuxService {
     String filePath,
     int streamIndex, {
     Duration startPosition = Duration.zero,
+    Duration subtitleOffset = Duration.zero,
     Map<String, String>? headers,
   }) async {
     if (!await isFfmpegAvailable()) return null;
     Process? process;
     try {
+      final operation = NetworkOperation.current;
+      operation?.check();
       process = await Process.start('ffmpeg', [
         '-v',
         'error',
+        '-copyts',
+        '-start_at_zero',
         if (headers != null && headers.isNotEmpty) ...[
           '-headers',
           headers.entries.map((e) => '${e.key}: ${e.value}\r\n').join(),
         ],
         '-i',
         filePath,
-        if (startPosition > Duration.zero) ...[
-          '-ss',
-          (startPosition.inMilliseconds / 1000).toString(),
-        ],
         '-map',
         '0:$streamIndex',
         '-c:s',
         'webvtt',
+        '-avoid_negative_ts',
+        'disabled',
         '-f',
         'webvtt',
         'pipe:1',
       ]);
-      unawaited(process.stderr.drain<void>());
+      operation?.onCancel(() {
+        process?.kill();
+      });
+      unawaited(process.stderr.drain<void>().catchError((_) {}));
       final text = await process.stdout
           .transform(utf8.decoder)
           .join()
           .timeout(const Duration(seconds: 60));
       final code = await process.exitCode.timeout(const Duration(seconds: 5));
-      if (code == 0 && text.startsWith('WEBVTT')) return text;
+      operation?.check();
+      if (code == 0 && text.startsWith('WEBVTT')) {
+        return retimeVtt(text, subtitleOffset - startPosition);
+      }
     } catch (_) {
       return null;
     } finally {
-      process?.kill();
+      if (process != null) {
+        process.kill();
+        try {
+          await process.exitCode.timeout(const Duration(milliseconds: 250));
+        } catch (_) {}
+      }
     }
     return null;
+  }
+
+  /// Positive offsets delay captions. Keep cues crossing the segment boundary,
+  /// clipping at zero, and discard cues that have already ended.
+  static String retimeVtt(String text, Duration offset) {
+    final timing = RegExp(
+      r'^(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3}) --> (?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})([^\n]*)$',
+      multiLine: true,
+    );
+    int milliseconds(RegExpMatch match, int group) =>
+        (int.parse(match[group] ?? '0') * 3600 +
+                int.parse(match[group + 1]!) * 60 +
+                int.parse(match[group + 2]!)) *
+            1000 +
+        int.parse(match[group + 3]!);
+    String timestamp(int ms) {
+      final d = Duration(milliseconds: ms);
+      return '${d.inHours.toString().padLeft(2, '0')}:'
+          '${(d.inMinutes % 60).toString().padLeft(2, '0')}:'
+          '${(d.inSeconds % 60).toString().padLeft(2, '0')}.'
+          '${(ms % 1000).toString().padLeft(3, '0')}';
+    }
+
+    final blocks = <String>[];
+    for (final block in text.replaceAll('\r\n', '\n').split(RegExp(r'\n\n+'))) {
+      if (block.trim().isEmpty) continue;
+      final match = timing.firstMatch(block);
+      if (match == null) {
+        blocks.add(block);
+        continue;
+      }
+      final start = milliseconds(match, 1) + offset.inMilliseconds;
+      final end = milliseconds(match, 5) + offset.inMilliseconds;
+      if (end <= 0) continue;
+      blocks.add(
+        block.replaceRange(
+          match.start,
+          match.end,
+          '${timestamp(start < 0 ? 0 : start)} --> ${timestamp(end)}${match[9]}',
+        ),
+      );
+    }
+    return '${blocks.join('\n\n')}\n';
   }
 
   /// Inicia processo de remuxing/transcode leve para saÃ­da MP4 (fragmented mp4) compatÃ­vel com Chromecast e TVs.
@@ -648,7 +863,14 @@ class MediaRemuxService {
         final headerStr = headers.entries
             .map((e) => '${e.key}: ${e.value}\r\n')
             .join();
-        args.addAll(['-headers', headerStr]);
+        args.addAll([
+          '-probesize',
+          '2000000',
+          '-analyzeduration',
+          '2000000',
+          '-headers',
+          headerStr,
+        ]);
       }
       if (startPosition > Duration.zero) {
         args.addAll(['-ss', (startPosition.inMilliseconds / 1000).toString()]);
@@ -656,24 +878,30 @@ class MediaRemuxService {
       args.addAll(['-i', inputPathOrUrl]);
 
       // Mapeamento de vÃ­deo: primeiro stream de vÃ­deo
-      args.addAll(['-map', '0:v:0']);
+      args.addAll(['-map', '0:v:0?']);
 
-      // Accurate input seeking discards preroll only when decoding. Stream copy
-      // keeps the preceding keyframe and makes the UI offset inaccurate.
-      if (transcodeVideo || startPosition > Duration.zero) {
-        args.addAll([
-          '-c:v',
-          'libx264',
-          '-preset',
-          'ultrafast',
-          '-crf',
-          '23',
-          '-pix_fmt',
-          'yuv420p',
-        ]);
-      } else {
-        args.addAll(['-c:v', 'copy']);
-      }
+      args.addAll([
+        '-vf',
+        "scale='min(1920,trunc(iw/2)*2)':-2",
+        '-c:v',
+        'libx264',
+        '-preset',
+        'ultrafast',
+        '-tune',
+        'zerolatency',
+        '-g',
+        '24',
+        '-sc_threshold',
+        '0',
+        '-crf',
+        '23',
+        '-maxrate',
+        '8M',
+        '-bufsize',
+        '16M',
+        '-pix_fmt',
+        'yuv420p',
+      ]);
 
       // Mapeamento de Ã¡udio: stream selecionado ou default
       if (selectedAudioIndex != null) {
@@ -684,10 +912,12 @@ class MediaRemuxService {
       // Ãudio universal AAC estÃ©reo compatÃ­vel com 100% dos Chromecast e Smart TVs
       args.addAll(['-c:a', 'aac', '-b:a', '192k', '-ac', '2']);
 
-      // Formato de saÃ­da: Fragmented MP4 direto para stdout (pipe:1)
+      // Formato de saída: Fragmented MP4 direto para stdout (pipe:1)
       args.addAll([
         '-movflags',
         'frag_keyframe+empty_moov+default_base_moof',
+        '-flush_packets',
+        '1',
         '-f',
         'mp4',
         'pipe:1',

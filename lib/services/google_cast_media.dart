@@ -252,7 +252,8 @@ class GoogleCastMedia {
       _acceptStatus(styledResult);
       return;
     }
-    final reason = styledResult['reason'] ??
+    final reason =
+        styledResult['reason'] ??
         styledResult['type'] ??
         result['reason'] ??
         result['type'] ??
@@ -306,11 +307,14 @@ class GoogleCastMedia {
     String url,
     Duration duration, {
     bool autoplay = true,
+    List<Map<String, dynamic>>? tracks,
   }) async {
     final previous = _lastLoad;
-    if (previous == null) throw StateError('NÃ£o hÃ¡ mÃ­dia para reposicionar.');
+    if (previous == null) {
+      throw StateError('NÃ£o hÃ¡ mÃ­dia para reposicionar.');
+    }
     final previousMedia = Map<String, dynamic>.from(previous['media'] as Map);
-    final tracks = previousMedia['tracks'] as List?;
+    final updatedTracks = tracks ?? previousMedia['tracks'] as List?;
     _lastLoad = {
       ...previous,
       'currentTime': 0,
@@ -319,17 +323,7 @@ class GoogleCastMedia {
         ...previousMedia,
         'contentId': url,
         'duration': duration.inMilliseconds / 1000.0,
-        if (tracks != null)
-          'tracks': [
-            for (final track in tracks)
-              {
-                ...Map<String, dynamic>.from(track as Map),
-                if (track['trackContentId'] is String)
-                  'trackContentId': Uri.parse(track['trackContentId'] as String)
-                      .replace(queryParameters: {'segment': url})
-                      .toString(),
-              },
-          ],
+        'tracks': ?updatedTracks,
       },
     };
     await reload();

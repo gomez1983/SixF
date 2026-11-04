@@ -15,13 +15,16 @@ class SimulatedCast extends GoogleCastMedia {
   String? loadedUrl;
   Duration? segmentDuration;
   final remuxUrls = <String>[];
+  List<Map<String, dynamic>>? remuxTracks;
   @override
   Future<void> replaceRemux(
     String url,
     Duration duration, {
     bool autoplay = true,
+    List<Map<String, dynamic>>? tracks,
   }) async {
     remuxUrls.add(url);
+    remuxTracks = tracks;
     segmentDuration = duration;
     if (pendingSeek != null) await pendingSeek!.future;
     if (rejectSeek) throw StateError('Recusado');

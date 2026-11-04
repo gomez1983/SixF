@@ -411,11 +411,11 @@ class _RemoteViewState extends State<RemoteView> {
                   ? _buildTab3Trackpad()
                   : const SizedBox.shrink(),
 
-              // Aba 4: Gaveta e Atalhos de Aplicativos
-              const AppDrawerWidget(),
-
-              // Aba 5: Biblioteca de Mídia
+              // Aba 4: Biblioteca de Mídia
               MediaLibrary(key: _libraryKey, embedded: true),
+
+              // Aba 5: Gaveta e Atalhos de Aplicativos
+              const AppDrawerWidget(),
             ],
           ),
         ),
@@ -738,13 +738,13 @@ class _RemoteViewState extends State<RemoteView> {
                 ),
               _buildBottomNavItem(
                 index: 3,
-                title: 'Apps',
-                icon: Icons.apps_rounded,
+                title: 'Biblioteca de mídia',
+                icon: Icons.video_library_outlined,
               ),
               _buildBottomNavItem(
                 index: 4,
-                title: 'Biblioteca de mídia',
-                icon: Icons.video_library_outlined,
+                title: 'Apps',
+                icon: Icons.apps_rounded,
               ),
             ],
           ),

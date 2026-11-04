@@ -447,7 +447,8 @@ class LibrarySources {
           int? fileSize;
           if (!isDir) {
             try {
-              fileSize = (item as File).lengthSync();
+              final stat = item.statSync();
+              if (stat.size >= 0) fileSize = stat.size;
             } catch (_) {}
           }
           items.add(
@@ -470,7 +471,8 @@ class LibrarySources {
           int? fileSize;
           if (!isDir) {
             try {
-              fileSize = await (item as File).length();
+              final stat = await item.stat();
+              if (stat.size >= 0) fileSize = stat.size;
             } catch (_) {}
           }
           items.add(
