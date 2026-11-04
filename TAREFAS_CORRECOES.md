@@ -103,3 +103,28 @@ ScrollConfiguration(
 ### Regra de Arquitetura
 - Em dispositivos que não possuem suporte ao ponteiro (como **Google TV / Chromecast** e **Samsung Tizen**), o botão **Magic Trackpad** deve permanecer **totalmente oculto** na barra de abas inferior (`if (supportsTrackpad)`).
 - O botão só deve aparecer quando conectado a TVs **LG webOS**.
+
+---
+
+## 7. Sincronização Fina da Legenda com o Vídeo no Chromecast
+
+### Sintoma
+- A legenda WebVTT agora é carregada e ativada corretamente no Chromecast, porém está fora de sincronia em relação ao áudio e à fala dos personagens.
+
+### Plano de Solução
+- Investigar se o deslocamento temporal advém do timestamp inicial do vídeo (PTS/DTS offset do container MKV ao extrair com `-c:s webvtt`).
+- Implementar suporte a ajuste fino de atraso/avanço de sincronia (offset manual de ±0.5s / ±1s) ou garantir extração com alinhamento absoluto aos timecodes do fluxo de áudio/vídeo.
+
+---
+
+## 8. Overflow de Layout no Card da Biblioteca ao Rodar Imagens no Android (`bottom overflowed by 6.5 pixels`)
+
+### Sintoma
+- No Android, ao iniciar a reprodução de imagens/fotos, surge uma faixa listrada em amarelo e preto no card da biblioteca de arquivos (`MediaLibrary` / `MediaCastDialog`) acusando:
+  `A RenderFlex overflowed by 6.5 pixels on the bottom.`
+
+### Causa Provável
+- Uma `Column` com altura fixa ou restrição de espaço onde os elementos internos (título, botões de ação ou miniaturas) excedem ligeiramente o limite disponível na tela do celular devido a paddings ou alturas não flexíveis (`Expanded` / `SingleChildScrollView` / `Flexible`).
+
+### Soluções Obrigatórias
+- Envolver a coluna de conteúdo ou o card afetado em um `SingleChildScrollView` ou utilizar `Flexible`/`Expanded` e ajustar os paddings verticais para acomodar diferentes tamanhos de tela e densidades de pixels sem estourar o layout.
