@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'network_operation.dart';
 
 class MediaTrack {
@@ -116,6 +118,11 @@ class MediaRemuxService {
   static final Map<String, String> _convertedMediaCache = {};
   static bool? _hasFfmpeg;
   static bool? _hasFfprobe;
+
+  @visibleForTesting
+  static void setFfmpegAvailableForTesting(bool? value) {
+    _hasFfmpeg = value;
+  }
 
   static Future<({int exitCode, String stdout})?> _runProcess(
     String executable,

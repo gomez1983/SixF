@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sixf_remote/controllers/media_cast_controller.dart';
 import 'package:sixf_remote/controllers/remote_controller.dart';
+import 'package:sixf_remote/services/media_remux_service.dart';
 import 'package:sixf_remote/ui/views/media_library.dart';
 
 import 'media_controls_gallery_widget_test.dart' show ScopedRemote;
@@ -73,6 +74,8 @@ void main() {
         castFactory: () => receiver,
       );
       await remote.ready;
+      MediaRemuxService.setFfmpegAvailableForTesting(false);
+      addTearDown(() => MediaRemuxService.setFfmpegAvailableForTesting(null));
       addTearDown(() async {
         await tester.pumpWidget(const SizedBox());
         remote.dispose();
@@ -101,7 +104,7 @@ void main() {
       await settleIO();
       await tester.tap(find.text('Arquivos'));
       await settleIO();
-      await tester.tap(find.text('clip.mp4'));
+      await tester.tap(find.text('clip.mp4').first);
       await tester.pumpAndSettle();
       expect(find.text('Reproduzir agora na televisão'), findsOneWidget);
       await tester.tap(find.text('Adicionar à playlist'));
@@ -119,7 +122,7 @@ void main() {
       await settleIO();
       for (final name in ['song.mp3', 'clip.mp4', 'photo.png']) {
         await tester.ensureVisible(find.text(name).first);
-        await tester.tap(find.text(name).first);
+        await tester.longPress(find.text(name).first);
         await tester.pumpAndSettle();
         expect(find.text('Adicionar à playlist'), findsOneWidget);
         await tester.runAsync(
@@ -199,7 +202,10 @@ void main() {
       expect(find.byTooltip('Pausar vídeo'), findsOneWidget);
       expect(find.byTooltip('Repetir vídeo'), findsOneWidget);
       expect(find.byKey(const ValueKey('photo-thumbnail-0')), findsOneWidget);
-      await tester.runAsync(media.stop);
+      await tester.runAsync(() async {
+        await media.stop();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
       await tester.pump();
     },
   );

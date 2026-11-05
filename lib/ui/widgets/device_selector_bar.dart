@@ -105,8 +105,8 @@ class DeviceSelectorBar extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: isDark
-                      ? const [Color(0x38D2B0F0), Color(0x30A777D9), Color(0x229362D7)]
-                      : const [Color(0xE8FFFFFF), Color(0x45B788E8), Color(0x30A777D9)],
+                      ? const [Color(0x3838BDF8), Color(0x300EA5E9), Color(0x220E8FF1)]
+                      : const [Color(0xE8FFFFFF), Color(0x40BAE6FD), Color(0x300EA5E9)],
                 )
               : null,
           borderRadius: BorderRadius.circular(13),

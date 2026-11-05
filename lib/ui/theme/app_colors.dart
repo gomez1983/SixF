@@ -5,48 +5,48 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // --- Paleta Dark Mode (Liquid Glass Escuro — #17151F) ---
+  // --- Paleta Dark Mode (Liquid Glass Escuro — #17151F com Realces Azul SixF) ---
   static const Color background = Color(0xFF17151F);
-  static const Color ambientGlowPrimary = Color(0x484B3564);
-  static const Color ambientGlowSecondary = Color(0x30234C44);
+  static const Color ambientGlowPrimary = Color(0x350E8FF1);
+  static const Color ambientGlowSecondary = Color(0x2801E9D8);
   static const Color remoteChassis = Color(0xEB221E2E);
   static const Color surfaceCard = Color(0xF5272331);
   static const Color surfaceElevated = Color(0xFF332D41);
   static const Color surfaceInteractive = Color(0xFF2D273B);
   static const Color surfaceInteractiveHover = Color(0xFF3B334E);
   static const Color borderSubtle = Color(0x22FFFFFF);
-  static const Color borderActive = Color(0xFFC29AEA);
+  static const Color borderActive = Color(0xFF38BDF8);
   static const Color textPrimary = Color(0xFFEEEBF5);
   static const Color textSecondary = Color(0xFFBEB4CE);
   static const Color textMuted = Color(0xFFA8A1B8);
   static const Color iconDefault = Color(0xFFEEEBF5);
-  static const Color iconHighlight = Color(0xFFC29AEA);
+  static const Color iconHighlight = Color(0xFF38BDF8);
   static const Color trackpadSurface = Color(0xFF1D1A27);
   static const Color trackpadBorder = Color(0x26FFFFFF);
-  static const Color trackpadCrosshair = Color(0x38C29AEA);
-  static const Color trackpadIndicator = Color(0xFFC29AEA);
+  static const Color trackpadCrosshair = Color(0x3838BDF8);
+  static const Color trackpadIndicator = Color(0xFF38BDF8);
 
-  // --- Paleta Light Mode (Liquid Glass Claro — #EEEDF5) ---
+  // --- Paleta Light Mode (Liquid Glass Claro — #EEEDF5 com Realces Azul SixF) ---
   static const Color lightBackground = Color(0xFFEEEDF5);
-  static const Color lightAmbientGlowPrimary = Color(0x55DFD3F2);
-  static const Color lightAmbientGlowSecondary = Color(0x55DBECE7);
+  static const Color lightAmbientGlowPrimary = Color(0x35BAE6FD);
+  static const Color lightAmbientGlowSecondary = Color(0x35DBECE7);
   static const Color lightRemoteChassis = Color(0xD8FFFFFF);
   static const Color lightSurfaceCard = Color(0xF0FFFFFF);
-  static const Color lightSurfaceElevated = Color(0xFFF3EFF9);
+  static const Color lightSurfaceElevated = Color(0xFFF0F5FA);
   static const Color lightSurfaceInteractive = Color(0xE6FFFFFF);
-  static const Color lightSurfaceInteractiveHover = Color(0xFFEBE4F6);
-  static const Color lightBorderSubtle = Color(0xFFDCD5EA);
-  static const Color lightBorderActive = Color(0xFF9362D7);
-  static const Color lightTextPrimary = Color(0xFF262637);
-  static const Color lightTextSecondary = Color(0xFF626071);
-  static const Color lightTextMuted = Color(0xFF747385);
-  static const Color lightIconDefault = Color(0xFF262637);
-  static const Color lightIconHighlight = Color(0xFF9362D7);
-  static const Color lightTrackpadSurface = Color(0xCCF3EFF9);
-  static const Color lightTrackpadBorder = Color(0xFFD8CFE8);
+  static const Color lightSurfaceInteractiveHover = Color(0xFFE0F2FE);
+  static const Color lightBorderSubtle = Color(0xFFD0DFE8);
+  static const Color lightBorderActive = Color(0xFF0284C7);
+  static const Color lightTextPrimary = Color(0xFF1E293B);
+  static const Color lightTextSecondary = Color(0xFF64748B);
+  static const Color lightTextMuted = Color(0xFF94A3B8);
+  static const Color lightIconDefault = Color(0xFF1E293B);
+  static const Color lightIconHighlight = Color(0xFF0284C7);
+  static const Color lightTrackpadSurface = Color(0xCCF0F5FA);
+  static const Color lightTrackpadBorder = Color(0xFFCBD5E1);
 
   // --- Cores Globais Compartilhadas ---
-  static const Color lgRed = Color(0xFF9362D7);
+  static const Color lgRed = Color(0xFF0E8FF1);
   static const Color powerRed = Color(0xFFD16760);
   static const Color powerGlow = Color(0x33D16760);
 

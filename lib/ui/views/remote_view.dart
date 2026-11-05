@@ -11,7 +11,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'media_library.dart';
-import '../../controllers/media_cast_controller.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
@@ -20,7 +19,6 @@ import '../widgets/color_buttons_row.dart';
 import '../widgets/device_selector_bar.dart';
 import '../widgets/dpad_widget.dart';
 import '../widgets/header_bar.dart';
-import '../widgets/media_cast_dialog.dart';
 import '../widgets/multimedia_controls.dart';
 import '../widgets/network_drawer.dart';
 import '../widgets/numeric_keypad.dart';
@@ -487,143 +485,13 @@ class _RemoteViewState extends State<RemoteView> {
 
           const SizedBox(height: 14),
 
-          // 3. Card de Transmissão de Fotos e Vídeos (DLNA / UPnP)
-          _buildMediaCastCard(),
-
-          const SizedBox(height: 14),
-
-          // 4. Botões Coloridos WebOS (Vermelho, Verde, Amarelo, Azul)
+          // 3. Botões Coloridos WebOS (Vermelho, Verde, Amarelo, Azul)
           const ColorButtonsRow(),
 
           const SizedBox(height: 14),
 
           // Feedback da última ação discreto
         ],
-      ),
-    );
-  }
-
-  /// Card interativo para transmissão de fotos/vídeos locais para a TV via DLNA.
-  Widget _buildMediaCastCard() {
-    MediaCastController? castCtrl;
-    try {
-      castCtrl = Provider.of<MediaCastController>(context, listen: true);
-    } catch (_) {
-      castCtrl = null;
-    }
-    final isStreaming = castCtrl?.isStreaming ?? false;
-    final isDark = AppColors.isDark(context);
-    final highlight = AppColors.iconHighlightOf(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isStreaming
-            ? highlight.withValues(alpha: isDark ? 0.12 : 0.08)
-            : AppColors.surfaceCardOf(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isStreaming ? highlight : AppColors.borderSubtleOf(context),
-          width: isStreaming ? 1.5 : 1.0,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => MediaCastDialog.show(context),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: highlight.withValues(alpha: isDark ? 0.20 : 0.14),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isStreaming
-                        ? Icons.cast_connected_rounded
-                        : Icons.photo_library_rounded,
-                    color: highlight,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              isStreaming
-                                  ? (castCtrl?.currentFileName ??
-                                        'Mídia em Reprodução')
-                                  : 'Transmitir Fotos & Vídeos',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimaryOf(context),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isStreaming) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: highlight.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                (castCtrl?.isPlaying ?? false)
-                                    ? 'AO VIVO'
-                                    : 'PAUSADO',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: highlight,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        isStreaming
-                            ? 'Clique para controlar a reprodução na TV'
-                            : 'Enviar fotos e vídeos locais para a Smart TV (DLNA)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondaryOf(context),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: AppColors.textMutedOf(context),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

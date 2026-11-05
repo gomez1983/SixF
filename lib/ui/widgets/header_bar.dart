@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../controllers/media_cast_controller.dart';
 import '../../controllers/remote_controller.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
-import 'media_cast_dialog.dart';
 import 'remote_button.dart';
 import 'connection_diagnostic.dart';
 
@@ -190,41 +188,6 @@ class HeaderBar extends StatelessWidget {
                     ? 'Conectando à TV...'
                     : 'Desconectado - Clique para Buscar e Conectar TVs LG'),
             onPressed: () => DeviceDiscoveryDialog.show(context),
-          ),
-
-          const SizedBox(width: 6),
-
-          // Botão Transmitir Fotos e Vídeos (DLNA / UPnP)
-          Builder(
-            builder: (context) {
-              MediaCastController? castCtrl;
-              try {
-                castCtrl = Provider.of<MediaCastController>(context, listen: true);
-              } catch (_) {
-                castCtrl = null;
-              }
-              final isStreaming = castCtrl?.isStreaming ?? false;
-              return RemoteButton(
-                width: 36,
-                height: 36,
-                isCircular: true,
-                backgroundColor: isStreaming
-                    ? AppColors.iconHighlightOf(context).withValues(alpha: 0.20)
-                    : AppColors.surfaceInteractiveOf(context),
-                borderColor: isStreaming
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.borderSubtleOf(context),
-                foregroundColor: isStreaming
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.textMutedOf(context),
-                icon: isStreaming ? Icons.cast_connected_rounded : Icons.photo_library_rounded,
-                iconSize: 18,
-                tooltip: isStreaming
-                    ? 'Transmitindo: ${castCtrl?.currentFileName ?? "Mídia"}'
-                    : 'Transmitir Fotos e Vídeos (DLNA)',
-                onPressed: () => MediaCastDialog.show(context),
-              );
-            },
           ),
 
           const SizedBox(width: 6),

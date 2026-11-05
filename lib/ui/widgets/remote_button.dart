@@ -152,12 +152,12 @@ class RemoteButton extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? const [Color(0x40D2B0F0), Color(0x35A777D9), Color(0x249362D7)]
-              : const [Color(0xE8FFFFFF), Color(0x48B788E8), Color(0x30A777D9)],
+              ? const [Color(0x4038BDF8), Color(0x350EA5E9), Color(0x240E8FF1)]
+              : const [Color(0xE8FFFFFF), Color(0x48BAE6FD), Color(0x300EA5E9)],
         );
         glassShadows = [
           BoxShadow(
-            color: isDark ? const Color(0x28000000) : const Color(0x1E7441A5),
+            color: isDark ? const Color(0x28000000) : const Color(0x1E0284C7),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
