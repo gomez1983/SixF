@@ -302,7 +302,67 @@ class MediaCastController extends ChangeNotifier {
   void _cancelTimers() {
     _positionPollTimer?.cancel();
     _positionPollTimer = null;
+    _seamlessLoopTimer?.cancel();
+    _seamlessLoopTimer = null;
     _polling = false;
+  }
+
+  /// Repetição sem "piscada" no Chromecast: o receptor padrão mostra a tela de
+  /// casting quando a mídia termina (IDLE/FINISHED) e um novo LOAD é enviado.
+  /// Voltando ao início com SEEK um instante antes do fim, o receptor nunca
+  /// fica ocioso. Só para arquivos tocados diretamente (SEEK é instantâneo);
+  /// streams convertidos na hora (remux) seguem pelo reinício tradicional.
+  Timer? _seamlessLoopTimer;
+
+  /// Mesmo princípio para a fila: o próximo arquivo é preparado e carregado
+  /// ~2 s antes do fim do atual, para o Chromecast trocar de um vídeo para o
+  /// outro sem passar pela tela ociosa de casting.
+  static const _earlyAdvance = Duration(milliseconds: 2200);
+  bool _advancedEarly = false;
+
+  void _armSeamlessLoop(NetworkOperation operation) {
+    if (_transport != MediaCastTransport.cast ||
+        !isPlaying ||
+        isPhoto ||
+        _seamlessLoopTimer != null ||
+        _loopRestarting ||
+        _navigating ||
+        _totalDuration <= const Duration(seconds: 6)) {
+      return;
+    }
+    final remaining = _totalDuration - _currentPosition;
+    if (remaining.isNegative) return;
+    final loopDirect = _isLooping && !_remuxCast;
+    final advance = !_isLooping && (_shuffling || (_sequential && canNext));
+    if (!loopDirect && !advance) return;
+    final lead = loopDirect
+        ? const Duration(milliseconds: 250)
+        : _earlyAdvance;
+    if (remaining > lead + const Duration(seconds: 2)) return;
+    final wait = remaining - lead;
+    _seamlessLoopTimer = Timer(wait.isNegative ? Duration.zero : wait, () async {
+      _seamlessLoopTimer = null;
+      if (!_current(operation) || _loopRestarting || _navigating) return;
+      if (loopDirect) {
+        if (!_isLooping) return;
+        _loopRestarting = true;
+        try {
+          await _cast!.command('SEEK', currentTime: 0);
+          _currentPosition = Duration.zero;
+        } catch (_) {
+          // Sem sucesso: o fluxo FINISHED → reload continua como reserva.
+        } finally {
+          if (_current(operation)) {
+            _loopRestarting = false;
+            notifyListeners();
+          }
+        }
+        return;
+      }
+      if (_isLooping || !(_shuffling || (_sequential && canNext))) return;
+      _advancedEarly = true;
+      await next();
+    });
   }
 
   MediaCastStatus _status = MediaCastStatus.idle;
@@ -675,6 +735,7 @@ class MediaCastController extends ChangeNotifier {
       );
     }
     _handledFinish = null;
+    _advancedEarly = false;
     _selectionGeneration++;
     _operation?.cancel();
     _cancelTimers();
@@ -1222,6 +1283,10 @@ class MediaCastController extends ChangeNotifier {
     HapticService.selectionClick();
     _isLooping = !_isLooping;
     if (_isLooping) _shuffling = false;
+    if (!_isLooping) {
+      _seamlessLoopTimer?.cancel();
+      _seamlessLoopTimer = null;
+    }
     notifyListeners();
   }
 
@@ -1418,6 +1483,8 @@ class MediaCastController extends ChangeNotifier {
       if (id != null &&
           id != _handledFinish &&
           !_loopRestarting &&
+          !_navigating &&
+          !_advancedEarly &&
           (_isLooping || _shuffling || (_sequential && canNext))) {
         _handledFinish = id;
         // Run outside the socket callback; no overlapping poll/command mutation.
@@ -1469,6 +1536,7 @@ class MediaCastController extends ChangeNotifier {
       final wasPlaying = isPlaying;
       await _refreshPlayback(operation);
       if (!_current(operation)) return;
+      _armSeamlessLoop(operation);
       // Repete apenas apÃ³s uma transiÃ§Ã£o real para STOPPED, sem cortar o fim do vÃ­deo.
       if (_transport != MediaCastTransport.cast &&
           _isLooping &&

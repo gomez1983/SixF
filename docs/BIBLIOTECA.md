@@ -24,3 +24,20 @@ Os identificadores abaixo pertencem à instalação do SixF. Passe-os ao Flutter
 | `ONEDRIVE_CLIENT_ID` | ID do aplicativo no Microsoft Entra (`Files.Read offline_access`). |
 
 Após a primeira autenticação, o *refresh token* e a sessão OAuth são mantidos de forma persistente para evitar abrir o navegador a cada uso, contando com botão explícito para **Sair da conta** na aba **Arquivos**.
+
+**Os dois builds (Windows e Android) precisam receber o mesmo arquivo:** `flutter build windows --dart-define-from-file=.local-secrets/drive-build.json` e `flutter build apk --dart-define-from-file=.local-secrets/drive-build.json`. Sem ele, o app mostra a mensagem de login não habilitado.
+
+### Google Drive no Android
+
+- Com `GOOGLE_WEB_CLIENT_ID` definido, o Android usa o login nativo (conta do aparelho).
+- Sem ele, o Android usa o mesmo fluxo do Windows: abre o navegador, você autoriza e volta ao SixF. Esse fluxo só exige `GOOGLE_DESKTOP_CLIENT_ID`/`SECRET`, que já existem.
+
+### Habilitar o OneDrive (passo a passo, uma única vez)
+
+1. Acesse <https://entra.microsoft.com> com sua conta Microsoft → **Identidade › Aplicativos › Registros de aplicativo › Novo registro**.
+2. Nome: `SixF Remote`. Tipos de conta: **Contas em qualquer diretório organizacional e contas pessoais da Microsoft**.
+3. URI de redirecionamento: plataforma **Cliente público/nativo (móvel e área de trabalho)**, valor `http://localhost`. Registrar.
+4. Em **Autenticação**, deixe **Permitir fluxos de cliente público = Sim**.
+5. Em **Permissões de API**, confirme `Microsoft Graph › Files.Read` e `offline_access` (delegadas).
+6. Copie o **ID do aplicativo (cliente)** e acrescente ao `.local-secrets/drive-build.json`: `"ONEDRIVE_CLIENT_ID": "<id>"`.
+7. Recompile Windows e Android com `--dart-define-from-file` (acima). O mesmo ID serve para os dois.

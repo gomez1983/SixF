@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -14,6 +15,10 @@ import 'ui/views/remote_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Player embutido da Biblioteca de mídia (vídeos/áudios no próprio card).
+  if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+    MediaKit.ensureInitialized();
+  }
   if (!kIsWeb &&
       Platform.isWindows &&
       !Platform.environment.containsKey('FLUTTER_TEST')) {

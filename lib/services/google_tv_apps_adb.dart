@@ -3,12 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_adb/flutter_adb.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'network_security_utils.dart';
 import 'drivers/tv_driver.dart';
+
+/// A conexão ADB por Depuração por Wi-Fi não está ativa (TV com a depuração
+/// desligada, porta nova não anunciada ou pareamento revogado). O controle
+/// remoto continua funcionando; só a lista de aplicativos depende dela.
+class AdbUnavailableException implements Exception {
+  const AdbUnavailableException();
+  @override
+  String toString() => 'A conexão ADB com o Chromecast não está ativa.';
+}
 
 /// Optional, separately authorized ADB channel for installed launcher activities.
 class GoogleTvAppsAdb {
@@ -47,28 +57,56 @@ class GoogleTvAppsAdb {
       (await SharedPreferences.getInstance()).containsKey(
         'sixf_adb_port_$host',
       );
+
+  /// Aceita "37123" ou "192.168.0.50:37123" (como a TV exibe "Endereço IP e porta").
+  static int? parsePort(String text) {
+    final value = text.trim();
+    if (value.isEmpty) return null;
+    final port = int.tryParse(value.split(':').last.trim());
+    return port != null && port >= 1 && port <= 65535 ? port : null;
+  }
+
+  /// Pareia (quando [pairingPort] e [code] são informados) e confirma o acesso.
+  /// Sem [port], a porta de conexão — que a TV sorteia a cada ativação da
+  /// Depuração por Wi-Fi — é descoberta automaticamente via mDNS.
   static Future<void> configure(
     String host,
-    int port, {
+    int? port, {
     int? pairingPort,
     String? code,
   }) async {
-    _validate(host, port);
     final identity = await _identity(host);
     if (pairingPort != null) {
       _validate(host, pairingPort);
       if (!RegExp(r'^\d{6}$').hasMatch(code ?? '')) {
-        throw StateError('Informe os seis dígitos do pareamento ADB.');
+        throw StateError('Informe os seis dígitos do código de pareamento.');
       }
-      if (!await AdbPairing.pair(
-        host,
-        pairingPort,
-        code!,
-        identity,
-      ).timeout(const Duration(seconds: 30))) {
-        throw StateError('Pareamento ADB recusado.');
+      final bool paired;
+      try {
+        paired = await AdbPairing.pair(
+          host,
+          pairingPort,
+          code!,
+          identity,
+        ).timeout(const Duration(seconds: 30));
+      } catch (_) {
+        throw StateError(
+          'A TV não respondeu ao pareamento. Confira a porta e o código, que '
+          'mudam sempre que a janela de pareamento é reaberta.',
+        );
+      }
+      if (!paired) {
+        throw StateError('Código de pareamento recusado. Gere um novo na TV.');
       }
     }
+    port ??= await discoverPort(host);
+    if (port == null) {
+      throw StateError(
+        'Pareado, mas a porta de conexão não foi encontrada. Informe a porta '
+        'mostrada em "Endereço IP e porta" na tela de Depuração por Wi-Fi.',
+      );
+    }
+    _validate(host, port);
     final reply = await _command(host, port, identity, 'echo SIXF_ADB_OK');
     if (!reply
         .split(RegExp(r'[\r\n]+'))
@@ -132,10 +170,21 @@ class GoogleTvAppsAdb {
     final identity = await _identity(host);
     try {
       return await _command(host, port, identity, command);
-    } on StateError {
+    } catch (_) {
+      // A Depuração por Wi-Fi sorteia uma nova porta de conexão sempre que é
+      // reativada (reinício do Chromecast, troca de rede). Recusa, timeout ou
+      // EOF não provam revogação do pareamento (ver BPM-009): redescobre a
+      // porta e tenta de novo com a MESMA identidade, sem apagar nada.
       final discovered = await discoverPort(host);
-      if (discovered == null || discovered == port) rethrow;
-      final result = await _command(host, discovered, identity, command);
+      if (discovered == null || discovered == port) {
+        throw const AdbUnavailableException();
+      }
+      final String result;
+      try {
+        result = await _command(host, discovered, identity, command);
+      } catch (_) {
+        throw const AdbUnavailableException();
+      }
       await (await SharedPreferences.getInstance()).setInt(
         'sixf_adb_port_$host',
         discovered,
@@ -146,6 +195,27 @@ class GoogleTvAppsAdb {
 
   /// Resolve only the selected TV: never fall back to another ADB device.
   static Future<int?> discoverPort(String host) async {
+    // Android descarta multicast recebido sem um MulticastLock do Wi-Fi.
+    var locked = false;
+    if (Platform.isAndroid) {
+      try {
+        locked = await _platform.invokeMethod<bool>('multicastLock') ?? false;
+      } catch (_) {}
+    }
+    try {
+      return await _discoverPort(host);
+    } finally {
+      if (locked) {
+        try {
+          await _platform.invokeMethod<void>('multicastUnlock');
+        } catch (_) {}
+      }
+    }
+  }
+
+  static const _platform = MethodChannel('sixf/library');
+
+  static Future<int?> _discoverPort(String host) async {
     final client = MDnsClient(
       rawDatagramSocketFactory:
           (host, port, {reuseAddress = true, reusePort = true, ttl = 1}) =>
@@ -192,7 +262,7 @@ class GoogleTvAppsAdb {
       await client.start();
       unawaited(scan());
       return await result.future.timeout(
-        const Duration(seconds: 4),
+        const Duration(seconds: 6),
         onTimeout: () => null,
       );
     } catch (_) {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import 'network_operation.dart';
 
@@ -115,6 +116,7 @@ class MediaDetails {
 class MediaRemuxService {
   static final Map<String, String> _thumbnailCache = {};
   static final Map<String, Future<String?>> _inFlightThumbnails = {};
+  static final Set<String> _failedThumbnails = {};
   static final Map<String, String> _convertedMediaCache = {};
   static bool? _hasFfmpeg;
   static bool? _hasFfprobe;
@@ -163,21 +165,17 @@ class MediaRemuxService {
 
   static Future<bool> isFfmpegAvailable() async {
     if (_hasFfmpeg != null) return _hasFfmpeg!;
-    final res = await _runProcess(
-      'ffmpeg',
-      ['-version'],
-      timeout: const Duration(seconds: 2),
-    );
+    final res = await _runProcess('ffmpeg', [
+      '-version',
+    ], timeout: const Duration(seconds: 2));
     return _hasFfmpeg = (res != null && res.exitCode == 0);
   }
 
   static Future<bool> isFfprobeAvailable() async {
     if (_hasFfprobe != null) return _hasFfprobe!;
-    final res = await _runProcess(
-      'ffprobe',
-      ['-version'],
-      timeout: const Duration(seconds: 2),
-    );
+    final res = await _runProcess('ffprobe', [
+      '-version',
+    ], timeout: const Duration(seconds: 2));
     return _hasFfprobe = (res != null && res.exitCode == 0);
   }
 
@@ -202,48 +200,49 @@ class MediaRemuxService {
     if (_thumbnailCache.containsKey(videoPath)) {
       return _thumbnailCache[videoPath];
     }
+    if (_failedThumbnails.contains(videoPath)) return null;
     if (!await isFfmpegAvailable()) return null;
 
     File? target;
     try {
       final tempDir = Directory.systemTemp;
       final hash = videoPath.hashCode.abs().toString();
-      target = File('${tempDir.path}\\sixf_thumb_$hash.jpg');
+      target = File(p.join(tempDir.path, 'sixf_thumb320_$hash.jpg'));
 
       if (await target.exists() && await target.length() > 0) {
         return _thumbnailCache[videoPath] = target.path;
       }
 
-      final res = await _runProcess(
-        'ffmpeg',
-        [
+      // 1ª tentativa aos 3 s (evita telas pretas de abertura); a 2ª no início
+      // cobre vídeos curtos e contêineres cuja busca falha.
+      for (final seek in const ['00:00:03', '00:00:00']) {
+        final res = await _runProcess('ffmpeg', [
           '-ss',
-          '00:00:03',
+          seek,
           '-i',
           videoPath,
           '-vframes',
           '1',
           '-vf',
-          'scale=160:-1',
+          'scale=320:-2',
           '-q:v',
           '5',
           '-y',
           target.path,
-        ],
-        timeout: const Duration(seconds: 4),
-      );
-
-      if (res != null &&
-          res.exitCode == 0 &&
-          await target.exists() &&
-          await target.length() > 0) {
-        return _thumbnailCache[videoPath] = target.path;
+        ], timeout: const Duration(seconds: 8));
+        if (res != null &&
+            res.exitCode == 0 &&
+            await target.exists() &&
+            await target.length() > 0) {
+          return _thumbnailCache[videoPath] = target.path;
+        }
+        if (await target.exists()) {
+          try {
+            await target.delete();
+          } catch (_) {}
+        }
       }
-      if (await target.exists()) {
-        try {
-          await target.delete();
-        } catch (_) {}
-      }
+      _failedThumbnails.add(videoPath);
     } catch (_) {
       if (target != null) {
         try {
@@ -313,32 +312,28 @@ class MediaRemuxService {
           return targetMp4;
         }
 
-        final res = await _runProcess(
-          'ffmpeg',
-          [
-            '-v',
-            'error',
-            '-stream_loop',
-            '4',
-            '-t',
-            '12',
-            '-i',
-            sourceFile.path,
-            '-vf',
-            "scale='min(1280,trunc(iw/2)*2)':trunc(ow/a/2)*2",
-            '-c:v',
-            'libx264',
-            '-preset',
-            'ultrafast',
-            '-pix_fmt',
-            'yuv420p',
-            '-movflags',
-            'faststart',
-            '-y',
-            targetMp4.path,
-          ],
-          timeout: const Duration(seconds: 8),
-        );
+        final res = await _runProcess('ffmpeg', [
+          '-v',
+          'error',
+          '-stream_loop',
+          '4',
+          '-t',
+          '12',
+          '-i',
+          sourceFile.path,
+          '-vf',
+          "scale='min(1280,trunc(iw/2)*2)':trunc(ow/a/2)*2",
+          '-c:v',
+          'libx264',
+          '-preset',
+          'ultrafast',
+          '-pix_fmt',
+          'yuv420p',
+          '-movflags',
+          'faststart',
+          '-y',
+          targetMp4.path,
+        ], timeout: const Duration(seconds: 8));
 
         if (res != null &&
             res.exitCode == 0 &&
@@ -359,18 +354,14 @@ class MediaRemuxService {
           return targetPng;
         }
 
-        final res = await _runProcess(
-          'ffmpeg',
-          [
-            '-v',
-            'error',
-            '-i',
-            sourceFile.path,
-            '-y',
-            targetPng.path,
-          ],
-          timeout: const Duration(seconds: 4),
-        );
+        final res = await _runProcess('ffmpeg', [
+          '-v',
+          'error',
+          '-i',
+          sourceFile.path,
+          '-y',
+          targetPng.path,
+        ], timeout: const Duration(seconds: 4));
 
         if (res != null &&
             res.exitCode == 0 &&

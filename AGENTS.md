@@ -24,10 +24,14 @@ A memória técnica, decisões históricas e cadernos de erros deste projeto est
 1. **Stack Tecnológica:** Flutter & Dart, `provider` (gerenciamento de estado), `window_manager` e `tray_manager` (Windows), `shared_preferences`.
 2. **Padrão Driver / Adapter:**
    - Todo suporte a dispositivos de TV deve implementar a interface base abstrata `TvDriver` (`lib/services/tv_driver.dart`).
-   - Drivers concretos: `LgWebOsDriver` (webOS SSAP porta 3000/3001) e `SamsungTizenDriver` (WebSocket portas 8001/8002).
+   - Drivers concretos: `LgWebOsDriver` (webOS SSAP porta 3000/3001), `SamsungTizenDriver` (WebSocket portas 8001/8002) e `GoogleTvDriver` (Chromecast com Google TV, portas 6466/6467).
    - Instanciação centralizada exclusivamente pela `DriverFactory`.
 3. **Restrições de Escopo e Decisões Históricas (Atenção Crítica):**
-   - **Android TV / Google Cast v2:** O suporte a Android TV foi oficialmente **descontinuado** devido a instabilidades crônicas de expiração de token e mTLS no protocolo Cast v2. **Não tente reescrever ou reativar o `AndroidTvDriver` sem consultar o [BPM-001](file:///d:/Google%20Drive/Meu%20Drive/Pessoal/My%20Second%20Brain/Projetos/Projeto%20SixF/Post-Mortem/BPM-001%20-%20Instabilidade%20TLS%20e%20Sessao%20no%20Google%20Cast%20Remote%20v2.md).**
+   - **Chromecast com Google TV (suporte ativo):** O antigo `AndroidTvDriver` (Google Cast v2 / porta 8443) foi descontinuado em 09/2026 por instabilidade de token e mTLS. O suporte foi **retomado por autorização expressa do desenvolvedor**, restrito ao **Chromecast com Google TV** (Android 14, modelo com controle físico), através do `GoogleTvDriver` (`lib/services/drivers/google_tv_driver.dart`):
+     - Controle via **Android TV Remote Service v2** — porta de controle `6466`, pareamento por PIN hexadecimal na porta `6467`, identidade TLS (certificado RSA) persistente por aparelho.
+     - Mídia via **Google Cast** (Default Media Receiver), protocolo distinto do controle.
+     - Lista e abertura de aplicativos instalados via **ADB por Depuração sem fio** (`GoogleTvAppsAdb`), canal opcional autorizado separadamente pelo usuário.
+     - Outros aparelhos Android TV (Sony, TCL, Philips etc.) **não** estão no escopo. Antes de alterar sessão, TLS, pareamento ou ADB do Chromecast, consulte o [BPM-001](file:///d:/Google%20Drive/Meu%20Drive/Pessoal/My%20Second%20Brain/Projetos/Projeto%20SixF/Post-Mortem/BPM-001%20-%20Instabilidade%20TLS%20e%20Sessao%20no%20Google%20Cast%20Remote%20v2.md) (inclui a seção de retomada) e o BPM-009 (colisão de identidades e falso repareamento).
 4. **Descoberta de Rede:**
    - Descoberta automatizada via **SSDP / UDP Broadcast** e Wake-on-LAN (`wol`).
 

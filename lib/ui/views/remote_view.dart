@@ -305,12 +305,20 @@ class _RemoteViewState extends State<RemoteView> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWideScreen = constraints.maxWidth >= 840;
+              // Celular deitado (ou janela baixa e larga): layout próprio de
+              // paisagem. Vem antes do modo desktop, pois o S23 Ultra deitado
+              // passa de 840 dp e antes caía no layout de PC encolhido.
+              final isCompactLandscape =
+                  constraints.maxWidth > constraints.maxHeight &&
+                  constraints.maxHeight < 560;
 
               return SizedBox(
                 width: constraints.maxWidth,
                 height: constraints.maxHeight,
                 child: _compact
                     ? CompactRemote(onExpand: _toggleCompact)
+                    : isCompactLandscape
+                    ? _buildLandscapeShell()
                     : isWideScreen && _selectedTabIndex == 0
                     ? Column(
                         children: [
@@ -424,10 +432,230 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
+  /// Estrutura em paisagem (padrão Material para telas largas e baixas):
+  /// navegação em trilho lateral, cabeçalho e aparelhos numa única faixa e
+  /// todo o resto da altura para o conteúdo da aba.
+  Widget _buildLandscapeShell() {
+    final controller = context.watch<RemoteController>();
+    return Row(
+      children: [
+        _buildSideNavRail(),
+        Expanded(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 16, 2),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final header = HeaderBar(
+                      onToggleCompact: !kIsWeb && Platform.isWindows
+                          ? _toggleCompact
+                          : null,
+                      onOpenDrawer: () =>
+                          _scaffoldKey.currentState?.openEndDrawer(),
+                    );
+                    // Largura suficiente: cabeçalho e aparelhos lado a lado,
+                    // poupando altura. Senão, um sobre o outro.
+                    if (c.maxWidth < 620) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [header, const DeviceSelectorBar()],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(flex: 5, child: header),
+                        const SizedBox(width: 12),
+                        const Expanded(flex: 6, child: DeviceSelectorBar()),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedTabIndex,
+                  children: [
+                    _buildTab1ControlLandscape(),
+                    _buildTab2KeypadAndMedia(),
+                    controller.supportsTrackpad
+                        ? _buildTab3Trackpad()
+                        : const SizedBox.shrink(),
+                    MediaLibrary(key: _libraryKey, embedded: true),
+                    const AppDrawerWidget(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Trilho de navegação vertical (substitui a barra inferior na paisagem).
+  Widget _buildSideNavRail() {
+    final supportsTrackpad = context.watch<RemoteController>().supportsTrackpad;
+    final items = <({int index, String title, IconData icon})>[
+      (index: 0, title: 'Controle', icon: Icons.tv_rounded),
+      (index: 1, title: 'Teclas', icon: Icons.dialpad_rounded),
+      if (supportsTrackpad)
+        (index: 2, title: 'Trackpad', icon: Icons.touch_app_rounded),
+      (index: 3, title: 'Mídia', icon: Icons.video_library_outlined),
+      (index: 4, title: 'Apps', icon: Icons.apps_rounded),
+    ];
+    final active = AppColors.iconHighlightOf(context);
+    final inactive = AppColors.textSecondaryOf(context);
+
+    return Container(
+      width: 76,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCardOf(context),
+        border: Border(
+          right: BorderSide(color: AppColors.borderSubtleOf(context)),
+        ),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final item in items)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  child: Tooltip(
+                    message: item.title,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        HapticService.selectionClick();
+                        setState(() => _selectedTabIndex = item.index);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 64,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                          color: _selectedTabIndex == item.index
+                              ? active.withValues(alpha: 0.14)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              item.icon,
+                              size: 22,
+                              color: _selectedTabIndex == item.index
+                                  ? active
+                                  : inactive,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textScaler: const TextScaler.linear(1.0),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: _selectedTabIndex == item.index
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _selectedTabIndex == item.index
+                                    ? active
+                                    : inactive,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Aba Controle em paisagem: duas metades simétricas.
+  /// Esquerda — VOL, MUTE/VOZ e CH (mesma disposição do retrato) com a fileira
+  /// Home/Menu/Entrada/Sair logo abaixo. Direita — D-pad com VOLTAR, TV Digital
+  /// e HDMI (no Chromecast, o mesmo arranjo sem as entradas, que ele não tem).
+  /// Cada metade escala junto (FittedBox), então nada transborda em telas
+  /// baixas e as proporções ficam idênticas às do controle vertical.
+  Widget _buildTab1ControlLandscape() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final halfWidth = (constraints.maxWidth - 32 - 1) / 2;
+        final height = constraints.maxHeight;
+        // D-pad: ocupa a altura disponível, sem passar do tamanho do retrato.
+        final wheel = (height - 20).clamp(130.0, 260.0);
+        final volumeHeight = (height * 0.55).clamp(130.0, 220.0);
+        const leftWidth = 300.0;
+        final dpadWidth = wheel + 140;
+
+        Widget half(Widget child, double naturalWidth) => SizedBox(
+          width: halfWidth,
+          height: height,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(width: naturalWidth, child: child),
+              ),
+            ),
+          ),
+        );
+
+        return Padding(
+          key: const ValueKey('control-landscape'),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              half(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    VolumeChannelControls(height: volumeHeight),
+                    const SizedBox(height: 18),
+                    const SystemNavigationControls(),
+                  ],
+                ),
+                leftWidth,
+              ),
+              Container(
+                width: 1,
+                height: height * 0.62,
+                color: AppColors.borderSubtleOf(context),
+              ),
+              half(DPadWidget(size: wheel), dpadWidth),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Aba 1: Apenas Volume, Canais, D-Pad, HDMI 1, TV Digital, Home, Menu, Voltar e Exit
   Widget _buildTab1Control() {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Tamanhos modulares: a altura útil (abaixo de Home/Menu/Input/Exit) é
+        // repartida entre o bloco VOL/MUTE/CH (~42%) e o D-pad (o restante),
+        // com limites para telas muito baixas ou muito altas. Mesmo arranjo
+        // para qualquer aparelho; só somem as funções que ele não tem.
+        final body = constraints.maxHeight - 16 - 52 - 3 * 12;
+        final volumeHeight = (body * 0.42).clamp(130.0, 300.0);
+        final dpadSize = (body - volumeHeight).clamp(150.0, 300.0);
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -440,23 +668,15 @@ class _RemoteViewState extends State<RemoteView> {
                 // 1. Navegação do Sistema: Home, Menu, Voltar, Exit
                 const SystemNavigationControls(),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
-                // 2. Controles de Volume, Canal e Mudo
-                const VolumeChannelControls(),
+                // 2. Controles de Volume, Canal e Mudo (altura proporcional)
+                VolumeChannelControls(height: volumeHeight),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // 3. Roda D-Pad com HDMI 1 à esquerda e TV Digital à direita
-                DPadWidget(
-                  size:
-                      (constraints.maxWidth -
-                              (context.watch<RemoteController>().currentBrand ==
-                                      TvBrand.googleTv
-                                  ? 64
-                                  : 172))
-                          .clamp(128.0, 210.0),
-                ),
+                DPadWidget(size: dpadSize),
 
                 const SizedBox(height: 12),
               ],

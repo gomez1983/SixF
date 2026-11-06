@@ -1,5 +1,6 @@
 import 'google_tv_adb_dialog.dart';
 import '../../services/drivers/tv_driver.dart';
+import '../../services/google_tv_apps_adb.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -104,24 +105,39 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
 
           SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
 
-          if (controller.currentBrand == TvBrand.googleTv)
-            TextButton.icon(
-              icon: const Icon(Icons.settings_ethernet),
-              label: const Text('Configurar aplicativos via ADB'),
-              onPressed: () async {
-                final host = controller.ipAddress;
-                final configured = await showDialog<bool>(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (_) => GoogleTvAdbDialog(host: host),
-                );
-                if (configured == true &&
-                    mounted &&
-                    controller.ipAddress == host) {
-                  await controller.fetchInstalledApps(forceRefresh: true);
-                }
-              },
+          // Chromecast sem a lista ADB ativa: passo a passo + campos de porta e
+          // código dentro da própria gaveta (sem diálogo, sem outra tela).
+          if (isConnected &&
+              !isLoading &&
+              controller.currentBrand == TvBrand.googleTv &&
+              !apps.any((a) => a.id.startsWith('adb:')))
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+              ),
+              child: SingleChildScrollView(
+                child: FutureBuilder<bool>(
+                  key: ValueKey('adb-panel-${controller.ipAddress}'),
+                  future: GoogleTvAppsAdb.configured(controller.ipAddress),
+                  builder: (context, snapshot) => GoogleTvAdbPanel(
+                    host: controller.ipAddress,
+                    wasConfigured:
+                        snapshot.data == true || controller.appsError != null,
+                    onConnected: () async {
+                      final host = controller.ipAddress;
+                      if (mounted && controller.ipAddress == host) {
+                        await controller.fetchInstalledApps(forceRefresh: true);
+                      }
+                    },
+                  ),
+                ),
+              ),
             ),
+          if (isConnected &&
+              !isLoading &&
+              controller.currentBrand == TvBrand.googleTv &&
+              !apps.any((a) => a.id.startsWith('adb:')))
+            SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
           // 2. Campo de Pesquisa Instantânea
           if (isConnected && apps.isNotEmpty) ...[
             _buildSearchField(context),

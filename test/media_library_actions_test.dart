@@ -104,6 +104,12 @@ void main() {
       await settleIO();
       await tester.tap(find.text('Arquivos'));
       await settleIO();
+      // Regra: ao abrir uma pasta, o padrão é visualizar no próprio app —
+      // mesmo com a TV conectada, nada é enviado até o usuário pedir.
+      expect(remote.isConnected, isTrue);
+      expect(find.text('Local'), findsWidgets);
+      expect(find.text('Na TV'), findsNothing);
+      expect(receiver.loadedUrl, isNull);
       await tester.tap(find.text('clip.mp4').first);
       await tester.pumpAndSettle();
       expect(find.text('Reproduzir agora na televisão'), findsOneWidget);

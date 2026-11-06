@@ -98,7 +98,8 @@ class LibrarySources {
 
   final Set<HttpClient> _activeClients = {};
 
-  static final Map<String, ({List<LibraryEntry> items, DateTime expires})> _folderCache = {};
+  static final Map<String, ({List<LibraryEntry> items, DateTime expires})>
+  _folderCache = {};
 
   static void invalidateFolderCache([String? folderId]) {
     if (folderId != null) {
@@ -234,15 +235,15 @@ class LibrarySources {
     if (cached != null && cached.expires.isAfter(DateTime.now())) {
       return cached.token;
     }
-    if (source == LibrarySource.drive && Platform.isAndroid) {
-      const server = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
-      if (server.isEmpty) {
-        throw const FormatException(
-          'Configure o cliente Google desta instalação.',
-        );
-      }
+    // Android com cliente Web registrado: login nativo do Google (conta do aparelho).
+    // Sem ele, o Android usa o mesmo fluxo do Windows (navegador + retorno local),
+    // que depende apenas do cliente OAuth de computador incluído no build.
+    const webClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+    if (source == LibrarySource.drive &&
+        Platform.isAndroid &&
+        webClientId.isNotEmpty) {
       await (_googleInit ??= GoogleSignIn.instance.initialize(
-        serverClientId: server,
+        serverClientId: webClientId,
       ));
       _account ??= await GoogleSignIn.instance.authenticate(
         scopeHint: [driveScope],
@@ -267,7 +268,13 @@ class LibrarySources {
     final client = google ? googleId : microsoftId;
     if (client.isEmpty) {
       throw FormatException(
-        'Configure o cliente ${google ? "Google Drive" : "OneDrive"} desta instalação.',
+        google
+            ? 'O login do Google Drive não foi incluído nesta versão do SixF '
+                  '(falta o ID de cliente OAuth no build). Enquanto isso, use '
+                  '"Adicionar pasta deste aparelho" e escolha o Drive.'
+            : 'O login do OneDrive ainda não está habilitado nesta versão do SixF: '
+                  'falta registrar o aplicativo no Microsoft Entra e incluir o '
+                  'ONEDRIVE_CLIENT_ID no build (passo a passo em docs/BIBLIOTECA.md).',
       );
     }
     const secret = String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_SECRET');
@@ -389,6 +396,18 @@ class LibrarySources {
     }
   }
 
+  /// URL pré-assinada da miniatura média do OneDrive (`$expand=thumbnails`).
+  static String? _oneDriveThumbnail(Object? thumbnails) {
+    if (thumbnails is! List || thumbnails.isEmpty) return null;
+    final set = thumbnails.first;
+    if (set is! Map) return null;
+    for (final size in const ['medium', 'large', 'small']) {
+      final url = set[size] is Map ? set[size]['url'] : null;
+      if (url is String && url.startsWith('https://')) return url;
+    }
+    return null;
+  }
+
   static String _ensureExtension(
     String rawName,
     String? mimeType,
@@ -452,13 +471,7 @@ class LibrarySources {
             } catch (_) {}
           }
           items.add(
-            LibraryEntry(
-              src,
-              item.path,
-              name,
-              folder: isDir,
-              size: fileSize,
-            ),
+            LibraryEntry(src, item.path, name, folder: isDir, size: fileSize),
           );
         }
       } catch (_) {
@@ -476,13 +489,7 @@ class LibrarySources {
             } catch (_) {}
           }
           items.add(
-            LibraryEntry(
-              src,
-              item.path,
-              name,
-              folder: isDir,
-              size: fileSize,
-            ),
+            LibraryEntry(src, item.path, name, folder: isDir, size: fileSize),
           );
         }
       }
@@ -490,7 +497,14 @@ class LibrarySources {
       final rows = await tree.invokeListMethod<dynamic>('list', dir.id);
       for (final row in rows!) {
         items.add(
-          LibraryEntry(src, row['id'], row['name'], folder: row['folder']),
+          LibraryEntry(
+            src,
+            row['id'],
+            row['name'],
+            folder: row['folder'],
+            mimeType: row['mime'] as String?,
+            size: (row['size'] as num?)?.toInt(),
+          ),
         );
       }
     } else {
@@ -514,8 +528,7 @@ class LibrarySources {
       final params = {
         'q':
             "'$sanitizedParent' in parents and trashed = false and (mimeType = 'application/vnd.google-apps.folder' or mimeType contains 'video/' or mimeType contains 'image/' or mimeType contains 'audio/' or fileExtension = 'mkv' or fileExtension = 'mp4' or fileExtension = 'webm' or fileExtension = 'webp' or fileExtension = 'avi' or fileExtension = 'ts')",
-        'fields':
-            'nextPageToken,files(id,name,mimeType,size,thumbnailLink,fileExtension)',
+        'fields': 'nextPageToken,files(id,name,mimeType,size,thumbnailLink,fileExtension)',
         'pageSize': '100',
       };
       Uri? next = google
@@ -523,6 +536,7 @@ class LibrarySources {
           : Uri.https(
               'graph.microsoft.com',
               '/v1.0/me/drive/${dir.id == "root" ? "root" : "items/${dir.id}"}/children',
+              {r'$expand': 'thumbnails'},
             );
       var pageCount = 0;
       while (next != null && pageCount < 3) {
@@ -555,7 +569,9 @@ class LibrarySources {
           final parsedSize = google
               ? int.tryParse(row['size']?.toString() ?? '')
               : (row['size'] as num?)?.toInt();
-          final thumb = google ? row['thumbnailLink'] as String? : null;
+          final thumb = google
+              ? row['thumbnailLink'] as String?
+              : _oneDriveThumbnail(row['thumbnails']);
 
           items.add(
             LibraryEntry(

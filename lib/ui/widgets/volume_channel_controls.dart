@@ -8,7 +8,14 @@ import 'voice_listening_dialog.dart';
 
 /// Controles Verticais de Volume (+/-), Canal (+/-) e botão central de Mudo.
 class VolumeChannelControls extends StatelessWidget {
-  const VolumeChannelControls({super.key});
+  /// Altura-alvo do bloco (VOL/CH). `null` mantém o tamanho compacto padrão
+  /// (~130 px). Na aba Controle em retrato, a altura acompanha a tela.
+  final double? height;
+
+  const VolumeChannelControls({super.key, this.height});
+
+  // Proporções derivadas do tamanho padrão (botões de 48 px, bloco de 130 px).
+  static const double _baseHeight = 130;
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +23,14 @@ class VolumeChannelControls extends StatelessWidget {
     final isMuted = controller.isMuted;
     final volumeLevel = controller.volumeLevel;
     final currentChannel = controller.currentChannel;
+    final target = height ?? _baseHeight;
+    // Cresce em altura livremente (botões mais altos); largura e ícones só um
+    // pouco, para não ficarem desproporcionais.
+    final scale = (target / _baseHeight).clamp(1.0, 1.3);
+    final buttonHeight = ((target - 34) / 2).clamp(48.0, 120.0);
+    final rockerWidth = 58 * scale;
+    final iconSize = 22 * scale;
+    final roundSize = 50 * scale;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -29,6 +44,9 @@ class VolumeChannelControls extends StatelessWidget {
           onMinus: () => controller.volumeDown(),
           plusTooltip: 'Aumentar Volume (+)',
           minusTooltip: 'Diminuir Volume (-)',
+          width: rockerWidth,
+          buttonHeight: buttonHeight,
+          iconSize: iconSize,
         ),
 
         // Coluna Central: Botão Mute e Botão de Microfone (Voz)
@@ -36,8 +54,8 @@ class VolumeChannelControls extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             RemoteButton(
-              width: 50,
-              height: 50,
+              width: roundSize,
+              height: roundSize,
               isCircular: true,
               backgroundColor: isMuted
                   ? AppColors.powerRed.withValues(alpha: 0.2)
@@ -45,7 +63,7 @@ class VolumeChannelControls extends StatelessWidget {
               borderColor: isMuted ? AppColors.powerRed : AppColors.borderSubtleOf(context),
               foregroundColor: isMuted ? AppColors.powerRed : AppColors.textPrimaryOf(context),
               icon: isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-              iconSize: 22,
+              iconSize: iconSize,
               tooltip: isMuted ? 'Desmutar Áudio' : 'Mutar Áudio',
               onPressed: () => controller.muteToggle(),
             ),
@@ -59,8 +77,8 @@ class VolumeChannelControls extends StatelessWidget {
                 letterSpacing: 0.8,
               ),
             ),
-            const SizedBox(height: 8),
-            VoicePttButton(controller: controller),
+            SizedBox(height: 8 * scale),
+            VoicePttButton(controller: controller, size: roundSize),
             const SizedBox(height: 3),
             Text(
               'VOZ',
@@ -83,6 +101,9 @@ class VolumeChannelControls extends StatelessWidget {
           onMinus: () => controller.channelDown(),
           plusTooltip: 'Avançar Canal (+)',
           minusTooltip: 'Voltar Canal (-)',
+          width: rockerWidth,
+          buttonHeight: buttonHeight,
+          iconSize: iconSize,
         ),
       ],
     );
@@ -96,22 +117,25 @@ class VolumeChannelControls extends StatelessWidget {
     required VoidCallback onMinus,
     required String plusTooltip,
     required String minusTooltip,
+    double width = 58,
+    double buttonHeight = 48,
+    double iconSize = 22,
   }) {
     return Container(
-      width: 58,
+      width: width,
       decoration: AppColors.glassCardDecoration(context, borderRadius: 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Botão Superior (+)
           RemoteButton(
-            width: 54,
-            height: 48,
+            width: width - 4,
+            height: buttonHeight,
             backgroundColor: Colors.transparent,
             borderColor: Colors.transparent,
             borderRadius: 24,
             icon: Icons.add_rounded,
-            iconSize: 22,
+            iconSize: iconSize,
             tooltip: plusTooltip,
             onPressed: onPlus,
             repeatOnHold: context.read<RemoteController>().isConnected,
@@ -147,13 +171,13 @@ class VolumeChannelControls extends StatelessWidget {
 
           // Botão Inferior (-)
           RemoteButton(
-            width: 54,
-            height: 48,
+            width: width - 4,
+            height: buttonHeight,
             backgroundColor: Colors.transparent,
             borderColor: Colors.transparent,
             borderRadius: 24,
             icon: Icons.remove_rounded,
-            iconSize: 22,
+            iconSize: iconSize,
             tooltip: minusTooltip,
             onPressed: onMinus,
             repeatOnHold: context.read<RemoteController>().isConnected,
@@ -171,8 +195,9 @@ class VolumeChannelControls extends StatelessWidget {
 /// Ao soltar: vibração mecânica de desengate e fechamento instantâneo.
 class VoicePttButton extends StatefulWidget {
   final RemoteController controller;
+  final double size;
 
-  const VoicePttButton({super.key, required this.controller});
+  const VoicePttButton({super.key, required this.controller, this.size = 50});
 
   @override
   State<VoicePttButton> createState() => _VoicePttButtonState();
@@ -296,8 +321,8 @@ class _VoicePttButtonState extends State<VoicePttButton>
             child: child,
           ),
           child: Container(
-            width: 50,
-            height: 50,
+            width: widget.size,
+            height: widget.size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isPressed
@@ -322,7 +347,7 @@ class _VoicePttButtonState extends State<VoicePttButton>
             child: Center(
               child: Icon(
                 isLocked ? Icons.lock_open_rounded : Icons.mic_rounded,
-                size: 22,
+                size: widget.size * 0.44,
                 color: (isPressed || isLocked)
                     ? highlightColor
                     : AppColors.iconHighlightOf(context),
