@@ -157,6 +157,17 @@ class LibrarySources {
     }
   }
 
+  /// Cabeçalho Authorization válido, só em memória, para ferramentas externas
+  /// (ffmpeg/ffprobe) que leem a URL da nuvem. Retorna null sem sessão
+  /// renovável.
+  static Future<Map<String, String>?> authHeadersForSourceName(
+    String? sourceName,
+  ) async {
+    final token = await freshTokenForSourceName(sourceName);
+    if (token == null || token.isEmpty) return null;
+    return {'Authorization': 'Bearer $token'};
+  }
+
   static Future<void> _ensureStoredTokensLoaded() async {
     if (_prefsLoaded) return;
     _prefsLoaded = true;
@@ -697,7 +708,8 @@ class LibrarySources {
           'id': entry.id,
           'name': entry.name,
           'size': resolvedSize ?? 0,
-          'headers': {'Authorization': 'Bearer $authToken'},
+          // O token NÃO vai para o disco: quem precisa dele o obtém em memória
+          // por requisição (freshTokenForSourceName / authHeadersForSourceName).
         }),
       );
       if (!await file.exists()) {

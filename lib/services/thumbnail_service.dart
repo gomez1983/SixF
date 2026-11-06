@@ -135,6 +135,13 @@ class ThumbnailService {
     }
   }
 
+  /// O token só pode ir para hosts do Google. 	humbnailUrl é guardado nas
+  /// preferências; um valor adulterado nunca deve receber o Bearer. Miniaturas do
+  /// OneDrive são pré-assinadas e dispensam o cabeçalho.
+  static bool _sendsToken(Uri uri) =>
+      uri.host.endsWith('.googleapis.com') ||
+      uri.host.endsWith('.googleusercontent.com');
+
   /// Baixa a miniatura. Links pré-assinados funcionam sem cabeçalho; alguns
   /// `thumbnailLink` privados do Drive exigem o token, então tenta os dois.
   static Future<bool> _download(
@@ -146,7 +153,7 @@ class ThumbnailService {
     if (uri.scheme != 'https') return false;
     final token = await LibrarySources.freshTokenForSourceName(e.source.name);
     final attempts = <Map<String, String>>[
-      if (token != null) {'Authorization': 'Bearer $token'},
+      if (token != null && _sendsToken(uri)) {'Authorization': 'Bearer $token'},
       if (!authOnly) const {},
     ];
     for (final headers in attempts) {

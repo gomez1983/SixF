@@ -854,9 +854,8 @@ class MediaCastController extends ChangeNotifier {
           ? cloudDesc['url'] as String?
           : file.path;
       final cloudSource = cloudDesc?['source'] as String?;
-      var probeHeaders = cloudDesc != null && cloudDesc['headers'] is Map
-          ? Map<String, String>.from(cloudDesc['headers'] as Map)
-          : null;
+      // O descritor não guarda token: o cabeçalho vem sempre da memória.
+      Map<String, String>? probeHeaders;
       if (cloudSource != null) {
         final freshToken = await LibrarySources.freshTokenForSourceName(
           cloudSource,

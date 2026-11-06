@@ -141,7 +141,7 @@ class GoogleCastMedia {
       host,
       port,
       timeout: const Duration(seconds: 8),
-      onBadCertificate: (_) => true,
+      onBadCertificate: (_) => NetworkSecurityUtils.isLocalNetworkHost(host),
     );
     if (generation != _generation) {
       socket.destroy();

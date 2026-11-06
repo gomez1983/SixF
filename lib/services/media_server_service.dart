@@ -33,13 +33,15 @@ class MediaServerService {
     final key = '$_currentToken:$trackId';
     final op = _mediaOperation;
     return _subtitles.putIfAbsent(key, () async {
+      // Token só em memória (o descritor em disco não o guarda).
+      final headers = await LibrarySources.authHeadersForSourceName(
+        _cloudDescriptor?['source'] as String?,
+      );
       final text = await op.run(
         () => MediaRemuxService.extractVttSubtitle(
           _cloudDescriptor?['url'] as String? ?? file.path,
           trackId,
-          headers: _cloudDescriptor?['headers'] is Map
-              ? Map<String, String>.from(_cloudDescriptor!['headers'] as Map)
-              : null,
+          headers: headers,
         ),
       );
       if (text == null) {
