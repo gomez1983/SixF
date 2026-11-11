@@ -53,7 +53,7 @@ A memória técnica, decisões históricas e cadernos de erros deste projeto est
 
 ---
 
-## 5. Gatilhos Proativos de Auditoria de Segurança (`flutter-security-audit`)
+## 5. Gatilhos Proativos de Auditoria de Segurança (`flutter-security-audit` e `auditoria-codigo`)
 
 O assistente deve **identificar proativamente** os momentos ideais e **avisar/recomendar ao desenvolvedor** a execução da skill `flutter-security-audit` antes de concluir tarefas nas seguintes situações:
 1. **Novas Dependências ou Upgrades:** Modificações no `pubspec.yaml` (adição de pacotes ou comandos de upgrade de dependências).
@@ -61,6 +61,10 @@ O assistente deve **identificar proativamente** os momentos ideais e **avisar/re
 3. **Persistência de Dados Sensíveis:** Mudanças no `StorageService` envolvendo chaves de TV, tokens ou senhas.
 4. **Permissões de Plataforma:** Alterações no `AndroidManifest.xml` (permissões, flags de tráfego claro) ou runners nativos do Windows.
 5. **Preparação de Release:** Sempre que o usuário mencionar publicação nas lojas (Google Play, Microsoft Store), builds de instalador (`.iss`, `.msix`) ou lançamento de versão.
+
+**Divisão de uso entre as skills:**
+- `flutter-security-audit`: auditoria padrão do SixF; conhece o escopo do projeto (drivers, Chromecast/Google TV, ADB) e deve ser a primeira escolha.
+- `auditoria-codigo`: varredura complementar e mais ampla (segredos rastreados no Git, taint analysis, relatório em `docs/security/audits/`). Os achados devem ser conferidos contra os post-mortems (BPM-001, BPM-009) antes de serem aceitos, pois a skill não conhece as decisões históricas do projeto.
 
 ---
 
