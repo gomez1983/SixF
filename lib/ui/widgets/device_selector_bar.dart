@@ -224,6 +224,14 @@ class DeviceSelectorBar extends StatelessWidget {
     );
   }
 
+  /// Abre o menu de opções do aparelho (conectar, renomear, remover...).
+  /// Público para a interface Liquid Glass reaproveitar o mesmo menu.
+  void showDeviceOptions(
+    BuildContext context,
+    RemoteController controller,
+    SavedDevice device,
+  ) => _showDeviceOptionsModal(context, controller, device);
+
   void _showDeviceOptionsModal(
     BuildContext context,
     RemoteController controller,

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/remote_controller.dart';
+import '../glass/glass_flags.dart';
+import '../glass/liquid_glass.dart' show GlassTokens, glassFlatDecoration;
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
 import 'remote_button.dart';
@@ -147,6 +149,22 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                 label: const Text('Favoritos'),
                 selected: _favoritesOnly,
                 onSelected: (value) => setState(() => _favoritesOnly = value),
+                // Modo Liquid Glass: chip translúcido em vez do fundo opaco.
+                backgroundColor: kGlassUi
+                    ? AppColors.surfaceInteractiveOf(context)
+                    : null,
+                selectedColor: kGlassUi ? GlassTokens.of(context).tintBlue : null,
+                surfaceTintColor: kGlassUi ? Colors.transparent : null,
+                elevation: kGlassUi ? 0 : null,
+                side: kGlassUi
+                    ? BorderSide(
+                        color: GlassTokens.of(context).rimLight.withValues(alpha: 0.5),
+                      )
+                    : null,
+                shape: kGlassUi ? const StadiumBorder() : null,
+                labelStyle: kGlassUi
+                    ? TextStyle(color: GlassTokens.of(context).label)
+                    : null,
               ),
             ),
             SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
@@ -517,7 +535,9 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
       children: [
         Positioned.fill(
           child: Material(
-            color: AppColors.surfaceCardOf(context),
+            color: kGlassUi
+                ? Colors.transparent
+                : AppColors.surfaceCardOf(context),
             borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
             child: InkWell(
               borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
@@ -527,13 +547,15 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                   horizontal: 4,
                   vertical: isDesktop ? 4 : 8,
                 ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
-                  border: Border.all(
-                    color: AppColors.borderSubtleOf(context),
-                    width: 1,
-                  ),
-                ),
+                decoration: kGlassUi
+                    ? glassFlatDecoration(context, radius: isDesktop ? 12 : 16)
+                    : BoxDecoration(
+                        borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
+                        border: Border.all(
+                          color: AppColors.borderSubtleOf(context),
+                          width: 1,
+                        ),
+                      ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -13,6 +13,10 @@ import 'package:provider/provider.dart';
 import 'media_library.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/haptic_service.dart';
+import '../glass/glass_control_body.dart';
+import '../glass/glass_flags.dart';
+import '../glass/glass_remote_shell.dart';
+import '../glass/liquid_glass.dart' show GlassBackdrop;
 import '../theme/app_colors.dart';
 import '../widgets/app_drawer_widget.dart';
 import '../widgets/color_buttons_row.dart';
@@ -301,7 +305,8 @@ class _RemoteViewState extends State<RemoteView> {
         key: _scaffoldKey,
         backgroundColor: AppColors.backgroundOf(context),
         endDrawer: const NetworkDrawer(),
-        body: SafeArea(
+        body: _withGlassBackdrop(
+          SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWideScreen = constraints.maxWidth >= 840;
@@ -331,9 +336,16 @@ class _RemoteViewState extends State<RemoteView> {
             },
           ),
         ),
+        ),
       ),
     );
   }
+
+  /// No modo Liquid Glass todos os layouts (largo, paisagem, compacto) ficam
+  /// sobre o fundo ambiente, que é o que dá sentido ao vidro.
+  Widget _withGlassBackdrop(Widget child) => kGlassUi
+      ? Stack(fit: StackFit.expand, children: [const GlassBackdrop(), child])
+      : child;
 
   /// Layout em duas colunas para telas Desktop largas:
   /// Adapta-se perfeitamente à largura e altura da janela sem transbordar.
@@ -382,6 +394,31 @@ class _RemoteViewState extends State<RemoteView> {
   /// Layout em 4 Abas Responsivo para Mobile (Galaxy S23 Ultra e telas verticais):
   /// Aproveita 100% da largura e altura da tela sem compressão ou caixas fixas.
   Widget _buildMobileTabLayout(BoxConstraints constraints) {
+    // Experimental (--dart-define=SIXF_GLASS_UI=true): mesma navegação e mesmas
+    // abas, com moldura e aba Controle no estilo Liquid Glass.
+    if (kGlassUi) {
+      return GlassRemoteShell(
+        selectedTab: _selectedTabIndex,
+        onSelectTab: (i) {
+          HapticService.selectionClick();
+          setState(() => _selectedTabIndex = i);
+        },
+        onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
+        onToggleCompact: !kIsWeb && Platform.isWindows ? _toggleCompact : null,
+        body: IndexedStack(
+          index: _selectedTabIndex,
+          children: [
+            const GlassControlBody(),
+            _buildTab2KeypadAndMedia(),
+            context.watch<RemoteController>().supportsTrackpad
+                ? _buildTab3Trackpad()
+                : const SizedBox.shrink(),
+            MediaLibrary(key: _libraryKey, embedded: true),
+            const AppDrawerWidget(),
+          ],
+        ),
+      );
+    }
     return Column(
       children: [
         // 1. Cabeçalho persistente no topo (Status, Cast, Power, Tema, Menu)
@@ -787,6 +824,24 @@ class _RemoteViewState extends State<RemoteView> {
   Widget _buildBottomTabBar() {
     final isDark = AppColors.isDark(context);
     final supportsTrackpad = context.watch<RemoteController>().supportsTrackpad;
+
+    // Layout largo no modo Liquid Glass: mesma barra flutuante do celular.
+    if (kGlassUi) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+          child: GlassTabBar(
+            items: glassTabItems(supportsTrackpad: supportsTrackpad),
+            selected: _selectedTabIndex,
+            onSelect: (i) {
+              HapticService.selectionClick();
+              setState(() => _selectedTabIndex = i);
+            },
+          ),
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(

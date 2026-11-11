@@ -197,7 +197,17 @@ class VoicePttButton extends StatefulWidget {
   final RemoteController controller;
   final double size;
 
-  const VoicePttButton({super.key, required this.controller, this.size = 50});
+  /// Visual alternativo (ex.: Liquid Glass). A lógica de Push-to-Talk, travamento
+  /// e vibração é a mesma; só o desenho do botão muda.
+  final Widget Function(BuildContext context, bool isPressed, bool isLocked)?
+  builder;
+
+  const VoicePttButton({
+    super.key,
+    required this.controller,
+    this.size = 50,
+    this.builder,
+  });
 
   @override
   State<VoicePttButton> createState() => _VoicePttButtonState();
@@ -306,6 +316,24 @@ class _VoicePttButtonState extends State<VoicePttButton>
     final highlightColor = AppColors.iconHighlightOf(context);
     final isPressed = _isPressed;
     final isLocked = _isLocked;
+
+    if (widget.builder != null) {
+      return Listener(
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        child: Tooltip(
+          message: 'Comando de Voz (Segure para falar • Deslize para travar 🔒)',
+          child: AnimatedBuilder(
+            animation: _scaleController,
+            builder: (context, child) =>
+                Transform.scale(scale: _scaleController.value, child: child),
+            child: widget.builder!(context, isPressed, isLocked),
+          ),
+        ),
+      );
+    }
 
     return Listener(
       onPointerDown: _onPointerDown,

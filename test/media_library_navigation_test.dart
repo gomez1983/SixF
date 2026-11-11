@@ -1,3 +1,4 @@
+import 'glass_test_labels.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -35,11 +36,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       final libraryTabLeft = tester
-          .getTopLeft(find.text('Biblioteca de mídia').last)
+          .getTopLeft(find.text(tabLibraryLabel).last)
           .dx;
       final appsTabLeft = tester.getTopLeft(find.text('Apps').last).dx;
       expect(libraryTabLeft, lessThan(appsTabLeft));
-      await tester.tap(find.text('Biblioteca de mídia').first);
+      await tester.tap(find.text(tabLibraryLabel).first);
       await tester.pumpAndSettle();
       expect(find.textContaining('Biblioteca de mídia ·'), findsOneWidget);
       expect(find.text('Playlists'), findsOneWidget);
@@ -59,10 +60,10 @@ void main() {
         expect(tester.state(find.byType(MediaLibrary)), same(libraryState));
       }
 
-      await tester.tap(find.text('Teclas & Mídia').last);
+      await tester.tap(find.text(tabKeysLabel).last);
       await tester.pumpAndSettle();
       expect(find.text('Atalhos de Teclado Físico (Desktop)'), findsNothing);
-      await tester.tap(find.text('Biblioteca de mídia').last);
+      await tester.tap(find.text(tabLibraryLabel).last);
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(MediaLibrary)), same(libraryState));
       expect(tester.takeException(), isNull);

@@ -1,3 +1,4 @@
+import 'glass_test_labels.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -550,12 +551,12 @@ void main() {
       final remote = tester.element(find.text('SixF')).read<RemoteController>();
       expect(find.byType(TrackpadWidget, skipOffstage: false), findsOneWidget);
       if (width < 840) {
-        await tester.tap(find.text('Magic Trackpad'));
+        await tester.tap(find.text(tabTrackpadLabel));
         await tester.pumpAndSettle();
       }
       remote.selectBrand(TvBrand.googleTv);
       await tester.pumpAndSettle();
-      expect(find.text('Magic Trackpad', skipOffstage: false), findsNothing);
+      expect(find.text(tabTrackpadLabel, skipOffstage: false), findsNothing);
       expect(find.byType(TrackpadWidget, skipOffstage: false), findsNothing);
       remote.selectBrand(TvBrand.samsungTizen);
       await tester.pumpAndSettle();

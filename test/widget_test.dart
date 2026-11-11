@@ -1,3 +1,4 @@
+import 'glass_test_labels.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -136,7 +137,7 @@ void main() {
         expect(find.text('TV Digital'), findsOneWidget);
 
         // Alterna para a Aba 2 (Teclas & Mídia) e verifica botões coloridos
-        await tester.tap(find.text('Teclas & Mídia'));
+        await tester.tap(find.text(tabKeysLabel));
         await tester.pumpAndSettle();
 
         expect(find.text('VERMELHO'), findsOneWidget);
@@ -212,7 +213,7 @@ void main() {
       expect(find.text('HDMI 1'), findsOneWidget);
       expect(find.text('TV Digital'), findsOneWidget);
 
-      await tester.tap(find.text('Teclas & Mídia'));
+      await tester.tap(find.text(tabKeysLabel));
       await tester.pumpAndSettle();
       expect(find.text('VERMELHO'), findsOneWidget);
       expect(find.text('AZUL'), findsOneWidget);
@@ -281,7 +282,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Clica no seletor "Magic Trackpad"
-      await tester.tap(find.text('Magic Trackpad').first);
+      await tester.tap(find.text(tabTrackpadLabel).first);
       await tester.pumpAndSettle();
 
       expect(

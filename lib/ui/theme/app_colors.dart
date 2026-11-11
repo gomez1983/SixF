@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../glass/glass_flags.dart';
+import '../glass/liquid_glass.dart' show GlassTokens, glassFlatDecoration;
+
 /// Paleta de cores e tokens Liquid Glass inspirados no Dashboard do André,
 /// com suporte completo a Modo Escuro (Dark Mode) e Modo Claro (Light Mode).
 class AppColors {
@@ -77,8 +80,9 @@ class AppColors {
   static Color ambientSecondaryOf(BuildContext context) =>
       isDark(context) ? ambientGlowSecondary : lightAmbientGlowSecondary;
 
-  static Color remoteChassisOf(BuildContext context) =>
-      isDark(context) ? remoteChassis : lightRemoteChassis;
+  static Color remoteChassisOf(BuildContext context) => kGlassUi
+      ? (isDark(context) ? const Color(0xF21F2233) : const Color(0xF2F4F6FC))
+      : (isDark(context) ? remoteChassis : lightRemoteChassis);
 
   static Color surfaceCardOf(BuildContext context) =>
       isDark(context) ? surfaceCard : lightSurfaceCard;
@@ -86,8 +90,12 @@ class AppColors {
   static Color surfaceElevatedOf(BuildContext context) =>
       isDark(context) ? surfaceElevated : lightSurfaceElevated;
 
-  static Color surfaceInteractiveOf(BuildContext context) =>
-      isDark(context) ? surfaceInteractive : lightSurfaceInteractive;
+  // No modo Liquid Glass (experimental) as superfícies de conteúdo viram vidro
+  // translúcido sobre o fundo ambiente; dialogs e menus (surfaceCardOf,
+  // remoteChassisOf) continuam opacos para ficarem legíveis.
+  static Color surfaceInteractiveOf(BuildContext context) => kGlassUi
+      ? GlassTokens.of(context).fillStrong
+      : (isDark(context) ? surfaceInteractive : lightSurfaceInteractive);
 
   static Color surfaceInteractiveHoverOf(BuildContext context) =>
       isDark(context) ? surfaceInteractiveHover : lightSurfaceInteractiveHover;
@@ -113,17 +121,22 @@ class AppColors {
   static Color iconHighlightOf(BuildContext context) =>
       isDark(context) ? iconHighlight : lightIconHighlight;
 
-  static Color trackpadSurfaceOf(BuildContext context) =>
-      isDark(context) ? trackpadSurface : lightTrackpadSurface;
+  static Color trackpadSurfaceOf(BuildContext context) => kGlassUi
+      ? GlassTokens.of(context).fill
+      : (isDark(context) ? trackpadSurface : lightTrackpadSurface);
 
-  static Color trackpadBorderOf(BuildContext context) =>
-      isDark(context) ? trackpadBorder : lightTrackpadBorder;
+  static Color trackpadBorderOf(BuildContext context) => kGlassUi
+      ? GlassTokens.of(context).rimLight.withValues(alpha: 0.5)
+      : (isDark(context) ? trackpadBorder : lightTrackpadBorder);
 
   /// Decoração Liquid Glass para o chassi principal e grandes painéis.
   static BoxDecoration glassPanelDecoration(
     BuildContext context, {
     double borderRadius = 28,
   }) {
+    if (kGlassUi) {
+      return glassFlatDecoration(context, radius: borderRadius, strong: true);
+    }
     final dark = isDark(context);
     return BoxDecoration(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -158,6 +171,7 @@ class AppColors {
     BuildContext context, {
     double borderRadius = 18,
   }) {
+    if (kGlassUi) return glassFlatDecoration(context, radius: borderRadius);
     final dark = isDark(context);
     return BoxDecoration(
       borderRadius: BorderRadius.circular(borderRadius),

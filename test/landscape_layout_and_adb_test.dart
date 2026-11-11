@@ -1,3 +1,4 @@
+import 'glass_test_labels.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,7 +55,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       await tester.pumpWidget(const SixFRemoteApp());
       await tester.pumpAndSettle();
-      expect(find.text('Teclas & Mídia'), findsOneWidget);
+      expect(find.text(tabKeysLabel), findsOneWidget);
     });
 
     for (final size in const [Size(412, 915), Size(360, 640), Size(440, 860)]) {
@@ -67,7 +68,7 @@ void main() {
         await tester.pumpWidget(const SixFRemoteApp());
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        final volume = tester.getSize(find.byType(VolumeChannelControls));
+        final volume = tester.getSize(volumeBlock());
         final dpad = tester.getSize(find.byKey(const Key('chromecast-dpad')));
         // Nunca menores que o tamanho compacto antigo (130 px / roda 128 px).
         expect(volume.height, greaterThanOrEqualTo(130));

@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
+import '../glass/glass_flags.dart';
+import '../glass/liquid_glass.dart';
 import '../theme/app_colors.dart';
 import 'repeat_press.dart';
 
@@ -84,6 +88,58 @@ class RemoteButton extends StatelessWidget {
     onPressed?.call();
   }
 
+  Widget _buildGlass(BuildContext context, Widget content) {
+    final t = GlassTokens.of(context);
+    final bg = backgroundColor;
+    // Fundos neutros (padrão, superfícies do tema, transparente) viram vidro
+    // simples; fundos coloridos (botões de cor, Mudo ativo...) viram vidro
+    // tingido com a mesma cor.
+    final neutral =
+        bg == null ||
+        bg.a == 0 ||
+        bg == AppColors.surfaceInteractiveOf(context) ||
+        bg == AppColors.surfaceElevatedOf(context);
+    final tint = isSelected
+        ? t.tintBlue
+        : (neutral ? null : bg.withValues(alpha: math.min(bg.a * 1.9, 0.55)));
+    final ShapeBorder shape = customShape ??
+        (isCircular
+            ? const CircleBorder()
+            : glassRounded(math.min(borderRadius * 1.5 + 2, (height ?? 999) / 2)));
+
+    Widget core = GlassTap(
+      onPressed: onPressed == null ? null : _handlePress,
+      haptic: false, // _handlePress já vibra conforme [hapticType].
+      pressedScale: 1.06,
+      lean: 0.05,
+      semanticLabel: tooltip,
+      builder: (context, pressed) => Opacity(
+        opacity: onPressed == null ? 0.45 : 1,
+        child: LiquidGlass(
+          shape: shape,
+          tint: tint,
+          strong: pressed,
+          blur: false,
+          width: width,
+          height: height,
+          padding: padding ?? const EdgeInsets.all(8),
+          child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: content)),
+        ),
+      ),
+    );
+    if (repeatOnHold && onPressed != null) {
+      core = RepeatPress(
+        onRepeat: _handlePress,
+        sessionToken: repeatToken,
+        child: core,
+      );
+    }
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      return Tooltip(message: tooltip!, child: core);
+    }
+    return core;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
@@ -141,6 +197,11 @@ class RemoteButton extends StatelessWidget {
       );
     } else {
       content = const SizedBox.shrink();
+    }
+
+    // Modo Liquid Glass (experimental): mesmo botão, mesmas ações, outro visual.
+    if (kGlassUi) {
+      return _buildGlass(context, content);
     }
 
     Gradient? glassGradient;

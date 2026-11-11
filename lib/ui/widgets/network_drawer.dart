@@ -1,8 +1,12 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/drivers/tv_driver.dart';
 import '../theme/app_colors.dart';
+import '../glass/glass_flags.dart';
+import '../glass/liquid_glass.dart' show GlassTokens, glassFlatDecoration;
 import 'device_discovery_dialog.dart';
 
 /// Gaveta Lateral (Drawer) para configuração dos parâmetros de rede e preferências da Smart TV LG.
@@ -45,9 +49,31 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
     final isDarkMode = controller.isDarkMode;
     final tvs = controller.discoveredTvs;
 
+    final t = GlassTokens.of(context);
+    Widget glassBody(Widget child) {
+      if (!kGlassUi) return child;
+      const r = BorderRadius.horizontal(left: Radius.circular(28));
+      return ClipRRect(
+        borderRadius: r,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.remoteChassisOf(context).withValues(alpha: 0.82),
+              borderRadius: r,
+              border: Border.all(color: t.rimLight.withValues(alpha: 0.3)),
+            ),
+            child: child,
+          ),
+        ),
+      );
+    }
+
     return Drawer(
-      backgroundColor: AppColors.remoteChassisOf(context),
-      child: SafeArea(
+      backgroundColor: kGlassUi
+          ? Colors.transparent
+          : AppColors.remoteChassisOf(context),
+      child: glassBody(SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Form(
@@ -60,10 +86,10 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
+                      decoration: _g(context, BoxDecoration(
                         color: AppColors.surfaceElevatedOf(context),
                         borderRadius: BorderRadius.circular(10),
-                      ),
+                      )),
                       child: Icon(Icons.settings_ethernet_rounded,
                           color: AppColors.iconHighlightOf(context), size: 22),
                     ),
@@ -110,11 +136,11 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
+                          decoration: _g(context, BoxDecoration(
                             color: AppColors.surfaceCardOf(context),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.borderSubtleOf(context)),
-                          ),
+                          )),
                           child: Row(
                             children: [
                               Icon(
@@ -138,7 +164,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                               Switch(
                                 key: const Key('drawer_theme_switch'),
                                 value: isDarkMode,
-                                activeThumbColor: AppColors.lgRed,
+                                activeThumbColor: kGlassUi ? null : AppColors.lgRed,
                                 onChanged: (_) => controller.toggleTheme(),
                               ),
                             ],
@@ -151,11 +177,11 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
+                          decoration: _g(context, BoxDecoration(
                             color: AppColors.surfaceCardOf(context),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.borderSubtleOf(context)),
-                          ),
+                          )),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -179,7 +205,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                         borderRadius: BorderRadius.circular(8),
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(vertical: 8),
-                                          decoration: BoxDecoration(
+                                          decoration: _g(context, BoxDecoration(
                                             color: isSelected
                                                 ? AppColors.surfaceElevatedOf(context)
                                                 : Colors.transparent,
@@ -188,7 +214,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                               color: isSelected ? AppColors.iconHighlightOf(context) : AppColors.borderSubtleOf(context),
                                               width: isSelected ? 1.5 : 1,
                                             ),
-                                          ),
+                                          )),
                                           child: Center(
                                             child: Text(
                                               brand.displayName,
@@ -215,16 +241,57 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
 
                         if (controller.currentBrand == TvBrand.googleTv) ...[
                           SwitchListTile.adaptive(
-                            contentPadding:EdgeInsets.zero,
-                            title:const Text('Voltar à direita do D-pad'),
-                            subtitle:const Text('Desative para usar à esquerda'),
-                            value:controller.backButtonOnRight,
-                            onChanged:controller.setBackButtonOnRight,
+                            contentPadding: EdgeInsets.zero,
+                            dense: kGlassUi,
+                            title: Text(
+                              'Voltar à direita do D-pad',
+                              style: kGlassUi
+                                  ? TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimaryOf(context),
+                                    )
+                                  : null,
+                            ),
+                            subtitle: Text(
+                              'Desative para usar à esquerda',
+                              style: kGlassUi
+                                  ? TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondaryOf(context),
+                                    )
+                                  : null,
+                            ),
+                            value: controller.backButtonOnRight,
+                            onChanged: controller.setBackButtonOnRight,
                           ),
+                          if (kGlassUi) const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
                             initialValue: controller.volumeTargetId,
                             isExpanded: true,
-                            decoration: const InputDecoration(labelText: 'Controlar volume de'),
+                            style: kGlassUi
+                                ? TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textPrimaryOf(context),
+                                  )
+                                : null,
+                            decoration: InputDecoration(
+                              labelText: 'Controlar volume de',
+                              // O rótulo flutuante ficava fora do campo: sobe-o
+                              // para dentro do box com mais respiro vertical.
+                              floatingLabelBehavior: kGlassUi
+                                  ? FloatingLabelBehavior.always
+                                  : null,
+                              labelStyle: kGlassUi
+                                  ? TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondaryOf(context),
+                                    )
+                                  : null,
+                              contentPadding: kGlassUi
+                                  ? const EdgeInsets.fromLTRB(16, 22, 12, 10)
+                                  : null,
+                            ),
                             items: controller.savedDevices.map((device) => DropdownMenuItem(
                               value: device.id, child: Text(device.name, overflow: TextOverflow.ellipsis))).toList(),
                             onChanged: (id) { if(id != null) controller.setVolumeTarget(id); },
@@ -235,13 +302,13 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         if (isWaitingPairing) ...[
                           Container(
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
+                            decoration: _g(context, BoxDecoration(
                               color: AppColors.buttonYellow.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
                                 color: AppColors.buttonYellow.withValues(alpha: 0.6),
                               ),
-                            ),
+                            )),
                             child: Column(
                               children: [
                                 Row(
@@ -273,7 +340,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
+                          decoration: _g(context, BoxDecoration(
                             color: AppColors.surfaceCardOf(context),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
@@ -281,20 +348,20 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                   ? AppColors.statusConnected.withValues(alpha: 0.3)
                                   : AppColors.borderSubtleOf(context),
                             ),
-                          ),
+                          )),
                           child: Row(
                             children: [
                               Container(
                                 width: 12,
                                 height: 12,
-                                decoration: BoxDecoration(
+                                decoration: _g(context, BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: isConnecting
                                       ? AppColors.statusConnecting
                                       : (isConnected
                                           ? AppColors.statusConnected
                                           : AppColors.statusDisconnected),
-                                ),
+                                )),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -340,13 +407,13 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
+                            decoration: _g(context, BoxDecoration(
                               color: AppColors.surfaceElevatedOf(context),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: AppColors.iconHighlightOf(context).withValues(alpha: 0.3),
                               ),
-                            ),
+                            )),
                             child: Row(
                               children: [
                                 const Icon(Icons.radar_rounded, color: AppColors.lgRed, size: 22),
@@ -397,7 +464,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
+                              decoration: _g(context, BoxDecoration(
                                 color: AppColors.surfaceCardOf(context),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
@@ -405,7 +472,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                                       ? AppColors.statusConnected
                                       : AppColors.borderSubtleOf(context),
                                 ),
-                              ),
+                              )),
                               child: Row(
                                 children: [
                                   Icon(
@@ -629,21 +696,21 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         // Preferência de Feedback Háptico / Vibração
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
+                          decoration: _g(context, BoxDecoration(
                             color: AppColors.surfaceElevatedOf(context).withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.borderSubtleOf(context)),
-                          ),
+                          )),
                           child: Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(7),
-                                decoration: BoxDecoration(
+                                decoration: _g(context, BoxDecoration(
                                   color: controller.isHapticEnabled
                                       ? AppColors.iconHighlightOf(context).withValues(alpha: 0.15)
                                       : AppColors.surfaceInteractiveOf(context),
                                   borderRadius: BorderRadius.circular(8),
-                                ),
+                                )),
                                 child: Icon(
                                   Icons.vibration_rounded,
                                   size: 18,
@@ -678,7 +745,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                               Switch(
                                 key: const Key('drawer_haptic_switch'),
                                 value: controller.isHapticEnabled,
-                                activeThumbColor: AppColors.iconHighlightOf(context),
+                                activeThumbColor: kGlassUi ? null : AppColors.iconHighlightOf(context),
                                 onChanged: (val) => controller.setHapticFeedback(val),
                               ),
                             ],
@@ -690,11 +757,11 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                         // Dica / Rodapé da Gaveta
                         Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
+                          decoration: _g(context, BoxDecoration(
                             color: AppColors.surfaceElevatedOf(context).withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppColors.borderSubtleOf(context)),
-                          ),
+                          )),
                           child: Row(
                             children: [
                               Icon(Icons.info_outline_rounded,
@@ -721,7 +788,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -773,7 +840,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            decoration: BoxDecoration(
+            decoration: _g(context, BoxDecoration(
               color: isActive
                   ? highlight.withValues(alpha: isDark ? 0.12 : 0.08)
                   : (isDark ? AppColors.surfaceCard : AppColors.lightSurfaceCard),
@@ -784,21 +851,21 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                     : (isDark ? AppColors.borderSubtle : AppColors.lightBorderSubtle),
                 width: isActive ? 1.5 : 1.0,
               ),
-            ),
+            )),
             child: Row(
               children: [
                 // LED de Status
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: BoxDecoration(
+                  decoration: _g(context, BoxDecoration(
                     shape: BoxShape.circle,
                     color: isConnected
                         ? AppColors.statusConnected
                         : (isConnecting
                             ? AppColors.statusConnecting
                             : AppColors.statusDisconnected),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 8),
 
@@ -990,4 +1057,30 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
       ),
     );
   }
+}
+
+/// Modo Liquid Glass: troca o fundo/borda de cartões por vidro translúcido,
+/// preservando bordas e tons semânticos (conectado, ativo, aviso).
+BoxDecoration _g(BuildContext context, BoxDecoration legacy) {
+  if (!kGlassUi || legacy.shape == BoxShape.circle) return legacy;
+  final radius = legacy.borderRadius is BorderRadius
+      ? (legacy.borderRadius as BorderRadius).topLeft.x
+      : 12.0;
+  final t = GlassTokens.of(context);
+  final border = legacy.border is Border ? legacy.border as Border : null;
+  final subtle = AppColors.borderSubtleOf(context).toARGB32();
+  final semantic = border != null && border.top.color.toARGB32() != subtle;
+  final strong = border != null && border.top.width >= 1.5;
+  final base = glassFlatDecoration(context, radius: radius, strong: strong);
+  const surfaces = {
+    0xFF272331, 0xFFFFFFFF, 0xFF332D41, 0xFFF0F5FA, 0xFF2D273B,
+  };
+  final c = legacy.color;
+  final tinted = c != null &&
+      c.a > 0 &&
+      !surfaces.contains(c.withValues(alpha: 1).toARGB32());
+  return base.copyWith(
+    color: strong ? t.tintBlue : (tinted ? c : base.color),
+    border: semantic ? legacy.border : base.border,
+  );
 }
