@@ -6,7 +6,10 @@ import 'remote_button.dart';
 
 /// Quatro botões coloridos tradicionais de Smart TV LG (Vermelho, Verde, Amarelo e Azul).
 class ColorButtonsRow extends StatelessWidget {
-  const ColorButtonsRow({super.key});
+  /// Botões por linha (4 = uma linha; 2 = grade 2x2).
+  final int columns;
+
+  const ColorButtonsRow({super.key, this.columns = 4});
 
   @override
   Widget build(BuildContext context) {
@@ -39,56 +42,56 @@ class ColorButtonsRow extends StatelessWidget {
       ),
     ];
 
-    return Row(
-      children: colorButtons.map((btn) {
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: RemoteButton(
-              height: 34,
-              borderRadius: 17,
-              backgroundColor: btn.color.withValues(alpha: 0.18),
-              borderColor: btn.color.withValues(alpha: 0.7),
-              foregroundColor: btn.color,
-              tooltip: btn.tooltip,
-              onPressed: btn.onPressed,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: btn.color,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: btn.color.withValues(alpha: 0.6),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      btn.label,
-                      style: TextStyle(
-                        color: btn.color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+    // Padrão Payno: pílulas neutras com um ponto colorido e o rótulo escuro.
+    Widget button(_ColorData btn) => RemoteButton(
+      height: 38,
+      borderRadius: 14,
+      backgroundColor: AppColors.surfaceInteractiveOf(context),
+      tooltip: btn.tooltip,
+      onPressed: btn.onPressed,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: btn.color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              btn.label,
+              style: TextStyle(
+                color: AppColors.textPrimaryOf(context),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.5,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+    final rows = <List<_ColorData>>[
+      for (var i = 0; i < colorButtons.length; i += columns)
+        colorButtons.sublist(i, (i + columns).clamp(0, colorButtons.length)),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
+          Row(
+            children: [
+              for (var c = 0; c < rows[r].length; c++) ...[
+                if (c > 0) const SizedBox(width: 8),
+                Expanded(child: button(rows[r][c])),
+              ],
+            ],
           ),
-        );
-      }).toList(),
+        ],
+      ],
     );
   }
 }

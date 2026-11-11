@@ -155,3 +155,124 @@ ScrollConfiguration(
 ### Soluções Obrigatórias
 - Verificar os codecs de áudio aceitos pelo Chromecast em `MediaDetails.isChromecastAudioCompatible`.
 - Garantir que qualquer faixa de áudio não nativamente suportada seja forçada para transcodificação AAC stereo durante o remux no `MediaRemuxService`.
+
+---
+
+## 11. Repetir Vídeo Não Repete na TV (volta ao início, mas não reinicia a reprodução)
+
+### Sintoma
+- Com um vídeo tocando na televisão e o botão **Repetir** (loop) ativado, ao chegar ao fim o vídeo volta ao começo, mas **não repete**: a reprodução não recomeça.
+
+### Soluções Obrigatórias
+- Investigar o fluxo de loop em `MediaCastController` (`toggleLoop`, `isLooping`) e nos drivers de mídia (Google Cast e DLNA): ao terminar o item com loop ativo, o controlador precisa recarregar/dar `play` no mesmo arquivo, e não apenas fazer seek para 0.
+- Cobrir com teste: item termina com `isLooping == true` → reprodução reinicia e o estado volta a "tocando".
+
+---
+
+## 12. Login do Google Drive Falha no Android ("falta o ID de cliente OAuth no build")
+
+### Sintoma
+- No Android, ao tocar em **Google Drive** na biblioteca de mídia, aparece: "O login do Google Drive não foi concluído nessa versão do SixF (falta o ID de cliente OAuth no build)".
+
+### Causa Provável
+- O APK atual (`dist/1.0.6/SixF-1.0.6-Android-teste-payno.apk`) foi gerado com `flutter build apk --debug --no-pub`, **sem** `--dart-define-from-file`. Sem os IDs (`GOOGLE_DESKTOP_CLIENT_ID`/`SECRET`, e `GOOGLE_WEB_CLIENT_ID` para o login nativo), o app mostra essa mensagem (ver `docs/BIBLIOTECA.md` e `lib/services/library_sources.dart`).
+- O arquivo local com os IDs existe em `.local-secrets/drive-build.json` (ignorado pelo Git).
+
+### Soluções Obrigatórias
+- Passar a gerar o APK (e o Windows) sempre com o arquivo de segredos: `flutter build apk --debug --no-pub --dart-define-from-file=.local-secrets/drive-build.json`.
+- Atualizar `docs/DISTRIBUTION.md` para incluir essa flag no procedimento padrão de build.
+- Confirmar no aparelho o login do Drive e do OneDrive. Não commitar nem copiar o JSON de segredos para `dist/`.
+
+---
+
+## 13. Botões −/+ e ∨/∧ dos Cards de Volume e Canal: Maiores e com Fundo Branco
+
+### Sintoma
+- Na aba **Controle**, os botões circulares de menos/mais (Volume) e de para baixo/para cima (Canal) estão pequenos e discretos, em cinza-claro.
+
+### Soluções Obrigatórias
+- Aumentar o diâmetro desses botões (hoje 36 px em `lib/ui/widgets/volume_channel_controls.dart`, função `step`), aproximando-os dos círculos de **Ações rápidas** (48 px).
+- Usar o mesmo fundo branco com sombra suave dos botões HOME, MENU, INPUT e EXIT (`AppColors.circleOf` / `softShadowOf`), em vez do cinza atual (`surfaceInteractiveOf`), e ícone escuro nos dois temas.
+- Manter a repetição ao segurar o botão e rodar `test/layout_overflow_test.dart` para garantir que os cards não estourem com o botão maior.
+
+---
+
+## 14. Nova Ordem das Abas: Controle, Mídia, Teclas, Apps (Trackpad em 3º na LG)
+
+### Sintoma
+- Hoje a ordem das abas é Controle, Teclas, (Trackpad), Mídia, Apps.
+
+### Soluções Obrigatórias
+- Trocar Teclas e Mídia de lugar. Sem trackpad (Chromecast, Samsung): **Controle, Mídia, Teclas, Apps**.
+- Com TV LG (que tem trackpad): o Trackpad continua na **3ª posição**, ou seja, **Controle, Mídia, Trackpad, Teclas, Apps**. *(Interpretação a confirmar com o desenvolvedor antes de implementar.)*
+- A ordem vale na barra inferior (celular), no trilho lateral (paisagem/desktop) e no modo Liquid Glass (`glassTabItems` em `lib/ui/glass/glass_remote_shell.dart`). Em `lib/ui/views/remote_view.dart` o ponto central é `_navItems()`; cuidar para que os índices internos das abas (`_selectedTabIndex` e o `IndexedStack`) continuem apontando para o conteúdo certo.
+- Ajustar `test/media_library_navigation_test.dart` (compara a posição de Mídia e Apps) e rodar `test/layout_overflow_test.dart`.
+
+---
+
+## 15. Foto em Tela Cheia no Celular Não Acompanha a Televisão ao Avançar
+
+### Sintoma
+- Na aba **Mídia**, com uma foto sendo espelhada na televisão, ao abrir o botão de **tela cheia** o celular mostra a foto em tela cheia.
+- Ao avançar/voltar de foto **dentro da tela cheia**, a televisão **continua na foto anterior**. Só quando o usuário sai da tela cheia (volta ao card normal com carrossel) é que a TV passa para a foto escolhida.
+
+### Causa Provável
+- `ImageFullscreenViewer` (`lib/ui/widgets/image_fullscreen_viewer.dart`) só devolve o último índice ao fechar (`Navigator.pop<int>`). Em `lib/ui/views/media_library.dart` (por volta da linha 1135), o resultado é aplicado depois, com `_focusEntry(chosen, ...)`. Durante a troca de páginas (`onPageChanged`), nada avisa a biblioteca, então a TV não é atualizada.
+
+### Soluções Obrigatórias
+- Adicionar ao viewer um callback (por exemplo `onIndexChanged(LibraryEntry entry)`), chamado a cada `onPageChanged`, e ligá-lo em `media_library.dart` ao mesmo caminho que já espelha a foto na TV (`openPhotoAndMirror` / `_focusEntry`), só quando houver transmissão ativa para a TV.
+- Evitar rajada de envios ao deslizar rápido: aplicar *debounce* curto (ou enviar apenas a foto em que o usuário parou) e ignorar respostas fora de ordem.
+- Manter o comportamento atual ao fechar a tela cheia (o carrossel fica na última foto vista).
+- Cobrir com teste: abrir tela cheia com a TV como destino, avançar uma foto e verificar que o driver recebeu a nova imagem sem sair da tela cheia.
+
+---
+
+## 16. Redesenho da Aba Mídia (navegação de arquivos mais visual)
+
+### Sintoma
+- A forma de apresentar imagens, arquivos e a hierarquia de pastas estava confusa: o caminho aparecia como texto ("Meu Drive / Mídia") ao lado de uma seta e, ao abrir uma pasta, o visualizador abria sozinho e escondia os arquivos atrás do aviso "arquivos no carrossel acima".
+
+### Soluções Aplicadas (mockup aprovado em `docs/design/mockups/sixf-midia-mockup.html`)
+- Caminho no topo em etapas clicáveis (cada etapa volta direto à pasta), nome da pasta em destaque com a contagem por tipo.
+- Raiz com as fontes em cards (Google Drive, OneDrive, pastas deste aparelho) e "Abertas recentemente" (persistidas).
+- Subpastas em cards e arquivos em grade de miniaturas (ou lista), filtros por tipo com quantidade, busca e ordenação.
+- Seleção por círculos e barra azul de ações (Playlist, Fila, Tocar na TV). Tocar abre/toca no destino escolhido; segurar abre as opções.
+- A pasta abre na grade (o visualizador só aparece ao tocar num arquivo). Seções na ordem Arquivos, Playlists, Fila.
+- Desktop: árvore de fontes e pastas à esquerda mostrando onde o usuário está.
+
+---
+
+### Status em 11/11/2026
+- Itens **11, 13, 14, 15 e 16** implementados, com testes automáticos (o item 11 ainda precisa de confirmação numa TV real).
+- Item **12**: procedimento de build corrigido em `docs/DISTRIBUTION.md`; o login do Drive no Android precisa ser confirmado no aparelho.
+
+---
+
+## 17. Login do Google Drive/OneDrive Não Conclui no Galaxy S23 Ultra (Android 14)
+
+### Sintoma
+- No S23 Ultra, o fluxo no navegador termina com "Autorização concluída com sucesso", mas ao voltar ao SixF as pastas não aparecem e surge "Não foi possível abrir a pasta". No S9+ (Android 10) o mesmo fluxo funciona.
+
+### Causa Provável (a confirmar no aparelho)
+- O código de autorização chega ao SixF enquanto o navegador ainda está na frente e o app, em segundo plano, pode ficar sem rede (restrição de rede em segundo plano do Android 14/One UI). A troca do código pelo acesso (`oauth2.googleapis.com`) falha por erro de rede e o login não é salvo, por isso o app abre o navegador de novo.
+
+### Correção Aplicada
+- `lib/services/library_sources.dart`: aguarda o app voltar ao primeiro plano antes de trocar o código; repete a troca até 4 vezes em falha de rede; informa o motivo real (ex.: "sem conexão", "invalid_grant") em vez de mensagem genérica.
+- `lib/ui/views/media_library.dart`: mensagem de erro sem repetição, com botão separado "Tentar novamente".
+- Pendente: confirmar no S23 Ultra. Se persistir, coletar `adb logcat` do app durante o login.
+
+---
+
+## 18. Faixa Amarela e Preta ("Bottom overflowed by 0.833 pixels") no Card do Vídeo em Paisagem
+
+### Sintoma
+- No S23 Ultra deitado, na aba Mídia, com um **vídeo tocando no celular**, o card do player mostrava a faixa de estouro. Com foto, ou com vídeo na TV, não aparecia.
+
+### Causa
+- O player local usa os controles do `media_kit`, que pedem ~148 px de altura (barra superior 56 + inferior 56 + linha do tempo 36). Em paisagem o card do vídeo mede 145–176 px; nas alturas de 144 a 148 px, faltava uma fração de pixel.
+
+### Correção (`lib/ui/views/media_library.dart`)
+- `compactVideoControlSizes`: em cards com menos de 200 px, as barras dos controles encolhem para sempre caber (`test/video_controls_height_test.dart`). Em tela cheia e em alturas folgadas nada muda.
+- Em cards com menos de 96 px os controles internos saem; os botões do painel ao lado continuam.
+- Teste de estouro com vídeo tocando em 11 tamanhos e 3 escalas de fonte em `test/media_library_actions_test.dart`.
+- Pendente: confirmar no S23 Ultra.

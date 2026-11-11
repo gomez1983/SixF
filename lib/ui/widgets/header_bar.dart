@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../controllers/remote_controller.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
+import 'device_selector_bar.dart' show shortDeviceName;
+import 'payno.dart';
 import 'remote_button.dart';
 import 'connection_diagnostic.dart';
 
@@ -27,197 +30,209 @@ class HeaderBar extends StatelessWidget {
     final isConnected = controller.isConnected;
     final isConnecting = controller.isConnecting;
     final isWaitingPairing = controller.isWaitingPairing;
-    final isPoweredOn = controller.isPoweredOn;
-    final isDarkMode = controller.isDarkMode;
-
     final statusColor = isConnecting
         ? AppColors.statusConnecting
         : (isWaitingPairing
-            ? AppColors.buttonYellow
-            : (isConnected ? AppColors.statusConnected : AppColors.statusDisconnected));
+              ? AppColors.buttonYellow
+              : (isConnected
+                    ? AppColors.statusConnected
+                    : AppColors.statusDisconnected));
 
-    final statusText = isConnected ? (controller.connectedTvName ?? 'Conectado') : controller.connectionStatusLabel;
+    final statusText = isConnected
+        ? shortDeviceName(controller.connectedTvName ?? 'Conectado')
+        : controller.connectionStatusLabel;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
+    // Padrão Payno: logotipo circular, saudação pequena ("SixF Remote") sobre
+    // o nome do aparelho em destaque e ações em círculos brancos à direita.
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Janela/tela estreita: círculos e logotipo menores para o nome do
+        // aparelho continuar legível.
+        final narrow = box.maxWidth < 430;
+        final c = narrow ? 32.0 : 36.0;
+        final gap = narrow ? 4.0 : 6.0;
+        return _build(
+          context,
+          controller,
+          statusColor,
+          statusText,
+          c,
+          gap,
+          narrow,
+        );
+      },
+    );
+  }
+
+  Widget _build(
+    BuildContext context,
+    RemoteController controller,
+    Color statusColor,
+    String statusText,
+    double c,
+    double gap,
+    bool narrow,
+  ) {
+    final isConnected = controller.isConnected;
+    final isConnecting = controller.isConnecting;
+    final isPoweredOn = controller.isPoweredOn;
+    final isDarkMode = controller.isDarkMode;
+
+    Widget circle({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback? onPressed,
+      Color? fg,
+      HapticType haptic = HapticType.light,
+    }) => Padding(
+      padding: EdgeInsets.only(left: gap),
+      child: RemoteButton(
+        width: c,
+        height: c,
+        isCircular: true,
+        hapticType: haptic,
+        foregroundColor: fg ?? AppColors.textPrimaryOf(context),
+        icon: icon,
+        iconSize: 18,
+        tooltip: tooltip,
+        onPressed: onPressed,
+      ),
+    );
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
       child: Row(
         children: [
-          if (onToggleCompact != null) IconButton(
-            constraints: const BoxConstraints.tightFor(width: 28, height: 36),
-            padding: EdgeInsets.zero,
-            onPressed: onToggleCompact,
-            icon: const Icon(Icons.picture_in_picture_alt, size: 18),
-            tooltip: 'Modo compacto',
-          ),
-          // Botão Power com realce vermelho sutil
-          RemoteButton(
-            width: 42,
-            height: 42,
-            isCircular: true,
-            hapticType: HapticType.medium,
-            backgroundColor: isPoweredOn
-                ? AppColors.powerRed.withValues(alpha: 0.15)
-                : AppColors.surfaceInteractiveOf(context),
-            borderColor: isPoweredOn ? AppColors.powerRed : AppColors.borderSubtleOf(context),
-            foregroundColor: isPoweredOn ? AppColors.powerRed : AppColors.textMutedOf(context),
-            icon: Icons.power_settings_new_rounded,
-            iconSize: 22,
-            tooltip: isPoweredOn ? 'Desligar TV' : 'Ligar TV (Wake-on-LAN)',
-            onPressed: () => controller.powerToggle(),
-          ),
-
-          const SizedBox(width: 12),
-
-          // Título e Status interativo (clicável para abrir a lista de dispositivos)
+          // Logotipo e status (clicável para abrir o diagnóstico de conexão)
           Expanded(
             child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => showDialog<void>(context: context, builder: (_) => const ConnectionDiagnostic()),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.asset(
-                              'assets/icons/SixF_Logo_01.png',
-                              width: 24,
-                              height: 24,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'SixF',
-                            style: TextStyle(
-                              color: AppColors.iconHighlightOf(context),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Remote',
-                            style: TextStyle(
-                              color: AppColors.textPrimaryOf(context),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
+              borderRadius: BorderRadius.circular(26),
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => const ConnectionDiagnostic(),
+              ),
+              child: Row(
+                children: [
+                  PaynoLogo(size: narrow ? 34 : 40),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // LED indicador de conexão
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: statusColor,
-                            boxShadow: isConnected
-                                ? [
-                                    BoxShadow(
-                                      color: statusColor.withValues(alpha: 0.6),
-                                      blurRadius: 6,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : null,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'SixF',
+                                style: TextStyle(
+                                  color: AppColors.textPrimaryOf(context),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Remote',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondaryOf(context),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            statusText,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: statusColor,
+                              ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                statusText,
+                                style: TextStyle(
+                                  color: AppColors.textPrimaryOf(context),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: -0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
 
+          if (onToggleCompact != null)
+            circle(
+              icon: Icons.picture_in_picture_alt_rounded,
+              tooltip: 'Modo compacto',
+              onPressed: onToggleCompact,
+            ),
+
+          circle(
+            icon: Icons.power_settings_new_rounded,
+            tooltip: isPoweredOn ? 'Desligar TV' : 'Ligar TV (Wake-on-LAN)',
+            haptic: HapticType.medium,
+            fg: isPoweredOn
+                ? AppColors.powerRed
+                : AppColors.textMutedOf(context),
+            onPressed: () => controller.powerToggle(),
+          ),
+
           // Botão Buscar / Conectar TVs (Cast)
+          SizedBox(width: gap),
           RemoteButton(
-            width: 36,
-            height: 36,
+            width: c,
+            height: c,
             isCircular: true,
-            backgroundColor: isConnected
-                ? AppColors.statusConnected.withValues(alpha: 0.15)
-                : (isConnecting
-                    ? AppColors.statusConnecting.withValues(alpha: 0.15)
-                    : AppColors.surfaceInteractiveOf(context)),
-            borderColor: isConnected
-                ? AppColors.statusConnected
-                : (isConnecting
-                    ? AppColors.statusConnecting
-                    : AppColors.borderSubtleOf(context)),
             foregroundColor: isConnected
-                ? AppColors.statusConnected
+                ? AppColors.okOf(context)
                 : (isConnecting
-                    ? AppColors.statusConnecting
-                    : AppColors.textMutedOf(context)),
+                      ? AppColors.statusConnecting
+                      : AppColors.textPrimaryOf(context)),
             icon: isConnected ? Icons.tv_rounded : Icons.cast_rounded,
             iconSize: 18,
             tooltip: isConnected
                 ? 'TV Conectada: ${controller.connectedTvName ?? controller.ipAddress}'
                 : (isConnecting
-                    ? 'Conectando à TV...'
-                    : 'Desconectado - Clique para Buscar e Conectar TVs LG'),
+                      ? 'Conectando à TV...'
+                      : 'Desconectado - Clique para Buscar e Conectar TVs LG'),
             onPressed: () => DeviceDiscoveryDialog.show(context),
           ),
 
-          const SizedBox(width: 6),
-
-          // Botão de alternância de Tema (Modo Claro / Modo Escuro)
-          RemoteButton(
-            width: 36,
-            height: 36,
-            isCircular: true,
-            backgroundColor: AppColors.surfaceInteractiveOf(context),
-            borderColor: AppColors.borderSubtleOf(context),
-            foregroundColor: isDarkMode ? AppColors.buttonYellow : AppColors.iconHighlightOf(context),
-            icon: isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            iconSize: 18,
-            tooltip: isDarkMode ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro',
+          // Alternância de Tema (Modo Claro / Modo Escuro)
+          circle(
+            icon: isDarkMode
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined,
+            tooltip: isDarkMode
+                ? 'Mudar para Modo Claro'
+                : 'Mudar para Modo Escuro',
             onPressed: () => controller.toggleTheme(),
           ),
 
-          const SizedBox(width: 6),
-
-          // Botão para abrir o Drawer de configurações
-          RemoteButton(
-            width: 36,
-            height: 36,
-            isCircular: true,
-            backgroundColor: AppColors.surfaceInteractiveOf(context),
-            borderColor: AppColors.borderSubtleOf(context),
-            foregroundColor: AppColors.textSecondaryOf(context),
+          // Gaveta de configurações
+          circle(
             icon: Icons.tune_rounded,
-            iconSize: 18,
             tooltip: 'Configurações de Rede (IP / MAC)',
             onPressed: onOpenDrawer,
           ),

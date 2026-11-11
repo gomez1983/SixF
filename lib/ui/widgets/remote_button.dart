@@ -142,16 +142,21 @@ class RemoteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = AppColors.isDark(context);
-    final bg = backgroundColor ?? AppColors.surfaceInteractiveOf(context);
-    final fg = foregroundColor ??
-        (isSelected
-            ? AppColors.iconHighlightOf(context)
-            : AppColors.textPrimaryOf(context));
-    final border = borderColor ??
-        (isSelected
-            ? AppColors.iconHighlightOf(context).withValues(alpha: isDark ? 0.55 : 0.65)
-            : AppColors.borderSubtleOf(context));
+    // Padrão Payno: selecionado = azul-marinho sólido com texto branco;
+    // circular sem cor própria = círculo branco com sombra suave ("Quick
+    // Actions"); demais = tecla cinza-clara lisa.
+    final bg = isSelected && !kGlassUi
+        ? AppColors.accentFillOf(context)
+        : backgroundColor ??
+              (isCircular
+                  ? AppColors.circleOf(context)
+                  : AppColors.surfaceInteractiveOf(context));
+    final fg = isSelected && !kGlassUi
+        ? Colors.white
+        : foregroundColor ?? AppColors.textPrimaryOf(context);
+    final border = isSelected && !kGlassUi
+        ? Colors.transparent
+        : borderColor ?? AppColors.borderSubtleOf(context);
 
     final isTransparent = bg.a == 0 && (borderColor?.a ?? 1) == 0;
 
@@ -178,7 +183,7 @@ class RemoteButton extends StatelessWidget {
             style: TextStyle(
               color: fg,
               fontSize: 10,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
             ),
             textAlign: TextAlign.center,
@@ -192,7 +197,7 @@ class RemoteButton extends StatelessWidget {
     } else if (label != null) {
       content = Text(
         label!,
-        style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w600),
+        style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w500),
         textAlign: TextAlign.center,
       );
     } else {
@@ -204,40 +209,18 @@ class RemoteButton extends StatelessWidget {
       return _buildGlass(context, content);
     }
 
-    Gradient? glassGradient;
-    List<BoxShadow>? glassShadows;
-
+    List<BoxShadow>? shadows;
     if (!isTransparent) {
       if (isSelected) {
-        glassGradient = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? const [Color(0x4038BDF8), Color(0x350EA5E9), Color(0x240E8FF1)]
-              : const [Color(0xE8FFFFFF), Color(0x48BAE6FD), Color(0x300EA5E9)],
-        );
-        glassShadows = [
+        shadows = [
           BoxShadow(
-            color: isDark ? const Color(0x28000000) : const Color(0x1E0284C7),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.accentFillOf(context).withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ];
-      } else if (backgroundColor == null) {
-        glassGradient = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? const [Color(0xFF342E44), Color(0xFF272234)]
-              : const [Color(0xFAFFFFFF), Color(0xE8F1ECF9)],
-        );
-        glassShadows = [
-          BoxShadow(
-            color: isDark ? const Color(0x26000000) : const Color(0x0A48406C),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ];
+      } else if (isCircular && backgroundColor == null) {
+        shadows = AppColors.softShadowOf(context);
       }
     }
 
@@ -245,9 +228,8 @@ class RemoteButton extends StatelessWidget {
       decoration: BoxDecoration(
         shape: isCircular ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: isCircular ? null : BorderRadius.circular(borderRadius),
-        gradient: glassGradient,
-        color: glassGradient == null ? bg : null,
-        boxShadow: glassShadows,
+        color: bg,
+        boxShadow: shadows,
       ),
       child: Material(
         color: Colors.transparent,
@@ -256,10 +238,8 @@ class RemoteButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed != null ? _handlePress : null,
           hoverColor: AppColors.surfaceInteractiveHoverOf(context),
-          splashColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
-              .withValues(alpha: 0.18),
-          highlightColor: (foregroundColor ?? AppColors.iconHighlightOf(context))
-              .withValues(alpha: 0.10),
+          splashColor: AppColors.iconHighlightOf(context).withValues(alpha: 0.16),
+          highlightColor: AppColors.iconHighlightOf(context).withValues(alpha: 0.08),
           customBorder: shape,
           child: Container(
             width: width,

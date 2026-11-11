@@ -65,6 +65,15 @@ class _MediaLibraryState extends State<MediaLibrary> {
   String filter = '', folderError = '';
   bool sortByExtension = false;
   bool showThumbnails = true;
+
+  /// Filtro por tipo na pasta aberta: all, folder, video, image, audio.
+  String _typeFilter = 'all';
+
+  /// Pastas abertas recentemente (caminhos completos), mais recente primeiro.
+  final List<List<LibraryEntry>> recent = [];
+
+  /// Subpastas já vistas de cada pasta (para a árvore do desktop).
+  final Map<String, List<LibraryEntry>> _folderKids = {};
   final search = TextEditingController();
   final photoScroll = ScrollController();
 
@@ -198,6 +207,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
       if (data['queueTitle'] is String) {
         queueTitle = data['queueTitle'] as String;
       }
+      for (final r in data['recent'] ?? []) {
+        final path = [for (final v in r) LibraryEntry.fromJson(v)];
+        if (path.isNotEmpty) recent.add(path);
+      }
       if (data['showThumbnails'] is bool) {
         showThumbnails = data['showThumbnails'] as bool;
       }
@@ -233,6 +246,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       'roots': roots.map((e) => e.toJson()).toList(),
       'queue': queue.map((e) => e.toJson()).toList(),
       'trail': trail.map((e) => e.toJson()).toList(),
+      'recent': [for (final r in recent) r.map((e) => e.toJson()).toList()],
       'showThumbnails': showThumbnails,
       if (queueTitle != null) 'queueTitle': queueTitle,
     });
@@ -344,38 +358,25 @@ class _MediaLibraryState extends State<MediaLibrary> {
           .timeout(const Duration(seconds: 15));
       await _refreshCloudAuthState();
       if (mounted && generation == version) {
-        setState(() => entries = items);
-        final mediaItems = items
-            .where((e) => !e.folder && (e.isImage || e.isVideo || e.isAudio))
-            .toList();
-        if (mediaItems.isNotEmpty &&
-            activePhotos.isEmpty &&
-            activeMediaItem == null) {
-          final first = mediaItems.first;
-          if (first.isImage) {
-            unawaited(
-              openPhotoAndMirror(mediaItems, first, syncToQueue: false),
-            );
-          } else {
-            setState(() {
-              activeMediaItem = first;
-              viewerContext = mediaItems;
-              activePhotos = mediaItems.where((e) => e.isImage).toList();
-              activePhotoIndex = 0;
-              viewedPhotoFile = null;
-              loadingPhotoPreview = false;
-            });
-          }
-        }
+        setState(() {
+          entries = items;
+          _folderKids[_keyOf(target)] = items.where((e) => e.folder).toList();
+          _rememberRecent();
+        });
+        unawaited(save());
+        // A pasta abre na grade (mockup aprovado): o visualizador só
+        // aparece quando o usuário toca numa foto ou num vídeo.
       }
     } catch (e) {
       if (mounted && generation == version) {
         setState(
           () => folderError = e is TimeoutException
-              ? 'Tempo limite atingido ao carregar a pasta na nuvem. Verifique sua conexão ou tente novamente.'
+              ? 'Tempo limite atingido ao carregar a pasta na nuvem. Verifique sua conexão.'
               : (e is FormatException
                     ? e.message
-                    : 'Não foi possível abrir a pasta. Verifique o acesso e tente novamente.'),
+                    : (e is SocketException
+                          ? 'Sem conexão com a internet para abrir a pasta.'
+                          : 'Não foi possível abrir a pasta. Verifique o acesso à conta e à internet.')),
         );
       }
     } finally {
@@ -623,15 +624,24 @@ class _MediaLibraryState extends State<MediaLibrary> {
     activePhotoIndex = idx >= 0 ? idx : 0;
   }
 
+  /// Botão de alternância: ativo em azul-marinho com ícone branco, inativo
+  /// em cinza-claro com ícone escuro.
+  ButtonStyle _toggleStyle(bool active) => IconButton.styleFrom(
+    backgroundColor: active
+        ? AppColors.accentFillOf(context)
+        : AppColors.surfaceInteractiveOf(context),
+    foregroundColor: active ? Colors.white : AppColors.textPrimaryOf(context),
+  );
+
   Widget _buildViewModeToggleButton() {
     return IconButton.filledTonal(
       tooltip: showThumbnails
           ? 'Modo compacto (somente nomes)'
           : 'Modo detalhado (miniaturas e nomes)',
+      style: _toggleStyle(showThumbnails),
       icon: Icon(
         showThumbnails ? Icons.view_headline_rounded : Icons.grid_view_rounded,
         size: 19,
-        color: showThumbnails ? Theme.of(context).colorScheme.primary : null,
       ),
       onPressed: () {
         HapticService.selectionClick();
@@ -1123,16 +1133,38 @@ class _MediaLibraryState extends State<MediaLibrary> {
         ? _photoCache!
         : (_photoCache = await LibrarySources.sessionCache());
     if (!mounted) return;
+    // A TV acompanha a tela cheia: cada foto em que o usuário para (após
+    // uma pausa curta, para não enviar rajadas ao deslizar) é espelhada na
+    // TV. Sem destino TV, só a foto final é aplicada ao fechar.
+    final contextItems = _carouselContextItems();
+    var mirrored = entry;
+    Timer? debounce;
     final last = await ImageFullscreenViewer.show(
       context,
       items: images,
       initialIndex: start,
       resolve: (e) => sources.resolve(e, cache),
+      onIndexChanged: (i) {
+        debounce?.cancel();
+        if (i < 0 || i >= images.length) return;
+        debounce = Timer(const Duration(milliseconds: 350), () {
+          if (!mounted) return;
+          final tv = context.read<RemoteController>();
+          if (getPlaybackTarget(tv) != PlaybackTarget.tv || !tv.isConnected) {
+            return;
+          }
+          final chosen = images[i];
+          if (_same(chosen, mirrored)) return;
+          mirrored = chosen;
+          unawaited(_focusEntry(chosen, contextItems));
+        });
+      },
     );
+    debounce?.cancel();
     if (!mounted || last == null || last < 0 || last >= images.length) return;
     final chosen = images[last];
-    if (!_same(chosen, entry)) {
-      await _focusEntry(chosen, _carouselContextItems());
+    if (!_same(chosen, mirrored)) {
+      await _focusEntry(chosen, contextItems);
     }
   }
 
@@ -1346,20 +1378,17 @@ class _MediaLibraryState extends State<MediaLibrary> {
         : AppColors.lightIconHighlight;
 
     final tabs = <({int index, IconData icon, String label})>[
+      (index: 2, icon: Icons.folder_rounded, label: 'Arquivos'),
       (index: 0, icon: Icons.playlist_play_rounded, label: 'Playlists'),
       (
         index: 1,
         icon: Icons.queue_music_rounded,
         label: queue.isEmpty ? 'Fila' : 'Fila (${queue.length})',
       ),
-      (index: 2, icon: Icons.folder_rounded, label: 'Arquivos'),
     ];
 
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding,
-        vertical: 6,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 6),
       child: Row(
         children: [
           for (var i = 0; i < tabs.length; i++) ...[
@@ -1369,28 +1398,23 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 builder: (context) {
                   final item = tabs[i];
                   final isActive = tab == item.index;
+                  // Padrão Payno: a seção ativa em azul-marinho sólido.
                   final textColor = isActive
-                      ? (isDark
-                            ? AppColors.textPrimary
-                            : AppColors.lightTextPrimary)
+                      ? Colors.white
                       : (isDark
                             ? AppColors.textSecondary
                             : AppColors.lightTextSecondary);
-                  final iconColor = isActive
-                      ? highlightColor
-                      : (isDark
-                            ? AppColors.textSecondary
-                            : AppColors.lightTextSecondary);
+                  final iconColor = textColor;
                   final borderColor = isActive
-                      ? highlightColor
+                      ? Colors.transparent
                       : (isDark
                             ? AppColors.borderSubtle
                             : AppColors.lightBorderSubtle);
                   final bgColor = isActive
-                      ? highlightColor.withValues(alpha: isDark ? 0.22 : 0.14)
-                      : (isDark
-                            ? AppColors.surfaceCard
-                            : AppColors.lightSurfaceCard);
+                      ? (isDark
+                            ? AppColors.accentFill
+                            : AppColors.lightAccentFill)
+                      : AppColors.cardOf(context);
 
                   return InkWell(
                     onTap: () {
@@ -1400,7 +1424,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         _syncActivePhotosForTab(item.index);
                       });
                     },
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(999),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(
@@ -1408,37 +1432,15 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         vertical: 9,
                       ),
                       decoration: BoxDecoration(
-                        color: isActive ? null : bgColor,
-                        gradient: isActive
-                            ? LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: isDark
-                                    ? const [
-                                        Color(0x3838BDF8),
-                                        Color(0x300EA5E9),
-                                        Color(0x220E8FF1),
-                                      ]
-                                    : const [
-                                        Color(0xE8FFFFFF),
-                                        Color(0x40BAE6FD),
-                                        Color(0x300EA5E9),
-                                      ],
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(13),
-                        border: Border.all(
-                          color: borderColor,
-                          width: isActive ? 1.3 : 1.0,
-                        ),
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: borderColor),
                         boxShadow: isActive
                             ? [
                                 BoxShadow(
-                                  color: highlightColor.withValues(
-                                    alpha: isDark ? 0.24 : 0.16,
-                                  ),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
+                                  color: highlightColor.withValues(alpha: 0.25),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
                                 ),
                               ]
                             : null,
@@ -1456,8 +1458,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: isActive
-                                    ? FontWeight.bold
-                                    : FontWeight.w600,
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                                 color: textColor,
                               ),
                             ),
@@ -2009,6 +2011,33 @@ class _MediaLibraryState extends State<MediaLibrary> {
   }
 
   /// Caixa de visualização grande do carrossel (foto com zoom ou miniatura expandida do vídeo)
+  /// Os controles padrão do media_kit pedem ~148 px de altura (barra superior
+  /// de 56 + inferior de 56 + linha do tempo de 36). Em celular deitado o
+  /// card do vídeo é mais baixo que isso e estourava por frações de pixel
+  /// (faixa amarela e preta). Em alturas menores, as barras encolhem para
+  /// caber; em tela cheia e em alturas folgadas nada muda.
+  Widget _withCompactVideoControls(double height, Widget video) {
+    final sizes = compactVideoControlSizes(height);
+    if (sizes == null) return video;
+    final touch = MaterialVideoControlsThemeData(
+      buttonBarHeight: sizes.bar,
+      seekBarContainerHeight: sizes.seek,
+    );
+    final desktop = MaterialDesktopVideoControlsThemeData(
+      buttonBarHeight: sizes.bar,
+      seekBarContainerHeight: sizes.seek,
+    );
+    return MaterialVideoControlsTheme(
+      normal: touch,
+      fullscreen: const MaterialVideoControlsThemeData(),
+      child: MaterialDesktopVideoControlsTheme(
+        normal: desktop,
+        fullscreen: const MaterialDesktopVideoControlsThemeData(),
+        child: video,
+      ),
+    );
+  }
+
   Widget _buildPreviewBox(
     LibraryEntry current,
     bool canPrev,
@@ -2031,11 +2060,16 @@ class _MediaLibraryState extends State<MediaLibrary> {
       content = Stack(
         fit: StackFit.expand,
         children: [
-          Video(
-            key: ValueKey('inline-video-${_keyOf(current)}'),
-            controller: _localVideo!,
-            controls: AdaptiveVideoControls,
-            fill: Colors.black,
+          _withCompactVideoControls(
+            height,
+            Video(
+              key: ValueKey('inline-video-${_keyOf(current)}'),
+              controller: _localVideo!,
+              // Em cards muito baixos (<96 px) nem as barras compactas cabem:
+              // o vídeo fica sem sobreposição e usa os botões do painel ao lado.
+              controls: height < 96 ? NoVideoControls : AdaptiveVideoControls,
+              fill: Colors.black,
+            ),
           ),
           if (current.isAudio)
             IgnorePointer(
@@ -2060,46 +2094,57 @@ class _MediaLibraryState extends State<MediaLibrary> {
         alignment: Alignment.center,
         children: [
           _buildLargeVideoThumbnail(current, height: height),
+          // Botão de reproduzir (e aviso de erro) encolhem juntos se o card
+          // for baixo (celular deitado, fonte grande), em vez de estourar.
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Material(
-                  color: Colors.black54,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    key: const ValueKey('viewer-play-here'),
-                    tooltip: isTv
-                        ? 'Reproduzir na TV'
-                        : 'Reproduzir neste aparelho',
-                    iconSize: 40,
-                    color: Colors.white,
-                    icon: Icon(
-                      isTv && isStreamingThis
-                          ? Icons.cast_connected_rounded
-                          : Icons.play_arrow_rounded,
-                    ),
-                    onPressed: () => _startEntryPlayback(current),
-                  ),
-                ),
-                if (_localError != null && _localKey == _keyOf(current))
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _localError!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 11),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    color: Colors.black54,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      key: const ValueKey('viewer-play-here'),
+                      tooltip: isTv
+                          ? 'Reproduzir na TV'
+                          : 'Reproduzir neste aparelho',
+                      iconSize: 40,
+                      color: Colors.white,
+                      icon: Icon(
+                        isTv && isStreamingThis
+                            ? Icons.cast_connected_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                      onPressed: () => _startEntryPlayback(current),
                     ),
                   ),
-              ],
+                  if (_localError != null && _localKey == _keyOf(current))
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: Text(
+                          _localError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -2285,9 +2330,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
               size: 18,
               color: isTv ? highlight : null,
             ),
-            onPressed: loadingPhotoPreview
-                ? null
-                : () => _sendToTv(current),
+            onPressed: loadingPhotoPreview ? null : () => _sendToTv(current),
           ),
         IconButton(
           visualDensity: VisualDensity.compact,
@@ -2469,7 +2512,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
         : (hereLoaded ? () => unawaited(_localPlayer?.pause()) : null);
 
     final VoidCallback? onRepeat = isTv
-        ? (cast != null && isStreamingToTarget && (cast.canLoop || cast.isLooping)
+        ? (cast != null &&
+                  isStreamingToTarget &&
+                  (cast.canLoop || cast.isLooping)
               ? cast.toggleLoop
               : null)
         : _toggleLocalRepeat;
@@ -2845,161 +2890,141 @@ class _MediaLibraryState extends State<MediaLibrary> {
             (screen.width >= 600 && screen.width > screen.height * 0.7));
 
     // Cabeçalho da Biblioteca com indicação clara do aparelho de destino e botão de limpeza rápida
-    final Widget libraryHeader =
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                child: Row(
+    final Widget libraryHeader = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevatedOf(context),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.video_library_rounded,
+              color: AppColors.iconHighlightOf(context),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Biblioteca de mídia · ${tv.connectedTvName ?? tv.currentBrand.displayName}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimaryOf(context),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      width: 7,
+                      height: 7,
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceElevatedOf(context),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.video_library_rounded,
-                        color: AppColors.iconHighlightOf(context),
-                        size: 20,
+                        shape: BoxShape.circle,
+                        color: tv.isConnected
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFFEF4444),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 6),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Biblioteca de mídia · ${tv.connectedTvName ?? tv.currentBrand.displayName}',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimaryOf(context),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: tv.isConnected
-                                      ? const Color(0xFF22C55E)
-                                      : const Color(0xFFEF4444),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  tv.isConnected
-                                      ? 'Destino ativo: ${tv.connectedTvName ?? tv.ipAddress}'
-                                      : 'Nenhum aparelho conectado',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondaryOf(context),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      child: Text(
+                        tv.isConnected
+                            ? 'Destino ativo: ${tv.connectedTvName ?? tv.ipAddress}'
+                            : 'Nenhum aparelho conectado',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondaryOf(context),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (casting || isStreamingToTarget || queue.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Limpar fila',
-                        onPressed: () =>
-                            abortAndClearQueue(clearQueueItems: true),
-                        icon: const Icon(
-                          Icons.cleaning_services_rounded,
-                          size: 16,
-                          color: AppColors.powerRed,
-                        ),
-                      ),
                   ],
                 ),
-              );
+              ],
+            ),
+          ),
+          if (casting || isStreamingToTarget || queue.isNotEmpty)
+            IconButton(
+              tooltip: 'Limpar fila',
+              onPressed: () => abortAndClearQueue(clearQueueItems: true),
+              icon: const Icon(
+                Icons.cleaning_services_rounded,
+                size: 16,
+                color: AppColors.powerRed,
+              ),
+            ),
+        ],
+      ),
+    );
     final Widget? connectBanner = tv.isConnected
         ? null
-        :
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.3),
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.amber, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Conecte um aparelho para reproduzir.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textPrimaryOf(context),
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          color: Colors.amber,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Conecte um aparelho para reproduzir.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textPrimaryOf(context),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                );
+                ],
+              ),
+            ),
+          );
     final Widget? castingRow = !casting
         ? null
-        :
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: ExcludeSemantics(
+                    child: LinearProgressIndicator(
+                      semanticsLabel: 'Preparando episódio',
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: ExcludeSemantics(
-                          child: LinearProgressIndicator(
-                            semanticsLabel: 'Preparando episódio',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () =>
-                            abortAndClearQueue(clearQueueItems: false),
-                        icon: const Icon(Icons.cancel_outlined, size: 16),
-                        label: const Text('Cancelar'),
-                      ),
-                    ],
-                  ),
-                );
-    final Widget tabContent =
-loadFailed
-                    ? const Center(
-                        child: Text('A biblioteca salva não pôde ser lida.'),
-                      )
-                    : !ready
-                    ? const Center(child: CircularProgressIndicator())
-                    : tab == 0
-                    ? playlistView()
-                    : tab == 1
-                    ? queueView(cast, isStreamingToTarget)
-                    : filesView();
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => abortAndClearQueue(clearQueueItems: false),
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: const Text('Cancelar'),
+                ),
+              ],
+            ),
+          );
+    final Widget tabContent = loadFailed
+        ? const Center(child: Text('A biblioteca salva não pôde ser lida.'))
+        : !ready
+        ? const Center(child: CircularProgressIndicator())
+        : tab == 0
+        ? playlistView()
+        : tab == 1
+        ? queueView(cast, isStreamingToTarget)
+        : filesView();
 
     final Widget content;
     if (wideViewer) {
@@ -3082,11 +3107,26 @@ loadFailed
       );
     }
 
+    // Desktop / tela larga na aba Arquivos: árvore de fontes e pastas à
+    // esquerda, mostrando onde você está.
+    final withTree = LayoutBuilder(
+      builder: (context, box) {
+        if (tab != 2 || box.maxWidth < 980 || !ready) return content;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildFolderTree(),
+            Expanded(child: content),
+          ],
+        );
+      },
+    );
+
     return widget.embedded
-        ? content
+        ? withTree
         : Scaffold(
             appBar: AppBar(title: const Text('Biblioteca de mídia')),
-            body: content,
+            body: withTree,
           );
   }
 
@@ -3623,473 +3663,741 @@ loadFailed
   }
 
   /// Visão de Navegação em Pastas e Arquivos (Locais e Nuvem) com Miniaturas de Fotos e Login Persistente
-  Widget filesView() {
-    if (trail.isEmpty) {
-      return ListView(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.create_new_folder_outlined),
-            title: const Text('Adicionar pasta deste aparelho'),
-            onTap: addRoot,
-          ),
-          for (final root in [
-            ...roots,
-            const LibraryEntry(
-              LibrarySource.drive,
-              'root',
-              'Google Drive',
-              folder: true,
-            ),
-            const LibraryEntry(
-              LibrarySource.oneDrive,
-              'root',
-              'OneDrive',
-              folder: true,
-            ),
-          ])
-            ListTile(
-              leading: Icon(
-                root.source == LibrarySource.local ||
-                        root.source == LibrarySource.androidTree
-                    ? Icons.folder
-                    : Icons.cloud_outlined,
-              ),
-              title: Text(root.name),
-              subtitle:
-                  (root.source == LibrarySource.drive && driveLogged) ||
-                      (root.source == LibrarySource.oneDrive && oneDriveLogged)
-                  ? const Text(
-                      'Sessão salva · Login automático ativado',
-                      style: TextStyle(fontSize: 11),
-                    )
-                  : null,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if ((root.source == LibrarySource.drive && driveLogged) ||
-                      (root.source == LibrarySource.oneDrive && oneDriveLogged))
-                    IconButton(
-                      tooltip: 'Sair da conta ${root.name}',
-                      icon: const Icon(Icons.logout_rounded, size: 18),
-                      onPressed: () async {
-                        await sources.signOut(root.source);
-                        await _refreshCloudAuthState();
-                        message('Sessão de ${root.name} desconectada.');
-                      },
-                    ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
-              onTap: () => enter(root),
-            ),
-          if (roots.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  foregroundColor: AppColors.powerRed,
-                  side: BorderSide(
-                    color: AppColors.powerRed.withValues(alpha: 0.5),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() => roots.clear());
-                  save();
-                  message('Histórico de pastas deste aparelho limpo.');
-                },
-                icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-                label: const Text('Limpar histórico de pastas salvas'),
-              ),
-            ),
-          if (selected.isNotEmpty) selectionBar(),
-        ],
-      );
+  // ---------------------------------------------------------------------
+  // Navegação de arquivos (padrão Payno, mockup aprovado em
+  // docs/design/mockups/sixf-midia-mockup.html): caminho em etapas
+  // clicáveis no topo, fontes como cards, subpastas em cards e arquivos em
+  // grade de miniaturas (ou lista), seleção com círculos e barra de ações.
+  // ---------------------------------------------------------------------
+
+  static const _driveRoot = LibraryEntry(
+    LibrarySource.drive,
+    'root',
+    'Google Drive',
+    folder: true,
+  );
+  static const _oneDriveRoot = LibraryEntry(
+    LibrarySource.oneDrive,
+    'root',
+    'OneDrive',
+    folder: true,
+  );
+
+  bool _isSelected(LibraryEntry e) => selected.any((s) => _same(s, e));
+
+  /// Arquivos selecionáveis da pasta aberta, na ordem exibida: respeita a
+  /// busca e o filtro de tipo e deixa as subpastas de fora.
+  List<LibraryEntry> _selectableFiles() {
+    final all = _visibleFolderEntries();
+    final visible = _typeFilter == 'all'
+        ? all
+        : all.where((e) => _typeOf(e) == _typeFilter);
+    return visible.where((e) => !e.folder).toList();
+  }
+
+  /// Último arquivo marcado: ponto de partida do Shift + clique.
+  LibraryEntry? _selectAnchor;
+
+  void _toggleSelected(LibraryEntry e) {
+    HapticService.selectionClick();
+    // Shift + clique (teclado físico, no Windows): marca todos os arquivos
+    // entre o último marcado e este, como no Explorador de Arquivos.
+    final anchor = _selectAnchor;
+    if (HardwareKeyboard.instance.isShiftPressed && anchor != null) {
+      final files = _selectableFiles();
+      final from = files.indexWhere((f) => _same(f, anchor));
+      final to = files.indexWhere((f) => _same(f, e));
+      if (from >= 0 && to >= 0) {
+        final lo = from < to ? from : to;
+        final hi = from < to ? to : from;
+        setState(() {
+          for (final f in files.sublist(lo, hi + 1)) {
+            if (!_isSelected(f)) selected.add(f);
+          }
+          _selectAnchor = e;
+        });
+        return;
+      }
     }
-    return Column(
-      children: [
-        ListTile(
-          leading: BackButton(
-            onPressed: () {
-              trail.removeLast();
-              browse();
-            },
-          ),
-          title: Text(
-            trail.map((e) => e.name).join(' / '),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: IconButton(
-            tooltip: 'Recarregar pasta',
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: () {
-              if (trail.isNotEmpty) {
-                LibrarySources.invalidateFolderCache(
-                  "${trail.last.source.name}:${trail.last.id}",
-                );
-              }
-              browse();
-            },
+    setState(() {
+      final i = selected.indexWhere((s) => _same(s, e));
+      if (i < 0) {
+        selected.add(e);
+        _selectAnchor = e;
+      } else {
+        selected.removeAt(i);
+        if (selected.isEmpty) _selectAnchor = null;
+      }
+    });
+  }
+
+  /// Marca todos os arquivos visíveis da pasta; se já estiverem todos
+  /// marcados, desmarca-os.
+  void _toggleSelectAll() {
+    HapticService.selectionClick();
+    final files = _selectableFiles();
+    if (files.isEmpty) return;
+    final allSelected = files.every(_isSelected);
+    setState(() {
+      if (allSelected) {
+        selected.removeWhere((s) => files.any((f) => _same(f, s)));
+        if (selected.isEmpty) _selectAnchor = null;
+      } else {
+        for (final f in files) {
+          if (!_isSelected(f)) selected.add(f);
+        }
+        _selectAnchor = files.last;
+      }
+    });
+  }
+
+  /// Volta direto para a etapa [index] do caminho.
+  void _openTrailAt(int index) {
+    if (index < 0) {
+      trail.clear();
+    } else if (index < trail.length - 1) {
+      trail.removeRange(index + 1, trail.length);
+    } else {
+      return;
+    }
+    _typeFilter = 'all';
+    browse();
+  }
+
+  void _openPath(List<LibraryEntry> path) {
+    trail
+      ..clear()
+      ..addAll(path.map(_cloneEntry));
+    _typeFilter = 'all';
+    browse();
+  }
+
+  /// Guarda a pasta aberta nas "Abertas recentemente" (máximo de 4).
+  void _rememberRecent() {
+    if (trail.isEmpty) return;
+    final path = [for (final e in trail) _cloneEntry(e)];
+    recent.removeWhere((r) => r.isNotEmpty && _same(r.last, path.last));
+    recent.insert(0, path);
+    if (recent.length > 4) recent.removeRange(4, recent.length);
+  }
+
+  bool _isCloudLogged(LibrarySource s) =>
+      (s == LibrarySource.drive && driveLogged) ||
+      (s == LibrarySource.oneDrive && oneDriveLogged);
+
+  String _ext(LibraryEntry e) {
+    final ext = p.extension(e.name).toUpperCase();
+    return ext.startsWith('.') ? ext.substring(1) : ext;
+  }
+
+  String _typeOf(LibraryEntry e) => e.folder
+      ? 'folder'
+      : e.isVideo
+      ? 'video'
+      : e.isImage
+      ? 'image'
+      : e.isAudio
+      ? 'audio'
+      : 'other';
+
+  Widget _sourceLogo(LibrarySource source, {double size = 22}) {
+    switch (source) {
+      case LibrarySource.drive:
+        return SizedBox(
+          width: size,
+          height: size,
+          child: const CustomPaint(painter: _DriveLogoPainter()),
+        );
+      case LibrarySource.oneDrive:
+        return Icon(
+          Icons.cloud_rounded,
+          size: size,
+          color: const Color(0xFF0F78D4),
+        );
+      case LibrarySource.local:
+      case LibrarySource.androidTree:
+        return Icon(
+          Icons.smartphone_rounded,
+          size: size,
+          color: AppColors.iconHighlightOf(context),
+        );
+    }
+  }
+
+  Widget _sectionLabel(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: AppColors.textMutedOf(context),
+      ),
+    ),
+  );
+
+  /// Card de linha (fonte, pasta salva, pasta recente).
+  Widget _rowCard({
+    required Widget leading,
+    required String title,
+    String? subtitle,
+    Widget? subtitleLead,
+    Widget? trailing,
+    VoidCallback? onTap,
+    bool dashed = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: dashed ? Colors.transparent : AppColors.circleOf(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: dashed
+                ? AppColors.textMutedOf(context).withValues(alpha: 0.5)
+                : AppColors.borderSubtleOf(context),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: search,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Buscar nesta pasta',
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceInteractiveOf(context),
+                    borderRadius: BorderRadius.circular(13),
                   ),
-                  onChanged: (v) => setState(() => filter = v.toLowerCase()),
+                  child: leading,
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildViewModeToggleButton(),
-              const SizedBox(width: 6),
-              IconButton.filledTonal(
-                tooltip: sortByExtension
-                    ? 'Ordenado por Tipo / Extensão'
-                    : 'Ordenar por Nome (A-Z)',
-                icon: Icon(
-                  sortByExtension
-                      ? Icons.category_rounded
-                      : Icons.sort_by_alpha_rounded,
-                  color: sortByExtension
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                ),
-                onPressed: () {
-                  HapticService.selectionClick();
-                  setState(() => sortByExtension = !sortByExtension);
-                },
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Builder(
-            builder: (_) {
-              if (loading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (folderError.isNotEmpty) {
-                return Center(
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextButton(
-                        onPressed: browse,
-                        child: Text(
-                          '$folderError\nTentar novamente',
-                          textAlign: TextAlign.center,
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimaryOf(context),
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() => trail.clear());
-                          save();
-                        },
-                        icon: const Icon(Icons.home_outlined, size: 16),
-                        label: const Text('Voltar às fontes'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              final visible = _visibleFolderEntries();
-              if (visible.isEmpty) {
-                return const Center(
-                  child: Text('Nenhuma pasta ou mídia encontrada.'),
-                );
-              }
-              final isCarouselActive =
-                  activePhotos.isNotEmpty || activeMediaItem != null;
-              final subfolders = visible.where((e) => e.folder).toList();
-
-              // Quando o carrossel estiver ativo e não houver filtro digitado,
-              // os arquivos de mídia ficam centralizados no carrossel superior para liberar espaço.
-              if (isCarouselActive && filter.isEmpty) {
-                if (subfolders.isNotEmpty) {
-                  return ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: Text(
-                          'Subpastas (${subfolders.length})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textSecondaryOf(context),
-                          ),
-                        ),
-                      ),
-                      for (final e in subfolders)
-                        ListTile(
-                          dense: !showThumbnails,
-                          visualDensity: showThumbnails
-                              ? null
-                              : VisualDensity.compact,
-                          leading: showThumbnails
-                              ? _buildEntryThumbnail(e, size: 38)
-                              : Icon(
-                                  Icons.folder_outlined,
-                                  size: 20,
-                                  color: AppColors.iconHighlightOf(context),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            ?subtitleLead,
+                            Flexible(
+                              child: Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textMutedOf(context),
                                 ),
-                          title: Text(e.name),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => enter(e),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          '${visible.where((e) => !e.folder).length} arquivos no carrossel acima · Segure na miniatura para opções',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMutedOf(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                return Center(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.swipe_rounded,
-                          size: 28,
-                          color: AppColors.textMutedOf(context),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${visible.where((e) => !e.folder).length} arquivos disponíveis no carrossel acima',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimaryOf(context),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Toque nas miniaturas para navegar ou segure para opções rápidas e seleção múltipla.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondaryOf(context),
-                          ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                );
-              }
+                ),
+                ?trailing,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-              return ListView.builder(
-                itemCount: visible.length,
-                itemBuilder: (_, i) {
-                  final e = visible[i];
-                  if (e.folder) {
-                    return ListTile(
-                      dense: !showThumbnails,
-                      visualDensity: showThumbnails
-                          ? null
-                          : VisualDensity.compact,
-                      leading: showThumbnails
-                          ? _buildEntryThumbnail(e, size: 38)
-                          : Icon(
-                              Icons.folder_outlined,
-                              size: 20,
-                              color: AppColors.iconHighlightOf(context),
-                            ),
-                      title: Text(e.name),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => enter(e),
-                    );
-                  }
-                  final index = selected.indexWhere(
-                    (s) => s.id == e.id && s.source == e.source,
-                  );
+  Widget _chevron() =>
+      Icon(Icons.chevron_right_rounded, color: AppColors.textMutedOf(context));
 
-                  final ext = p.extension(e.name).toUpperCase();
-                  final cleanExt = ext.startsWith('.') ? ext.substring(1) : ext;
+  Widget _statusDot(Color color) => Container(
+    width: 6,
+    height: 6,
+    margin: const EdgeInsets.only(right: 5),
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 
-                  if (e.isImage) {
-                    return ListTile(
-                      dense: !showThumbnails,
-                      visualDensity: showThumbnails
-                          ? null
-                          : VisualDensity.compact,
-                      leading: showThumbnails
-                          ? _buildEntryThumbnail(e, size: 42)
-                          : null,
-                      title: Text(e.name),
-                      subtitle: showThumbnails
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1.5,
-                                  ),
-                                  margin: const EdgeInsets.only(right: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withValues(alpha: 0.25),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: Colors.amberAccent.withValues(
-                                        alpha: 0.7,
-                                      ),
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'FOTO • $cleanExt',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                      color: AppColors.textPrimaryOf(context),
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  e.size != null
-                                      ? '${_formatBytes(e.size!)} · Toque para abrir'
-                                      : 'Toque para abrir e espelhar na TV',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondaryOf(context),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            )
-                          : null,
-                      onTap: () => showFileActions(e, photoContext: visible),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Visualizar e espelhar na TV',
-                            icon: const Icon(Icons.cast_rounded),
-                            onPressed: () => openPhotoAndMirror(visible, e),
-                          ),
-                          Checkbox(
-                            value: index >= 0,
-                            onChanged: (_) => setState(() {
-                              if (index < 0) {
-                                selected.add(e);
-                              } else {
-                                selected.removeAt(index);
-                              }
-                            }),
-                          ),
-                        ],
+  /// Raiz: fontes em cards, pastas deste aparelho e abertas recentemente.
+  Widget _buildSourcesRoot() {
+    Widget cloud(LibraryEntry root) {
+      final logged = _isCloudLogged(root.source);
+      return _rowCard(
+        leading: _sourceLogo(root.source, size: 24),
+        title: root.name,
+        subtitle: logged
+            ? 'Sessão salva · Login automático ativado'
+            : 'Toque para entrar na conta',
+        subtitleLead: logged ? _statusDot(AppColors.okOf(context)) : null,
+        onTap: () => enter(root),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (logged)
+              IconButton(
+                tooltip: 'Sair da conta ${root.name}',
+                icon: Icon(
+                  Icons.logout_rounded,
+                  size: 18,
+                  color: AppColors.textMutedOf(context),
+                ),
+                onPressed: () async {
+                  await sources.signOut(root.source);
+                  await _refreshCloudAuthState();
+                  message('Sessão de ${root.name} desconectada.');
+                },
+              ),
+            _chevron(),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      children: [
+        _sectionLabel('Fontes'),
+        cloud(_driveRoot),
+        cloud(_oneDriveRoot),
+        _sectionLabel('Neste aparelho'),
+        for (final root in roots)
+          _rowCard(
+            leading: Icon(
+              Icons.folder_rounded,
+              color: AppColors.iconHighlightOf(context),
+            ),
+            title: root.name,
+            subtitle: 'Pasta salva',
+            onTap: () => enter(root),
+            trailing: _chevron(),
+          ),
+        _rowCard(
+          dashed: true,
+          leading: Icon(
+            Icons.create_new_folder_outlined,
+            color: AppColors.iconHighlightOf(context),
+          ),
+          title: 'Adicionar pasta deste aparelho',
+          onTap: addRoot,
+        ),
+        if (recent.isNotEmpty) ...[
+          _sectionLabel('Abertas recentemente'),
+          for (final path in recent)
+            _rowCard(
+              leading: Icon(
+                Icons.history_rounded,
+                color: AppColors.iconHighlightOf(context),
+              ),
+              title: path.last.name,
+              subtitle: path.map((e) => e.name).join(' › '),
+              onTap: () => _openPath(path),
+              trailing: _chevron(),
+            ),
+        ],
+        if (roots.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: AppColors.powerRed),
+              onPressed: () {
+                setState(() => roots.clear());
+                save();
+                message('Histórico de pastas deste aparelho limpo.');
+              },
+              icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+              label: const Text('Limpar histórico de pastas salvas'),
+            ),
+          ),
+        if (selected.isNotEmpty) selectionBar(),
+      ],
+    );
+  }
+
+  /// Caminho em etapas clicáveis: "Google Drive › Mídia › Séries".
+  Widget _buildCrumbs() {
+    // Alinhado à esquerda; se o caminho for longo, rola mostrando o fim
+    // (a pasta atual).
+    return LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: box.maxWidth),
+          child: Row(
+            children: [
+              for (var i = 0; i < trail.length; i++) ...[
+                if (i > 0)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: AppColors.textMutedOf(context),
+                  ),
+                Builder(
+                  builder: (context) {
+                    final current = i == trail.length - 1;
+                    return Material(
+                      color: current
+                          ? AppColors.accentSoftOf(context)
+                          : AppColors.surfaceInteractiveOf(context),
+                      shape: StadiumBorder(
+                        side: BorderSide(
+                          color: current
+                              ? Colors.transparent
+                              : AppColors.borderSubtleOf(context),
+                        ),
                       ),
-                    );
-                  }
-
-                  final isVid = e.isVideo;
-                  return ListTile(
-                    dense: !showThumbnails,
-                    visualDensity: showThumbnails
-                        ? null
-                        : VisualDensity.compact,
-                    leading: showThumbnails
-                        ? _buildEntryThumbnail(e, size: 42)
-                        : null,
-                    onTap: () => showFileActions(e, photoContext: visible),
-                    title: Text(e.name),
-                    subtitle: showThumbnails
-                        ? Wrap(
-                            spacing: 6,
-                            runSpacing: 2,
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: current ? null : () => _openTrailAt(i),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isVid
-                                      ? const Color(0xFF0E8FF1)
-                                            .withValues(alpha: 0.25)
-                                      : Colors.teal.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isVid
-                                        ? const Color(0xFF38BDF8)
-                                              .withValues(alpha: 0.7)
-                                        : Colors.tealAccent.withValues(
-                                            alpha: 0.7,
-                                          ),
-                                    width: 0.8,
-                                  ),
+                              if (i == 0) ...[
+                                _sourceLogo(trail[0].source, size: 14),
+                                const SizedBox(width: 5),
+                              ],
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 160,
                                 ),
                                 child: Text(
-                                  isVid
-                                      ? 'VÍDEO • $cleanExt'
-                                      : 'ÁUDIO • $cleanExt',
+                                  trail[i].name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                    color: AppColors.textPrimaryOf(context),
+                                    fontSize: 12,
+                                    fontWeight: current
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: current
+                                        ? AppColors.iconHighlightOf(context)
+                                        : AppColors.textSecondaryOf(context),
                                   ),
                                 ),
                               ),
-                              if (e.size != null)
-                                Text(
-                                  _formatBytes(e.size!),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondaryOf(context),
-                                  ),
-                                ),
                             ],
-                          )
-                        : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool active = false,
+    double size = 36,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: active
+            ? AppColors.accentFillOf(context)
+            : AppColors.circleOf(context),
+        shape: CircleBorder(
+          side: BorderSide(
+            color: active
+                ? Colors.transparent
+                : AppColors.borderSubtleOf(context),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            HapticService.selectionClick();
+            onPressed();
+          },
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(
+              icon,
+              size: size * 0.48,
+              color: active ? Colors.white : AppColors.textPrimaryOf(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _typeChip(String id, String label, IconData? icon, int? count) {
+    final on = _typeFilter == id;
+    final fg = on ? Colors.white : AppColors.textSecondaryOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Material(
+        color: on
+            ? AppColors.accentFillOf(context)
+            : AppColors.surfaceInteractiveOf(context),
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: on ? Colors.transparent : AppColors.borderSubtleOf(context),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() => _typeFilter = id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 13, color: fg),
+                  const SizedBox(width: 5),
+                ],
+                Text(
+                  count == null ? label : '$label $count',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget filesView() {
+    if (trail.isEmpty) return _buildSourcesRoot();
+
+    final counts = <String, int>{};
+    for (final e in entries) {
+      counts.update(_typeOf(e), (v) => v + 1, ifAbsent: () => 1);
+    }
+    String plural(int n, String one, String many) =>
+        '$n ${n == 1 ? one : many}';
+    final summary = [
+      if ((counts['folder'] ?? 0) > 0)
+        plural(counts['folder']!, 'pasta', 'pastas'),
+      if ((counts['video'] ?? 0) > 0)
+        plural(counts['video']!, 'vídeo', 'vídeos'),
+      if ((counts['image'] ?? 0) > 0) plural(counts['image']!, 'foto', 'fotos'),
+      if ((counts['audio'] ?? 0) > 0)
+        plural(counts['audio']!, 'áudio', 'áudios'),
+    ].join(' · ');
+
+    // Cabeçalho da pasta e conteúdo rolam juntos: em telas baixas (paisagem,
+    // fonte ampliada) nada fica espremido nem estoura.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) => ListView(
+              padding: const EdgeInsets.only(bottom: 12),
+              children: [
+                // 1. Voltar + caminho clicável + recarregar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: Row(
+                    children: [
+                      _circleButton(
+                        icon: Icons.arrow_back_rounded,
+                        tooltip: 'Voltar',
+                        size: 34,
+                        onPressed: () => _openTrailAt(trail.length - 2),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildCrumbs()),
+                      const SizedBox(width: 8),
+                      _circleButton(
+                        icon: Icons.refresh_rounded,
+                        tooltip: 'Recarregar pasta',
+                        size: 34,
+                        onPressed: () {
+                          LibrarySources.invalidateFolderCache(
+                            "${trail.last.source.name}:${trail.last.id}",
+                          );
+                          browse();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                // 2. Nome da pasta em destaque + contagem
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trail.last.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 24,
+                          height: 1.1,
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: -0.5,
+                          color: AppColors.textPrimaryOf(context),
+                        ),
+                      ),
+                      if (summary.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            summary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textMutedOf(context),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // 3. Busca + grade/lista + ordenação
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.circleOf(context),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: AppColors.borderSubtleOf(context),
+                            ),
+                          ),
+                          child: TextField(
+                            controller: search,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textPrimaryOf(context),
+                            ),
+                            decoration: InputDecoration(
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                size: 18,
+                                color: AppColors.textMutedOf(context),
+                              ),
+                              hintText: 'Buscar nesta pasta',
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 11,
+                              ),
+                            ),
+                            onChanged: (v) =>
+                                setState(() => filter = v.toLowerCase()),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _circleButton(
+                        icon: showThumbnails
+                            ? Icons.grid_view_rounded
+                            : Icons.view_list_rounded,
+                        tooltip: showThumbnails
+                            ? 'Modo compacto (somente nomes)'
+                            : 'Modo detalhado (miniaturas e nomes)',
+                        active: true,
+                        onPressed: () {
+                          setState(() => showThumbnails = !showThumbnails);
+                          save();
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      _circleButton(
+                        icon: sortByExtension
+                            ? Icons.category_rounded
+                            : Icons.sort_by_alpha_rounded,
+                        tooltip: sortByExtension
+                            ? 'Ordenado por Tipo / Extensão'
+                            : 'Ordenar por Nome (A-Z)',
+                        active: sortByExtension,
+                        onPressed: () =>
+                            setState(() => sortByExtension = !sortByExtension),
+                      ),
+                    ],
+                  ),
+                ),
+                // 4. Filtros por tipo, com a quantidade de cada um
+                if (entries.isNotEmpty)
+                  SizedBox(
+                    height: 44,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(16, 9, 10, 4),
                       children: [
-                        IconButton(
-                          tooltip: 'Reproduzir no aparelho ativo',
-                          icon: const Icon(Icons.play_arrow),
-                          onPressed: () =>
-                              play([e], start: 0, sourceTitle: e.name),
-                        ),
-                        Checkbox(
-                          value: index >= 0,
-                          onChanged: (_) => setState(() {
-                            if (index < 0) {
-                              selected.add(e);
-                            } else {
-                              selected.removeAt(index);
-                            }
-                          }),
-                        ),
+                        _typeChip('all', 'Tudo', null, null),
+                        if ((counts['folder'] ?? 0) > 0)
+                          _typeChip(
+                            'folder',
+                            'Pastas',
+                            Icons.folder_outlined,
+                            counts['folder'],
+                          ),
+                        if ((counts['video'] ?? 0) > 0)
+                          _typeChip(
+                            'video',
+                            'Vídeos',
+                            Icons.movie_outlined,
+                            counts['video'],
+                          ),
+                        if ((counts['image'] ?? 0) > 0)
+                          _typeChip(
+                            'image',
+                            'Fotos',
+                            Icons.image_outlined,
+                            counts['image'],
+                          ),
+                        if ((counts['audio'] ?? 0) > 0)
+                          _typeChip(
+                            'audio',
+                            'Áudios',
+                            Icons.audiotrack_outlined,
+                            counts['audio'],
+                          ),
                       ],
                     ),
-                  );
-                },
-              );
-            },
+                  ),
+                // 5. Conteúdo: subpastas em cards + arquivos em grade ou lista
+                ..._buildFolderContent(box.maxWidth),
+              ],
+            ),
           ),
         ),
         if (selected.isNotEmpty) selectionBar(),
@@ -4097,68 +4405,635 @@ loadFailed
     );
   }
 
-  /// Barra de ações claras para os itens selecionados:
-  /// 1. Tocar na TV / Adicionar à Fila Temporária
-  /// 2. Criar / Salvar em Playlist Persistida
-  Widget selectionBar() {
-    final count = selected.length;
-    final tv = context.read<RemoteController>();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+  List<Widget> _buildFolderContent(double maxWidth) {
+    Widget state(Widget child) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+      child: Center(child: child),
+    );
+    if (loading) return [state(const CircularProgressIndicator())];
+    if (folderError.isNotEmpty) {
+      return [
+        state(
+          Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.iconHighlightOf(context)
-                      .withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count ${count == 1 ? 'arquivo selecionado' : 'arquivos selecionados'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.iconHighlightOf(context),
-                  ),
+              Text(
+                folderError,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textPrimaryOf(context),
                 ),
               ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Desmarcar todos',
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () => setState(() => selected.clear()),
+              TextButton(
+                onPressed: browse,
+                child: const Text('Tentar novamente'),
+              ),
+              TextButton.icon(
+                onPressed: () => _openTrailAt(-1),
+                icon: const Icon(Icons.home_outlined, size: 16),
+                label: const Text('Voltar às fontes'),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
+        ),
+      ];
+    }
+    final all = _visibleFolderEntries();
+    final visible = _typeFilter == 'all'
+        ? all
+        : all.where((e) => _typeOf(e) == _typeFilter).toList();
+    if (visible.isEmpty) {
+      return [
+        state(
+          Text(
+            'Nenhuma pasta ou mídia encontrada.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMutedOf(context)),
+          ),
+        ),
+      ];
+    }
+    final folders = visible.where((e) => e.folder).toList();
+    final files = visible.where((e) => !e.folder).toList();
+    // Contexto do carrossel/visualizador: todos os arquivos visíveis da pasta.
+    final photoContext = all.where((e) => !e.folder).toList();
+
+    const gap = 8.0;
+    final width = (maxWidth - 32).clamp(120.0, double.infinity);
+    final folderCols = (width / 190).floor().clamp(2, 5);
+    final folderW = (width - gap * (folderCols - 1)) / folderCols;
+    final tileCols = (width / 120).floor().clamp(3, 8);
+    final tileW = (width - gap * (tileCols - 1)) / tileCols;
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (folders.isNotEmpty)
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final f in folders)
+                    SizedBox(width: folderW, child: _folderCard(f)),
+                ],
+              ),
+            if (folders.isNotEmpty && files.isNotEmpty)
+              const SizedBox(height: 12),
+            if (files.isNotEmpty && showThumbnails)
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final e in files)
+                    SizedBox(
+                      width: tileW,
+                      height: tileW,
+                      child: _fileTile(e, photoContext, tileW),
+                    ),
+                ],
+              )
+            else
+              for (final e in files) _fileRow(e, photoContext),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _folderCard(LibraryEntry folder) {
+    return Material(
+      color: AppColors.circleOf(context),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppColors.borderSubtleOf(context)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => enter(folder),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
             children: [
-              FilledButton.icon(
-                onPressed: !tv.isConnected
-                    ? () => addSelectionToQueue(playNow: false)
-                    : () => addSelectionToQueue(playNow: true),
-                icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                label: const Text('Tocar na TV'),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.accentSoftOf(context),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  Icons.folder_rounded,
+                  size: 19,
+                  color: AppColors.iconHighlightOf(context),
+                ),
               ),
-              FilledButton.tonalIcon(
-                onPressed: () => addSelectionToQueue(playNow: false),
-                icon: const Icon(Icons.queue_music_rounded, size: 18),
-                label: const Text('Adicionar à fila'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  folder.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryOf(context),
+                  ),
+                ),
               ),
-              OutlinedButton.icon(
-                onPressed: addSelection,
-                icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                label: const Text('Criar playlist'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Círculo de seleção (vazio ou azul com ✓).
+  Widget _selectCircle(LibraryEntry e, {bool onImage = false}) {
+    final on = _isSelected(e);
+    return Tooltip(
+      message: on ? 'Desmarcar' : 'Selecionar',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _toggleSelected(e),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: on
+                  ? AppColors.accentFillOf(context)
+                  : (onImage ? const Color(0x55000000) : Colors.transparent),
+              border: Border.all(
+                color: on
+                    ? Colors.white
+                    : (onImage ? Colors.white : AppColors.textMutedOf(context)),
+                width: 1.6,
+              ),
+            ),
+            child: on
+                ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fileTile(LibraryEntry e, List<LibraryEntry> ctx, double size) {
+    final on = _isSelected(e);
+    return Material(
+      color: AppColors.surfaceInteractiveOf(context),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: on
+            ? BorderSide(color: AppColors.accentFillOf(context), width: 3)
+            : BorderSide.none,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _focusEntry(e, ctx),
+        onLongPress: () => showFileActions(e, photoContext: ctx),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildEntryThumbnail(e, size: size),
+            // Nome sobre degradê escuro
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(7, 14, 7, 5),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xA6000000)],
+                  ),
+                ),
+                child: Text(
+                  e.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            if (!e.isImage)
+              Positioned(
+                left: 6,
+                top: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x9E0A0E16),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _ext(e),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: _selectCircle(e, onImage: true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fileRow(LibraryEntry e, List<LibraryEntry> ctx) {
+    final on = _isSelected(e);
+    final details = [
+      _ext(e),
+      if (e.size != null) _formatBytes(e.size!),
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Material(
+        color: on
+            ? AppColors.accentSoftOf(context)
+            : AppColors.circleOf(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: on ? Colors.transparent : AppColors.borderSubtleOf(context),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _focusEntry(e, ctx),
+          onLongPress: () => showFileActions(e, photoContext: ctx),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 6, 4, 6),
+            child: Row(
+              children: [
+                _selectCircle(e),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: _buildEntryThumbnail(e, size: 42),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        e.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimaryOf(context),
+                        ),
+                      ),
+                      if (details.isNotEmpty)
+                        Text(
+                          details,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.textMutedOf(context),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (e.isImage)
+                  IconButton(
+                    tooltip: 'Visualizar e espelhar na TV',
+                    icon: Icon(
+                      Icons.cast_rounded,
+                      size: 20,
+                      color: AppColors.textSecondaryOf(context),
+                    ),
+                    onPressed: () => openPhotoAndMirror(ctx, e),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Reproduzir no aparelho ativo',
+                    icon: Icon(
+                      Icons.play_arrow_rounded,
+                      color: AppColors.textSecondaryOf(context),
+                    ),
+                    onPressed: () => play([e], start: 0, sourceTitle: e.name),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Árvore de fontes e pastas (desktop): mostra onde você está e permite
+  /// pular para qualquer pasta já visitada do caminho atual.
+  Widget _buildFolderTree() {
+    final nodes = <Widget>[];
+    void node(
+      LibraryEntry entry, {
+      required int depth,
+      required bool current,
+      required VoidCallback onTap,
+      bool source = false,
+      Widget? trailing,
+    }) {
+      final fg = current
+          ? Colors.white
+          : (source
+                ? AppColors.textPrimaryOf(context)
+                : AppColors.textSecondaryOf(context));
+      nodes.add(
+        Padding(
+          padding: EdgeInsets.only(
+            left: depth * 14.0,
+            bottom: 2,
+            top: source ? 6 : 0,
+          ),
+          child: Material(
+            color: current
+                ? AppColors.accentFillOf(context)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                child: Row(
+                  children: [
+                    if (source)
+                      _sourceLogo(entry.source, size: 16)
+                    else
+                      Icon(
+                        Icons.folder_outlined,
+                        size: 16,
+                        color: current
+                            ? Colors.white
+                            : AppColors.textMutedOf(context),
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        entry.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: current || source
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: fg,
+                        ),
+                      ),
+                    ),
+                    ?trailing,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    void level(int depth) {
+      final parent = trail[depth];
+      final kids =
+          _folderKids[_keyOf(parent)] ??
+          (depth + 1 < trail.length
+              ? [trail[depth + 1]]
+              : const <LibraryEntry>[]);
+      for (final kid in kids.take(40)) {
+        final onPath = depth + 1 < trail.length && _same(kid, trail[depth + 1]);
+        node(
+          kid,
+          depth: depth + 1,
+          current: onPath && depth + 1 == trail.length - 1,
+          onTap: () => _openPath([...trail.take(depth + 1), kid]),
+        );
+        if (onPath && depth + 1 < trail.length - 1) level(depth + 1);
+        if (onPath && depth + 1 == trail.length - 1) {
+          // Subpastas da pasta atual
+          for (final sub
+              in (_folderKids[_keyOf(kid)] ?? const <LibraryEntry>[]).take(
+                40,
+              )) {
+            node(
+              sub,
+              depth: depth + 2,
+              current: false,
+              onTap: () => _openPath([...trail, sub]),
+            );
+          }
+        }
+      }
+    }
+
+    for (final root in [_driveRoot, _oneDriveRoot, ...roots]) {
+      final open = trail.isNotEmpty && _same(trail[0], root);
+      final cloud =
+          root.source == LibrarySource.drive ||
+          root.source == LibrarySource.oneDrive;
+      node(
+        root,
+        depth: 0,
+        source: true,
+        current: open && trail.length == 1,
+        onTap: () => _openPath([root]),
+        trailing: cloud && !_isCloudLogged(root.source)
+            ? Text(
+                'Entrar',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.iconHighlightOf(context),
+                ),
+              )
+            : null,
+      );
+      if (open) level(0);
+    }
+
+    return Container(
+      width: 236,
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(color: AppColors.borderSubtleOf(context)),
+        ),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+        children: [
+          _sectionLabel('Fontes e pastas'),
+          ...nodes,
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: addRoot,
+            icon: const Icon(Icons.create_new_folder_outlined, size: 16),
+            label: const Text(
+              'Adicionar pasta',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Barra de ações dos itens selecionados (azul-marinho, padrão Payno):
+  /// tocar na TV, adicionar à fila temporária ou criar playlist.
+  Widget selectionBar() {
+    final count = selected.length;
+    final tv = context.read<RemoteController>();
+    Widget action(
+      IconData icon,
+      String label,
+      String tooltip,
+      VoidCallback onTap, {
+      bool primary = false,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: Material(
+          color: primary ? Colors.white : const Color(0x2EFFFFFF),
+          shape: const StadiumBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              // Se a barra ficar estreita, o botão encolhe em vez de estourar.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 16,
+                      color: primary ? AppColors.lightAccentFill : Colors.white,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: primary
+                            ? AppColors.lightAccentFill
+                            : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final files = trail.isEmpty ? const <LibraryEntry>[] : _selectableFiles();
+    final allSelected = files.isNotEmpty && files.every(_isSelected);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: AppColors.accentFillOf(context),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.accentFillOf(context).withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          Text(
+            '$count ${count == 1 ? 'selecionado' : 'selecionados'}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (files.isNotEmpty)
+                action(
+                  allSelected
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                  allSelected ? 'Desmarcar todos' : 'Selecionar todos',
+                  allSelected
+                      ? 'Desmarcar todos os arquivos da pasta'
+                      : 'Selecionar todos os arquivos da pasta',
+                  _toggleSelectAll,
+                ),
+              action(
+                Icons.playlist_add_rounded,
+                'Playlist',
+                'Criar playlist',
+                addSelection,
+              ),
+              action(
+                Icons.queue_music_rounded,
+                'Fila',
+                'Adicionar à fila',
+                () => addSelectionToQueue(playNow: false),
+              ),
+              action(
+                Icons.cast_rounded,
+                'Tocar na TV',
+                'Tocar na TV',
+                () => addSelectionToQueue(playNow: tv.isConnected),
+                primary: true,
+              ),
+              IconButton(
+                tooltip: 'Limpar seleção',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+                onPressed: () => setState(() {
+                  selected.clear();
+                  _selectAnchor = null;
+                }),
               ),
             ],
           ),
@@ -4166,4 +5041,48 @@ loadFailed
       ),
     );
   }
+}
+
+/// Logotipo do Google Drive (três faixas: verde, amarela e azul).
+class _DriveLogoPainter extends CustomPainter {
+  const _DriveLogoPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width / 24, h = size.height / 24;
+    Path path(List<double> pts) {
+      final path = Path()..moveTo(pts[0] * w, pts[1] * h);
+      for (var i = 2; i < pts.length; i += 2) {
+        path.lineTo(pts[i] * w, pts[i + 1] * h);
+      }
+      return path..close();
+    }
+
+    canvas.drawPath(
+      path([8.2, 3, 15.8, 3, 21.8, 13.4, 14.2, 13.4]),
+      Paint()..color = const Color(0xFFF6B400),
+    );
+    canvas.drawPath(
+      path([2.2, 13.4, 6, 20, 18, 20, 14.2, 13.4]),
+      Paint()..color = const Color(0xFF2684FC),
+    );
+    canvas.drawPath(
+      path([8.2, 3, 2.2, 13.4, 6, 20, 12, 9.6]),
+      Paint()..color = const Color(0xFF00AC47),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DriveLogoPainter oldDelegate) => false;
+}
+
+/// Alturas das barras dos controles do vídeo para um card de [height] px, ou
+/// `null` se a altura padrão (56 + 56 + 36) já cabe com folga. Sempre
+/// `bar * 2 + seek + 4 <= height` enquanto `height >= 88`.
+@visibleForTesting
+({double bar, double seek})? compactVideoControlSizes(double height) {
+  if (height >= 200) return null;
+  final seek = height >= 150 ? 30.0 : 24.0;
+  final bar = ((height - seek - 4) / 2).clamp(24.0, 56.0).toDouble();
+  return (bar: bar, seek: seek);
 }

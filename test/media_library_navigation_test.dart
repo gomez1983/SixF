@@ -35,11 +35,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final libraryTabLeft = tester
-          .getTopLeft(find.text(tabLibraryLabel).last)
-          .dx;
-      final appsTabLeft = tester.getTopLeft(find.text('Apps').last).dx;
-      expect(libraryTabLeft, lessThan(appsTabLeft));
+      // Mídia vem antes de Apps: à esquerda na barra inferior (celular) ou
+      // acima no trilho lateral (desktop).
+      final library = tester.getTopLeft(find.text(tabLibraryLabel).last);
+      final apps = tester.getTopLeft(find.text('Apps').last);
+      expect(
+        width < 840 ? library.dx < apps.dx : library.dy < apps.dy,
+        isTrue,
+      );
       await tester.tap(find.text(tabLibraryLabel).first);
       await tester.pumpAndSettle();
       expect(find.textContaining('Biblioteca de mídia ·'), findsOneWidget);
@@ -62,7 +65,7 @@ void main() {
 
       await tester.tap(find.text(tabKeysLabel).last);
       await tester.pumpAndSettle();
-      expect(find.text('Atalhos de Teclado Físico (Desktop)'), findsNothing);
+      expect(find.text('Atalhos do teclado físico'), findsNothing);
       await tester.tap(find.text(tabLibraryLabel).last);
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(MediaLibrary)), same(libraryState));

@@ -347,7 +347,19 @@ class MediaCastController extends ChangeNotifier {
         if (!_isLooping) return;
         _loopRestarting = true;
         try {
-          await _cast!.command('SEEK', currentTime: 0);
+          // Volta ao início e manda continuar tocando. Se o item já tiver
+          // terminado (IDLE), o SEEK sozinho deixa o vídeo parado no começo:
+          // nesse caso recarrega a mídia, que recomeça do zero tocando.
+          await _cast!.command(
+            'SEEK',
+            currentTime: 0,
+            resumeState: 'PLAYBACK_START',
+          );
+          if (_current(operation) &&
+              _cast?.status['playerState'] != 'PLAYING' &&
+              _cast?.status['playerState'] != 'BUFFERING') {
+            await _cast!.reload();
+          }
           _currentPosition = Duration.zero;
         } catch (_) {
           // Sem sucesso: o fluxo FINISHED → reload continua como reserva.

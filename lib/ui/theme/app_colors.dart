@@ -3,67 +3,73 @@ import 'package:flutter/material.dart';
 import '../glass/glass_flags.dart';
 import '../glass/liquid_glass.dart' show GlassTokens, glassFlatDecoration;
 
-/// Paleta de cores e tokens Liquid Glass inspirados no Dashboard do André,
-/// com suporte completo a Modo Escuro (Dark Mode) e Modo Claro (Light Mode).
+/// Paleta do padrão visual Payno (referência em `Referências/` e mockup em
+/// `docs/design/mockups/sixf-payno-mockup.html`): fundo cinza-azulado com uma
+/// mancha azul-aço difusa no topo, cards translúcidos claros e um único azul-
+/// marinho como destaque. Modo Escuro e Modo Claro.
 class AppColors {
   AppColors._();
 
-  // --- Paleta Dark Mode (Liquid Glass Escuro — #17151F com Realces Azul SixF) ---
-  static const Color background = Color(0xFF17151F);
-  static const Color ambientGlowPrimary = Color(0x350E8FF1);
-  static const Color ambientGlowSecondary = Color(0x2801E9D8);
-  static const Color remoteChassis = Color(0xEB221E2E);
-  static const Color surfaceCard = Color(0xF5272331);
-  static const Color surfaceElevated = Color(0xFF332D41);
-  static const Color surfaceInteractive = Color(0xFF2D273B);
-  static const Color surfaceInteractiveHover = Color(0xFF3B334E);
-  static const Color borderSubtle = Color(0x22FFFFFF);
-  static const Color borderActive = Color(0xFF38BDF8);
-  static const Color textPrimary = Color(0xFFEEEBF5);
-  static const Color textSecondary = Color(0xFFBEB4CE);
-  static const Color textMuted = Color(0xFFA8A1B8);
-  static const Color iconDefault = Color(0xFFEEEBF5);
-  static const Color iconHighlight = Color(0xFF38BDF8);
-  static const Color trackpadSurface = Color(0xFF1D1A27);
-  static const Color trackpadBorder = Color(0x26FFFFFF);
-  static const Color trackpadCrosshair = Color(0x3838BDF8);
-  static const Color trackpadIndicator = Color(0xFF38BDF8);
+  // --- Paleta Dark Mode (Payno escuro — #0D121B com destaque azul-marinho) ---
+  static const Color background = Color(0xFF0D121B);
+  static const Color ambientGlowPrimary = Color(0x8C4669AA);
+  static const Color ambientGlowSecondary = Color(0x80324B7D);
+  static const Color remoteChassis = Color(0xF7161D2A);
+  static const Color surfaceCard = Color(0xFA1A2232);
+  static const Color surfaceElevated = Color(0xFF222B3D);
+  static const Color surfaceInteractive = Color(0xFF1F2838);
+  static const Color surfaceInteractiveHover = Color(0xFF2A3448);
+  static const Color borderSubtle = Color(0x17FFFFFF);
+  static const Color borderActive = Color(0xFF86A5DC);
+  static const Color textPrimary = Color(0xFFE7ECF4);
+  static const Color textSecondary = Color(0xFFA9B3C6);
+  static const Color textMuted = Color(0xFF8792A7);
+  static const Color iconDefault = Color(0xFFE7ECF4);
+  static const Color iconHighlight = Color(0xFF9DB7E6);
+  static const Color trackpadSurface = Color(0xFF172030);
+  static const Color trackpadBorder = Color(0x1FFFFFFF);
+  static const Color trackpadCrosshair = Color(0x389DB7E6);
+  static const Color trackpadIndicator = Color(0xFF9DB7E6);
 
-  // --- Paleta Light Mode (Liquid Glass Claro — #EEEDF5 com Realces Azul SixF) ---
-  static const Color lightBackground = Color(0xFFEEEDF5);
-  static const Color lightAmbientGlowPrimary = Color(0x35BAE6FD);
-  static const Color lightAmbientGlowSecondary = Color(0x35DBECE7);
-  static const Color lightRemoteChassis = Color(0xD8FFFFFF);
-  static const Color lightSurfaceCard = Color(0xF0FFFFFF);
-  static const Color lightSurfaceElevated = Color(0xFFF0F5FA);
-  static const Color lightSurfaceInteractive = Color(0xE6FFFFFF);
-  static const Color lightSurfaceInteractiveHover = Color(0xFFE0F2FE);
-  static const Color lightBorderSubtle = Color(0xFFD0DFE8);
-  static const Color lightBorderActive = Color(0xFF0284C7);
-  static const Color lightTextPrimary = Color(0xFF1E293B);
-  static const Color lightTextSecondary = Color(0xFF64748B);
-  static const Color lightTextMuted = Color(0xFF94A3B8);
-  static const Color lightIconDefault = Color(0xFF1E293B);
-  static const Color lightIconHighlight = Color(0xFF0284C7);
-  static const Color lightTrackpadSurface = Color(0xCCF0F5FA);
-  static const Color lightTrackpadBorder = Color(0xFFCBD5E1);
+  // --- Paleta Light Mode (Payno claro — #EEF1F5 com destaque azul-marinho) ---
+  static const Color lightBackground = Color(0xFFEEF1F5);
+  static const Color lightAmbientGlowPrimary = Color(0x8C3D5A8C);
+  static const Color lightAmbientGlowSecondary = Color(0x737891BE);
+  static const Color lightRemoteChassis = Color(0xFAF7F9FC);
+  static const Color lightSurfaceCard = Color(0xFAFFFFFF);
+  static const Color lightSurfaceElevated = Color(0xFFF4F6FA);
+  static const Color lightSurfaceInteractive = Color(0xFFF2F4F8);
+  static const Color lightSurfaceInteractiveHover = Color(0xFFE6EBF3);
+  static const Color lightBorderSubtle = Color(0x161B2232);
+  static const Color lightBorderActive = Color(0xFF3B5788);
+  static const Color lightTextPrimary = Color(0xFF1B2232);
+  static const Color lightTextSecondary = Color(0xFF5E6779);
+  static const Color lightTextMuted = Color(0xFF8A93A3);
+  static const Color lightIconDefault = Color(0xFF1B2232);
+  static const Color lightIconHighlight = Color(0xFF3B5788);
+  static const Color lightTrackpadSurface = Color(0xD9F4F6FA);
+  static const Color lightTrackpadBorder = Color(0x1F1B2232);
+
+  // --- Destaque azul-marinho (preenchimento de botões ativos, OK, abas) ---
+  static const Color accentFill = Color(0xFF4A6AA3);
+  static const Color lightAccentFill = Color(0xFF3B5788);
 
   // --- Cores Globais Compartilhadas ---
-  static const Color lgRed = Color(0xFF0E8FF1);
-  static const Color powerRed = Color(0xFFD16760);
-  static const Color powerGlow = Color(0x33D16760);
+  static const Color lgRed = Color(0xFF3B5788);
+  static const Color powerRed = Color(0xFFD94A4A);
+  static const Color powerGlow = Color(0x33D94A4A);
 
-  // Status de conexão (alinhados ao verde/coral do Dashboard)
-  static const Color statusConnected = Color(0xFF088875);
-  static const Color statusConnectedDark = Color(0xFF75D0B8);
-  static const Color statusDisconnected = Color(0xFF747385);
-  static const Color statusConnecting = Color(0xFFF59E0B);
+  // Status de conexão
+  static const Color statusConnected = Color(0xFF2FA36B);
+  static const Color statusConnectedDark = Color(0xFF4CC38A);
+  static const Color statusDisconnected = Color(0xFF8A93A3);
+  static const Color statusConnecting = Color(0xFFD9932B);
 
   // Cores tradicionais dos 4 botões de controle Smart TV
-  static const Color buttonRed = Color(0xFFD16760);
-  static const Color buttonGreen = Color(0xFF088875);
-  static const Color buttonYellow = Color(0xFFEAB308);
-  static const Color buttonBlue = Color(0xFF3E82F7);
+  static const Color buttonRed = Color(0xFFE5484D);
+  static const Color buttonGreen = Color(0xFF30A46C);
+  static const Color buttonYellow = Color(0xFFF5B82E);
+  static const Color buttonBlue = Color(0xFF3E63DD);
 
   // --- Métodos Utilitários Reativos para Resolução de Tema ---
 
@@ -121,6 +127,37 @@ class AppColors {
   static Color iconHighlightOf(BuildContext context) =>
       isDark(context) ? iconHighlight : lightIconHighlight;
 
+  /// Azul-marinho sólido (botão OK, aba ativa, botões primários).
+  static Color accentFillOf(BuildContext context) =>
+      isDark(context) ? accentFill : lightAccentFill;
+
+  /// Fundo suave do destaque (linha selecionada, chips ativos discretos).
+  static Color accentSoftOf(BuildContext context) => isDark(context)
+      ? const Color(0x1F7DA0DC)
+      : const Color(0x173B5788);
+
+  /// Fundo de card translúcido sobre o fundo ambiente.
+  static Color cardOf(BuildContext context) =>
+      isDark(context) ? const Color(0xB31C2433) : const Color(0xB8FFFFFF);
+
+  /// Fundo sólido de botões circulares (padrão "Quick Actions").
+  static Color circleOf(BuildContext context) =>
+      isDark(context) ? const Color(0xFF1F2839) : Colors.white;
+
+  /// Verde de status legível em cada tema.
+  static Color okOf(BuildContext context) =>
+      isDark(context) ? statusConnectedDark : statusConnected;
+
+  /// Sombra suave usada nos cards e botões circulares.
+  static List<BoxShadow> softShadowOf(BuildContext context) => isDark(context)
+      ? const [
+          BoxShadow(color: Color(0x59000000), blurRadius: 30, offset: Offset(0, 12)),
+        ]
+      : const [
+          BoxShadow(color: Color(0x0F1E2D50), blurRadius: 30, offset: Offset(0, 10)),
+          BoxShadow(color: Color(0x0A1E2D50), blurRadius: 2, offset: Offset(0, 1)),
+        ];
+
   static Color trackpadSurfaceOf(BuildContext context) => kGlassUi
       ? GlassTokens.of(context).fill
       : (isDark(context) ? trackpadSurface : lightTrackpadSurface);
@@ -137,32 +174,23 @@ class AppColors {
     if (kGlassUi) {
       return glassFlatDecoration(context, radius: borderRadius, strong: true);
     }
+    return paynoCardDecoration(context, radius: borderRadius);
+  }
+
+  /// Card Payno: translúcido, borda clara quase invisível, sombra difusa.
+  static BoxDecoration paynoCardDecoration(
+    BuildContext context, {
+    double radius = 20,
+    Color? color,
+  }) {
     final dark = isDark(context);
     return BoxDecoration(
-      borderRadius: BorderRadius.circular(borderRadius),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: dark
-            ? const [Color(0xF0282434), Color(0xDF1B1824)]
-            : const [Color(0xE8FFFFFF), Color(0xB8F4F0FA)],
-      ),
+      color: color ?? cardOf(context),
+      borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: dark ? const Color(0x26FFFFFF) : const Color(0xF2FFFFFF),
-        width: 1.2,
+        color: dark ? const Color(0x10FFFFFF) : const Color(0xE6FFFFFF),
       ),
-      boxShadow: [
-        BoxShadow(
-          color: dark ? const Color(0x50000000) : const Color(0x1448406C),
-          blurRadius: 36,
-          offset: const Offset(0, 14),
-        ),
-        BoxShadow(
-          color: dark ? const Color(0x12FFFFFF) : const Color(0xCCFFFFFF),
-          blurRadius: 1,
-          offset: const Offset(0, 1),
-        ),
-      ],
+      boxShadow: softShadowOf(context),
     );
   }
 
@@ -172,27 +200,6 @@ class AppColors {
     double borderRadius = 18,
   }) {
     if (kGlassUi) return glassFlatDecoration(context, radius: borderRadius);
-    final dark = isDark(context);
-    return BoxDecoration(
-      borderRadius: BorderRadius.circular(borderRadius),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: dark
-            ? const [Color(0xF52A2536), Color(0xE6221E2C)]
-            : const [Color(0xF5FFFFFF), Color(0xE0F7F4FC)],
-      ),
-      border: Border.all(
-        color: dark ? const Color(0x1FFFFFFF) : const Color(0xFFE2DCF0),
-        width: 1.0,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: dark ? const Color(0x38000000) : const Color(0x0D48406C),
-          blurRadius: 20,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    );
+    return paynoCardDecoration(context, radius: borderRadius);
   }
 }

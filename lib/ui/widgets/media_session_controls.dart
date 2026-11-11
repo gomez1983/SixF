@@ -176,7 +176,7 @@ class MediaSessionControls extends StatelessWidget {
                                       : 'Aplicando faixa de áudio...',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Theme.of(ctx).colorScheme.primary,
+                                    color: Theme.of(ctx).colorScheme.secondary,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -425,7 +425,7 @@ class MediaSessionControls extends StatelessWidget {
                                 size: 20,
                               ),
                               color: c.selectedSubtitleTrack != null
-                                  ? Theme.of(context).colorScheme.primary
+                                  ? Theme.of(context).colorScheme.secondary
                                   : null,
                               onPressed: enabled && c.isStreaming
                                   ? () => _showTracksDialog(
@@ -495,7 +495,7 @@ class MediaSessionControls extends StatelessWidget {
                             size: 20,
                           ),
                           color: c.selectedAudioTrack != null
-                              ? Theme.of(context).colorScheme.primary
+                              ? Theme.of(context).colorScheme.secondary
                               : null,
                           onPressed: enabled && c.isStreaming
                               ? () => _showTracksDialog(

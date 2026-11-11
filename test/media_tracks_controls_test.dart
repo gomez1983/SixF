@@ -80,7 +80,11 @@ class _FakeCastMedia extends GoogleCastMedia {
   }
 
   @override
-  Future<void> command(String type, {double? currentTime}) async {}
+  Future<void> command(
+    String type, {
+    double? currentTime,
+    String? resumeState,
+  }) async {}
 
   @override
   Future<void> refresh() async {}

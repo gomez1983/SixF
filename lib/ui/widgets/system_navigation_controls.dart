@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
-import '../theme/app_colors.dart';
-import 'remote_button.dart';
+import '../../services/haptic_service.dart';
+import 'payno.dart';
 
-/// Botões de Navegação do Sistema: Home, Menu/Configurações, Voltar e Exit.
+/// Botões de Navegação do Sistema: Home, Menu/Configurações, Entrada e Exit.
 class SystemNavigationControls extends StatelessWidget {
-  const SystemNavigationControls({super.key});
+  final double circleSize;
+
+  const SystemNavigationControls({super.key, this.circleSize = 48});
 
   @override
   Widget build(BuildContext context) {
@@ -14,48 +16,45 @@ class SystemNavigationControls extends StatelessWidget {
 
     final buttons = [
       _NavAction(
-        icon: Icons.home_rounded,
+        icon: Icons.home_outlined,
         label: 'HOME',
         tooltip: 'Página Inicial (WebOS Dashboard)',
         onPressed: () => controller.pressHome(),
       ),
       _NavAction(
-        icon: Icons.settings_rounded,
+        icon: Icons.settings_outlined,
         label: 'MENU',
         tooltip: 'Menu de Ajustes Rápidos',
         onPressed: () => controller.pressMenu(),
       ),
       _NavAction(
-        icon: Icons.input_rounded,
+        icon: Icons.login_rounded,
         label: 'INPUT',
         tooltip: 'Alternar Entrada / Fonte (HDMI, AV, TV)',
         onPressed: () => controller.navInput(),
       ),
       _NavAction(
-        icon: Icons.exit_to_app_rounded,
+        icon: Icons.logout_rounded,
         label: 'EXIT',
         tooltip: 'Fechar aplicativo / Sair da transmissão',
         onPressed: () => controller.pressExit(),
       ),
     ];
 
+    // Padrão Payno ("Quick Actions"): círculos brancos com o rótulo abaixo.
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: buttons.map((btn) {
         return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: RemoteButton(
-              height: 52,
-              borderRadius: 12,
-              backgroundColor: AppColors.surfaceInteractiveOf(context),
-              foregroundColor: AppColors.textPrimaryOf(context),
-              icon: btn.icon,
-              label: btn.label,
-              iconSize: 18,
-              tooltip: btn.tooltip,
-              onPressed: btn.onPressed,
-            ),
+          child: PaynoActionCircle(
+            icon: btn.icon,
+            label: btn.label,
+            size: circleSize,
+            tooltip: btn.tooltip,
+            onPressed: () {
+              HapticService.buttonPress();
+              btn.onPressed();
+            },
           ),
         );
       }).toList(),

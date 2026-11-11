@@ -9,9 +9,127 @@ class AppTheme {
   AppTheme._();
 
   /// Tema Escuro (Dark Mode)
-  static ThemeData get darkTheme => kGlassUi ? _glassify(_dark) : _dark;
+  static ThemeData get darkTheme => kGlassUi ? _glassify(_dark) : _payno(_dark);
 
-  static ThemeData get lightTheme => kGlassUi ? _glassify(_light) : _light;
+  static ThemeData get lightTheme =>
+      kGlassUi ? _glassify(_light) : _payno(_light);
+
+  /// Padrão Payno: cantos bem arredondados, azul-marinho como cor primária e
+  /// componentes do Material (diálogos, chips, menus, botões) sem sombras
+  /// duras, para telas e diálogos comuns seguirem o mesmo visual.
+  static ThemeData _payno(ThemeData base) {
+    final dark = base.brightness == Brightness.dark;
+    final accent = dark ? AppColors.accentFill : AppColors.lightAccentFill;
+    final surface = dark ? AppColors.remoteChassis : AppColors.lightRemoteChassis;
+    final line = dark ? AppColors.borderSubtle : AppColors.lightBorderSubtle;
+    final ink = dark ? AppColors.textPrimary : AppColors.lightTextPrimary;
+    final muted = dark ? AppColors.textMuted : AppColors.lightTextMuted;
+    final key = dark ? AppColors.surfaceInteractive : AppColors.lightSurfaceInteractive;
+    RoundedRectangleBorder shape(double r, {bool border = true}) =>
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(r),
+          side: border ? BorderSide(color: line) : BorderSide.none,
+        );
+    OutlineInputBorder field(Color c, [double w = 1]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(999),
+      borderSide: BorderSide(color: c, width: w),
+    );
+    return base.copyWith(
+      // Contêineres (botões "tonais", chips, etc.) em cinza-azulado claro com
+      // conteúdo escuro; o azul-marinho sólido fica só para o que é primário
+      // e sempre leva conteúdo branco.
+      colorScheme: base.colorScheme.copyWith(
+        primary: accent,
+        onPrimary: Colors.white,
+        secondary: dark ? AppColors.iconHighlight : AppColors.lightIconHighlight,
+        onSecondary: dark ? AppColors.background : Colors.white,
+        primaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE3E9F3),
+        onPrimaryContainer: ink,
+        secondaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE3E9F3),
+        onSecondaryContainer: ink,
+        tertiaryContainer: key,
+        onTertiaryContainer: ink,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: shape(24),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: shape(16),
+      ),
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        fillColor: key,
+        hintStyle: TextStyle(color: muted, fontSize: 13),
+        enabledBorder: field(line),
+        focusedBorder: field(accent, 1.5),
+        border: field(line),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: key,
+          foregroundColor: ink,
+          surfaceTintColor: Colors.transparent,
+          shape: shape(999),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          shape: shape(999, border: false),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: ink,
+          side: BorderSide(color: line),
+          shape: shape(999, border: false),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: dark ? AppColors.iconHighlight : AppColors.lightIconHighlight,
+          shape: shape(999, border: false),
+        ),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: key,
+        selectedColor: accent,
+        checkmarkColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        side: BorderSide(color: line),
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(color: ink, fontSize: 12),
+        secondaryLabelStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      ),
+      switchTheme: SwitchThemeData(
+        trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? accent : key,
+        ),
+        thumbColor: const WidgetStatePropertyAll(Colors.white),
+        trackOutlineColor: WidgetStatePropertyAll(line),
+      ),
+      sliderTheme: base.sliderTheme.copyWith(
+        activeTrackColor: accent,
+        thumbColor: accent,
+        inactiveTrackColor: key,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: accent),
+    );
+  }
 
   static ThemeData get _dark {
     return ThemeData(

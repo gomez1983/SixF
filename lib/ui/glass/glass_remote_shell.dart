@@ -93,11 +93,12 @@ class GlassRemoteShell extends StatelessWidget {
 /// Abas do controle (índice real do RemoteView). A aba Trackpad só existe nos
 /// aparelhos que suportam.
 List<GlassTabItem> glassTabItems({required bool supportsTrackpad}) => [
+  // Ordem exibida: Controle, Mídia, (Trackpad na LG), Teclas, Apps.
   const GlassTabItem(0, CupertinoIcons.tv, 'Controle'),
-  const GlassTabItem(1, CupertinoIcons.circle_grid_3x3_fill, 'Teclas'),
+  const GlassTabItem(3, CupertinoIcons.play_rectangle, 'Mídia'),
   if (supportsTrackpad)
     const GlassTabItem(2, CupertinoIcons.hand_point_right, 'Trackpad'),
-  const GlassTabItem(3, CupertinoIcons.play_rectangle, 'Mídia'),
+  const GlassTabItem(1, CupertinoIcons.circle_grid_3x3_fill, 'Teclas'),
   const GlassTabItem(4, CupertinoIcons.square_grid_2x2, 'Apps'),
 ];
 

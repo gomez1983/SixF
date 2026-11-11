@@ -20,17 +20,22 @@ class ImageFullscreenViewer extends StatefulWidget {
     required this.items,
     required this.initialIndex,
     required this.resolve,
+    this.onIndexChanged,
   });
 
   final List<LibraryEntry> items;
   final int initialIndex;
   final Future<File> Function(LibraryEntry entry) resolve;
 
+  /// Chamado a cada troca de foto (para a TV acompanhar a tela cheia).
+  final ValueChanged<int>? onIndexChanged;
+
   static Future<int?> show(
     BuildContext context, {
     required List<LibraryEntry> items,
     required int initialIndex,
     required Future<File> Function(LibraryEntry entry) resolve,
+    ValueChanged<int>? onIndexChanged,
   }) {
     return Navigator.of(context).push<int>(
       PageRouteBuilder<int>(
@@ -42,6 +47,7 @@ class ImageFullscreenViewer extends StatefulWidget {
           items: items,
           initialIndex: initialIndex,
           resolve: resolve,
+          onIndexChanged: onIndexChanged,
         ),
         transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
@@ -159,10 +165,13 @@ class _ImageFullscreenViewerState extends State<ImageFullscreenViewer> {
                     ? const NeverScrollableScrollPhysics()
                     : const PageScrollPhysics(),
                 itemCount: widget.items.length,
-                onPageChanged: (i) => setState(() {
-                  _index = i;
-                  _zoomed = false;
-                }),
+                onPageChanged: (i) {
+                  setState(() {
+                    _index = i;
+                    _zoomed = false;
+                  });
+                  widget.onIndexChanged?.call(i);
+                },
                 itemBuilder: (_, i) => _ZoomablePhoto(
                   key: ValueKey('fullscreen-photo-$i'),
                   file: _fileAt(i),

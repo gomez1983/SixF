@@ -6,6 +6,24 @@ import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
 
+/// Nome curto para exibição: sem o IP entre parênteses nem o complemento
+/// depois de " / " ("Smart TV (192.168.15.4)" → "Smart TV";
+/// "Chromecast / Google TV" → "Chromecast"). O apelido salvo não muda.
+String shortDeviceName(String name) {
+  var out = name.replaceAll(RegExp(r'\s*\([^)]*\)'), '');
+  final slash = out.indexOf(' / ');
+  if (slash > 0) out = out.substring(0, slash);
+  out = out.trim();
+  return out.isEmpty ? name.trim() : out;
+}
+
+/// Ícone do tipo de aparelho (TV LG, TV Samsung ou Chromecast).
+IconData brandIcon(TvBrand brand) => switch (brand) {
+  TvBrand.lgWebOs => Icons.tv_rounded,
+  TvBrand.samsungTizen => Icons.connected_tv_rounded,
+  TvBrand.googleTv => Icons.cast_rounded,
+};
+
 /// Barra horizontal de seleção e alternância rápida entre múltiplos dispositivos Smart TV (Pills/Chips).
 ///
 /// Permite alternar o controle ativo com 1 clique (hot-switch), visualizar o status
@@ -20,8 +38,8 @@ class DeviceSelectorBar extends StatelessWidget {
     final activeId = controller.activeDeviceId;
 
     return Container(
-      height: 44,
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      height: 48,
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
@@ -59,26 +77,29 @@ class DeviceSelectorBar extends StatelessWidget {
     required bool isConnected,
     required bool isConnecting,
   }) {
+    // Padrão Payno: pílulas brancas translúcidas; a ativa em texto escuro e
+    // borda azul-marinho, as demais em cinza.
+    // Cor do texto pelo tema salvo no controller (contraste garantido mesmo
+    // antes de o MaterialApp trocar o tema).
     final isDark = controller.isDarkMode;
-    final highlightColor = isDark ? AppColors.iconHighlight : AppColors.lightIconHighlight;
     final textColor = isActive
         ? (isDark ? AppColors.textPrimary : AppColors.lightTextPrimary)
-        : (isDark ? AppColors.textSecondary : AppColors.lightTextSecondary);
+        : (isDark ? AppColors.textMuted : AppColors.lightTextMuted);
     final iconColor = isActive
-        ? highlightColor
-        : (isDark ? AppColors.textSecondary : AppColors.lightTextSecondary);
+        ? AppColors.iconHighlightOf(context)
+        : AppColors.textMutedOf(context);
     final borderColor = isActive
-        ? highlightColor
-        : (isDark ? AppColors.borderSubtle : AppColors.lightBorderSubtle);
+        ? AppColors.iconHighlightOf(context).withValues(alpha: 0.55)
+        : AppColors.borderSubtleOf(context);
     final bgColor = isActive
-        ? highlightColor.withValues(alpha: isDark ? 0.22 : 0.14)
-        : (isDark ? AppColors.surfaceCard : AppColors.lightSurfaceCard);
+        ? AppColors.circleOf(context)
+        : AppColors.cardOf(context);
 
     final statusColor = isConnected
-        ? AppColors.statusConnected
+        ? AppColors.okOf(context)
         : (isConnecting
             ? AppColors.statusConnecting
-            : (isDark ? AppColors.textMuted : AppColors.lightTextMuted));
+            : AppColors.textMutedOf(context).withValues(alpha: 0.6));
 
     return InkWell(
       onTap: () {
@@ -94,76 +115,49 @@ class DeviceSelectorBar extends StatelessWidget {
         HapticService.heavyPress();
         _showDeviceOptionsModal(context, controller, device);
       },
-      borderRadius: BorderRadius.circular(13),
+      borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? null : bgColor,
-          gradient: isActive
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? const [Color(0x3838BDF8), Color(0x300EA5E9), Color(0x220E8FF1)]
-                      : const [Color(0xE8FFFFFF), Color(0x40BAE6FD), Color(0x300EA5E9)],
-                )
-              : null,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: borderColor,
-            width: isActive ? 1.3 : 1.0,
-          ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: highlightColor.withValues(alpha: isDark ? 0.24 : 0.16),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : null,
+          color: bgColor,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: borderColor),
+          boxShadow: isActive ? AppColors.softShadowOf(context) : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // LED de Conexão com indicador visual pulsante suave se ativo
+            // LED de conexão
             Container(
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: statusColor,
-                boxShadow: isConnected
-                    ? [
-                        BoxShadow(
-                          color: AppColors.statusConnected.withValues(alpha: 0.6),
-                          blurRadius: 4,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
               ),
             ),
             const SizedBox(width: 8),
 
             // Ícone da Marca (LG ou Samsung)
-            Icon(
-              device.brand == TvBrand.lgWebOs
-                  ? Icons.smart_screen_rounded
-                  : Icons.tv_rounded,
-              size: 16,
-              color: iconColor,
-            ),
+            Icon(brandIcon(device.brand), size: 15, color: iconColor),
             const SizedBox(width: 6),
 
-            // Nome / Apelido do Aparelho com contraste rigoroso garantido
-            Text(
-              device.name,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-                color: textColor,
+            // Nome curto do aparelho (o nome completo fica na dica)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Tooltip(
+                message: device.name,
+                child: Text(
+                  shortDeviceName(device.name),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    color: textColor,
+                  ),
+                ),
               ),
             ),
 
@@ -182,23 +176,20 @@ class DeviceSelectorBar extends StatelessWidget {
   }
 
   Widget _buildAddDevicePill(BuildContext context, RemoteController controller) {
-    final isDark = controller.isDarkMode;
-    final highlightColor = isDark ? AppColors.iconHighlight : AppColors.lightIconHighlight;
+    final highlightColor = AppColors.textMutedOf(context);
 
     return InkWell(
       onTap: () {
         HapticService.selectionClick();
         DeviceDiscoveryDialog.show(context);
       },
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(999),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceInteractive : AppColors.lightSurfaceInteractive,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: isDark ? AppColors.borderSubtle : AppColors.lightBorderSubtle,
-            style: BorderStyle.solid,
+            color: AppColors.textMutedOf(context).withValues(alpha: 0.45),
           ),
         ),
         child: Row(

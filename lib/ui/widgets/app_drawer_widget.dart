@@ -10,6 +10,7 @@ import '../glass/glass_flags.dart';
 import '../glass/liquid_glass.dart' show GlassTokens, glassFlatDecoration;
 import '../theme/app_colors.dart';
 import 'device_discovery_dialog.dart';
+import 'payno.dart';
 import 'remote_button.dart';
 
 /// Gaveta / Grid de Aplicativos instalados na Smart TV conectada.
@@ -19,7 +20,15 @@ import 'remote_button.dart';
 class AppDrawerWidget extends StatefulWidget {
   final bool isEmbeddedInDesktop;
 
-  const AppDrawerWidget({super.key, this.isEmbeddedInDesktop = false});
+  /// Já está dentro de um card (aba Apps do desktop): o cabeçalho não ganha
+  /// card próprio.
+  final bool isInCard;
+
+  const AppDrawerWidget({
+    super.key,
+    this.isEmbeddedInDesktop = false,
+    this.isInCard = false,
+  });
 
   /// Exibe a gaveta de aplicativos como um Modal BottomSheet moderno.
   static Future<void> showAsBottomSheet(BuildContext context) {
@@ -88,102 +97,152 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
               : a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
 
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.isEmbeddedInDesktop ? 12 : 16,
-        vertical: widget.isEmbeddedInDesktop ? 10 : 12,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Barra Superior: Título, Filtro de Busca e Botão Atualizar
-          _buildHeaderBar(
-            context,
-            controller,
-            isConnected,
-            isLoading,
-            apps.length,
-          ),
-
-          SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
-
-          // Chromecast sem a lista ADB ativa: passo a passo + campos de porta e
-          // código dentro da própria gaveta (sem diálogo, sem outra tela).
-          if (isConnected &&
-              !isLoading &&
-              controller.currentBrand == TvBrand.googleTv &&
-              !apps.any((a) => a.id.startsWith('adb:')))
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+    // Padrão Payno: título, contagem em destaque, busca e filtros num card.
+    final showSearch = isConnected && apps.isNotEmpty;
+    final top = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildHeaderBar(
+          context,
+          controller,
+          isConnected,
+          isLoading,
+          apps.length,
+        ),
+        if (showSearch && !kGlassUi) ...[
+          const SizedBox(height: 12),
+          _buildSearchField(context),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              PaynoChip(
+                'Todos',
+                selected: !_favoritesOnly,
+                onTap: () => setState(() => _favoritesOnly = false),
               ),
+              PaynoChip(
+                'Favoritos',
+                icon: Icons.star_outline_rounded,
+                selected: _favoritesOnly,
+                onTap: () => setState(() => _favoritesOnly = true),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+
+    // Em alturas pequenas (paisagem, janela baixa) cabeçalho e painel ADB
+    // têm teto e rolam por dentro: a grade nunca é empurrada para fora.
+    return LayoutBuilder(
+      builder: (context, box) => Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.isEmbeddedInDesktop ? 12 : 16,
+          vertical: widget.isEmbeddedInDesktop ? 10 : 8,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Cabeçalho: título, contagem, busca e filtros
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: _cap(box.maxHeight, 0.5)),
               child: SingleChildScrollView(
-                child: FutureBuilder<bool>(
-                  key: ValueKey('adb-panel-${controller.ipAddress}'),
-                  future: GoogleTvAppsAdb.configured(controller.ipAddress),
-                  builder: (context, snapshot) => GoogleTvAdbPanel(
-                    host: controller.ipAddress,
-                    wasConfigured:
-                        snapshot.data == true || controller.appsError != null,
-                    onConnected: () async {
-                      final host = controller.ipAddress;
-                      if (mounted && controller.ipAddress == host) {
-                        await controller.fetchInstalledApps(forceRefresh: true);
-                      }
-                    },
+                child: kGlassUi || widget.isEmbeddedInDesktop || widget.isInCard
+                    ? top
+                    : PaynoCard(child: top),
+              ),
+            ),
+
+            SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
+
+            // Chromecast sem a lista ADB ativa: passo a passo + campos de porta e
+            // código dentro da própria gaveta (sem diálogo, sem outra tela).
+            if (isConnected &&
+                !isLoading &&
+                controller.currentBrand == TvBrand.googleTv &&
+                !apps.any((a) => a.id.startsWith('adb:')))
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: _cap(box.maxHeight, 0.4)),
+                child: SingleChildScrollView(
+                  child: FutureBuilder<bool>(
+                    key: ValueKey('adb-panel-${controller.ipAddress}'),
+                    future: GoogleTvAppsAdb.configured(controller.ipAddress),
+                    builder: (context, snapshot) => GoogleTvAdbPanel(
+                      host: controller.ipAddress,
+                      wasConfigured:
+                          snapshot.data == true || controller.appsError != null,
+                      onConnected: () async {
+                        final host = controller.ipAddress;
+                        if (mounted && controller.ipAddress == host) {
+                          await controller.fetchInstalledApps(
+                            forceRefresh: true,
+                          );
+                        }
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (isConnected &&
-              !isLoading &&
-              controller.currentBrand == TvBrand.googleTv &&
-              !apps.any((a) => a.id.startsWith('adb:')))
-            SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
-          // 2. Campo de Pesquisa Instantânea
-          if (isConnected && apps.isNotEmpty) ...[
-            _buildSearchField(context),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilterChip(
-                label: const Text('Favoritos'),
-                selected: _favoritesOnly,
-                onSelected: (value) => setState(() => _favoritesOnly = value),
-                // Modo Liquid Glass: chip translúcido em vez do fundo opaco.
-                backgroundColor: kGlassUi
-                    ? AppColors.surfaceInteractiveOf(context)
-                    : null,
-                selectedColor: kGlassUi ? GlassTokens.of(context).tintBlue : null,
-                surfaceTintColor: kGlassUi ? Colors.transparent : null,
-                elevation: kGlassUi ? 0 : null,
-                side: kGlassUi
-                    ? BorderSide(
-                        color: GlassTokens.of(context).rimLight.withValues(alpha: 0.5),
-                      )
-                    : null,
-                shape: kGlassUi ? const StadiumBorder() : null,
-                labelStyle: kGlassUi
-                    ? TextStyle(color: GlassTokens.of(context).label)
-                    : null,
+            if (isConnected &&
+                !isLoading &&
+                controller.currentBrand == TvBrand.googleTv &&
+                !apps.any((a) => a.id.startsWith('adb:')))
+              SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
+            // 2. Campo de Pesquisa Instantânea (modo Liquid Glass)
+            if (showSearch && kGlassUi) ...[
+              _buildSearchField(context),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilterChip(
+                  label: const Text('Favoritos'),
+                  selected: _favoritesOnly,
+                  onSelected: (value) => setState(() => _favoritesOnly = value),
+                  // Modo Liquid Glass: chip translúcido em vez do fundo opaco.
+                  backgroundColor: kGlassUi
+                      ? AppColors.surfaceInteractiveOf(context)
+                      : null,
+                  selectedColor: kGlassUi
+                      ? GlassTokens.of(context).tintBlue
+                      : null,
+                  surfaceTintColor: kGlassUi ? Colors.transparent : null,
+                  elevation: kGlassUi ? 0 : null,
+                  side: kGlassUi
+                      ? BorderSide(
+                          color: GlassTokens.of(context).rimLight
+                              .withValues(alpha: 0.5),
+                        )
+                      : null,
+                  shape: kGlassUi ? const StadiumBorder() : null,
+                  labelStyle: kGlassUi
+                      ? TextStyle(color: GlassTokens.of(context).label)
+                      : null,
+                ),
+              ),
+              SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
+            ],
+
+            // 3. Área de Conteúdo: Grid de Apps ou Estados Vazios
+            Expanded(
+              child: _buildContent(
+                context,
+                controller,
+                isConnected,
+                isLoading,
+                filteredApps,
               ),
             ),
-            SizedBox(height: widget.isEmbeddedInDesktop ? 8 : 12),
           ],
-
-          // 3. Área de Conteúdo: Grid de Apps ou Estados Vazios
-          Expanded(
-            child: _buildContent(
-              context,
-              controller,
-              isConnected,
-              isLoading,
-              filteredApps,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  /// Fração da altura útil (descontados espaçamentos e margens).
+  static double _cap(double height, double fraction) =>
+      ((height - 44).clamp(0.0, double.infinity)) * fraction;
 
   Widget _buildHeaderBar(
     BuildContext context,
@@ -192,57 +251,64 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
     bool isLoading,
     int totalApps,
   ) {
+    final isGoogleTv = controller.currentBrand == TvBrand.googleTv;
+    final hasAdb = controller.installedApps.any((a) => a.id.startsWith('adb:'));
+    final title = isGoogleTv
+        ? (hasAdb ? 'Aplicativos do Chromecast' : 'Atalhos do Chromecast')
+        : 'Aplicativos & Atalhos';
+    final showCount = isConnected && (!isGoogleTv || hasAdb);
+    final unit = isGoogleTv
+        ? 'aplicativos · ADB'
+        : '${totalApps == 1 ? 'aplicativo' : 'aplicativos'} · ${controller.driver.brandDisplayName}';
+    final note = isConnected
+        ? 'Configure ADB para listar os apps instalados'
+        : 'Desconectado da Smart TV';
+
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.iconHighlightOf(context).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.apps_rounded,
-            size: 20,
-            color: AppColors.iconHighlightOf(context),
-          ),
-        ),
-        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                controller.currentBrand == TvBrand.googleTv
-                    ? (controller.installedApps.any(
-                            (a) => a.id.startsWith('adb:'),
-                          )
-                          ? 'Aplicativos do Chromecast'
-                          : 'Atalhos do Chromecast')
-                    : 'Aplicativos & Atalhos',
-                style: TextStyle(
-                  color: AppColors.textPrimaryOf(context),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                ),
+              Row(
+                children: [
+                  Icon(
+                    Icons.grid_view_rounded,
+                    size: 16,
+                    color: AppColors.textMutedOf(context),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textPrimaryOf(context),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                isConnected
-                    ? (controller.currentBrand == TvBrand.googleTv
-                          ? (controller.installedApps.any(
-                                  (a) => a.id.startsWith('adb:'),
-                                )
-                                ? '$totalApps aplicativos • ADB'
-                                : 'Configure ADB para listar os apps instalados')
-                          : '${controller.driver.brandDisplayName} • $totalApps aplicativo${totalApps == 1 ? '' : 's'}')
-                    : 'Desconectado da Smart TV',
-                style: TextStyle(
-                  color: AppColors.textMutedOf(context),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+              const SizedBox(height: 10),
+              if (showCount)
+                PaynoBigValue(
+                  '$totalApps',
+                  unit: unit,
+                  size: widget.isEmbeddedInDesktop ? 28 : 34,
+                )
+              else
+                Text(
+                  note,
+                  style: TextStyle(
+                    color: AppColors.textMutedOf(context),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -251,9 +317,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
             width: 36,
             height: 36,
             isCircular: true,
-            backgroundColor: AppColors.surfaceInteractiveOf(context),
-            borderColor: AppColors.borderSubtleOf(context),
-            foregroundColor: AppColors.iconHighlightOf(context),
+            foregroundColor: AppColors.textPrimaryOf(context),
             icon: Icons.refresh_rounded,
             iconSize: 18,
             tooltip: 'Recarregar aplicativos da TV',
@@ -272,7 +336,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
       height: isDesktop ? 36 : 42,
       decoration: BoxDecoration(
         color: AppColors.surfaceInteractiveOf(context),
-        borderRadius: BorderRadius.circular(isDesktop ? 10 : 12),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColors.borderSubtleOf(context)),
       ),
       child: TextField(
@@ -300,6 +364,9 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                 )
               : null,
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
           contentPadding: EdgeInsets.symmetric(vertical: isDesktop ? 6 : 10),
         ),
       ),
@@ -403,7 +470,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.iconHighlightOf(context),
+                  backgroundColor: AppColors.accentFillOf(context),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -537,7 +604,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
           child: Material(
             color: kGlassUi
                 ? Colors.transparent
-                : AppColors.surfaceCardOf(context),
+                : AppColors.surfaceInteractiveOf(context),
             borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
             child: InkWell(
               borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
@@ -550,7 +617,9 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                 decoration: kGlassUi
                     ? glassFlatDecoration(context, radius: isDesktop ? 12 : 16)
                     : BoxDecoration(
-                        borderRadius: BorderRadius.circular(isDesktop ? 12 : 16),
+                        borderRadius: BorderRadius.circular(
+                          isDesktop ? 12 : 16,
+                        ),
                         border: Border.all(
                           color: AppColors.borderSubtleOf(context),
                           width: 1,
@@ -612,7 +681,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
                       style: TextStyle(
                         color: AppColors.textPrimaryOf(context),
                         fontSize: isDesktop ? 10 : 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         letterSpacing: 0.1,
                       ),
                     ),

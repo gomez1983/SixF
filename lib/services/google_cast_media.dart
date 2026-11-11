@@ -363,7 +363,13 @@ class GoogleCastMedia {
     _acceptStatus(result);
   }
 
-  Future<void> command(String type, {double? currentTime}) async {
+  /// [resumeState] (só no SEEK): `PLAYBACK_START` força a reprodução a
+  /// continuar depois do salto, mesmo que o item tenha acabado de terminar.
+  Future<void> command(
+    String type, {
+    double? currentTime,
+    String? resumeState,
+  }) async {
     if (type == 'PLAY' && _status['idleReason'] == 'FINISHED') {
       await reload();
       return;
@@ -375,6 +381,7 @@ class GoogleCastMedia {
       'type': type,
       'mediaSessionId': _mediaSession,
       'currentTime': ?currentTime,
+      'resumeState': ?resumeState,
     });
     if (result['type'] != 'MEDIA_STATUS') {
       throw StateError('Comando de mÃ­dia recusado pelo Chromecast.');

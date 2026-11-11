@@ -64,9 +64,11 @@ flutter pub get
 dart run tool/check_release.dart
 flutter analyze --no-pub
 flutter test --no-pub
-flutter build windows --release --no-pub
-flutter build apk --debug --no-pub
+flutter build windows --release --no-pub --dart-define-from-file=.local-secrets/drive-build.json
+flutter build apk --debug --no-pub --dart-define-from-file=.local-secrets/drive-build.json
 ```
+
+**Sempre** passe `--dart-define-from-file=.local-secrets/drive-build.json` nos builds de Windows e Android: sem ele, o login do Google Drive e do OneDrive mostra "falta o ID de cliente OAuth no build" (ver `docs/BIBLIOTECA.md`). O arquivo fica fora do Git (`.local-secrets/` é ignorado) e nunca deve ser copiado para `dist/`.
 
 A CI repete análise/testes e builds Windows release/Android debug com Flutter 3.47.3. Workflow criado localmente não significa execução remota nem publicação. APK debug serve para desenvolvimento, nunca para distribuição em produção.
 

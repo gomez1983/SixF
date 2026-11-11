@@ -24,7 +24,6 @@ class DPadWidget extends StatelessWidget {
     final right = context.select<RemoteController, bool>(
       (c) => c.backButtonOnRight,
     );
-    final isDark = AppColors.isDark(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -35,8 +34,10 @@ class DPadWidget extends StatelessWidget {
         final maxAvailableWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth
             : (size + totalHorizontalExtras);
-        final effectiveSize = (maxAvailableWidth - totalHorizontalExtras)
-            .clamp(120.0, size);
+        final effectiveSize = (maxAvailableWidth - totalHorizontalExtras).clamp(
+          120.0,
+          size,
+        );
 
         final buttonSize = effectiveSize * 0.28;
         final centerSize = effectiveSize * 0.36;
@@ -46,7 +47,8 @@ class DPadWidget extends StatelessWidget {
           child: RemoteButton(
             width: sideSlotWidth,
             height: 64,
-            borderRadius: 16,
+            borderRadius: 18,
+            backgroundColor: AppColors.circleOf(context),
             foregroundColor: AppColors.textPrimaryOf(context),
             icon: Icons.undo_rounded,
             label: 'VOLTAR',
@@ -63,7 +65,8 @@ class DPadWidget extends StatelessWidget {
                   RemoteButton(
                     width: sideSlotWidth,
                     height: 52,
-                    borderRadius: 14,
+                    borderRadius: 16,
+                    backgroundColor: AppColors.circleOf(context),
                     foregroundColor: AppColors.textPrimaryOf(context),
                     icon: Icons.live_tv_rounded,
                     label: 'TV Digital',
@@ -75,7 +78,8 @@ class DPadWidget extends StatelessWidget {
                   RemoteButton(
                     width: sideSlotWidth,
                     height: 52,
-                    borderRadius: 14,
+                    borderRadius: 16,
+                    backgroundColor: AppColors.circleOf(context),
                     foregroundColor: AppColors.textPrimaryOf(context),
                     icon: Icons.settings_input_hdmi_rounded,
                     label: 'HDMI 1',
@@ -91,31 +95,12 @@ class DPadWidget extends StatelessWidget {
           key: const Key('chromecast-dpad'),
           width: effectiveSize,
           height: effectiveSize,
+          // Padrão Payno: roda branca com sombra difusa e anel interno sutil.
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? const [Color(0xF52D273B), Color(0xE6211D2C)]
-                  : const [Color(0xFAFFFFFF), Color(0xE6F2EDF9)],
-            ),
-            border: Border.all(
-              color: isDark ? const Color(0x28FFFFFF) : const Color(0xFFDCD3EC),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark ? const Color(0x45000000) : const Color(0x1448406C),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-              BoxShadow(
-                color: isDark ? const Color(0x10FFFFFF) : const Color(0xCCFFFFFF),
-                blurRadius: 1,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            color: AppColors.circleOf(context),
+            border: Border.all(color: AppColors.borderSubtleOf(context)),
+            boxShadow: AppColors.softShadowOf(context),
           ),
           child: Stack(
             alignment: Alignment.center,
@@ -126,9 +111,7 @@ class DPadWidget extends StatelessWidget {
                 height: effectiveSize * 0.82,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.borderSubtleOf(context).withValues(alpha: 0.6),
-                  ),
+                  border: Border.all(color: AppColors.borderSubtleOf(context)),
                 ),
               ),
 
@@ -208,35 +191,26 @@ class DPadWidget extends StatelessWidget {
                 ),
               ),
 
-              // Botão Central OK / Enter (Liquid Glass Wheel)
+              // Botão central OK / Enter em azul-marinho
               Container(
                 width: centerSize,
                 height: centerSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? const [Color(0xFF3E3552), Color(0xFF2B243A)]
-                        : const [Color(0xFFFFFFFF), Color(0xFFEBE3F7)],
-                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: isDark
-                          ? const Color(0x40000000)
-                          : const Color(0x187441A5),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
+                      color: AppColors.accentFillOf(context)
+                          .withValues(alpha: 0.28),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: RemoteButton(
                   isCircular: true,
-                  backgroundColor: Colors.transparent,
-                  borderColor: AppColors.borderActiveOf(context)
-                      .withValues(alpha: isDark ? 0.55 : 0.65),
-                  foregroundColor: AppColors.textPrimaryOf(context),
+                  backgroundColor: AppColors.accentFillOf(context),
+                  borderColor: Colors.transparent,
+                  foregroundColor: Colors.white,
                   label: 'OK',
                   tooltip: 'Confirmar / OK (Enter ou Espaço)',
                   onPressed: () => controller.dpadOk(),
@@ -246,25 +220,30 @@ class DPadWidget extends StatelessWidget {
           ),
         );
 
+        // Se nem a roda mínima couber na largura, o conjunto encolhe por
+        // inteiro em vez de estourar.
         return Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Slot Lateral Esquerdo (58px fixos)
-              right ? inputsColumn : backButton,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Slot Lateral Esquerdo (58px fixos)
+                right ? inputsColumn : backButton,
 
-              const SizedBox(width: sideGap),
+                const SizedBox(width: sideGap),
 
-              // Roda D-Pad Centralizada
-              wheel,
+                // Roda D-Pad Centralizada
+                wheel,
 
-              const SizedBox(width: sideGap),
+                const SizedBox(width: sideGap),
 
-              // Slot Lateral Direito (58px fixos para simetria absoluta)
-              right ? backButton : inputsColumn,
-            ],
+                // Slot Lateral Direito (58px fixos para simetria absoluta)
+                right ? backButton : inputsColumn,
+              ],
+            ),
           ),
         );
       },

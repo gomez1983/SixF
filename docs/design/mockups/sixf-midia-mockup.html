@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SixF — Nova aba Mídia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--page:#e8ecf1;--page-ink:#1d2433;--page-muted:#6f7889}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--page-ink);font-family:Inter,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;padding:40px 32px 80px}
+.page-head{max-width:1500px;margin:0 auto 22px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;justify-content:space-between}
+.page-head h1{font-weight:400;font-size:28px;letter-spacing:-.4px}
+.page-head p{color:var(--page-muted);font-size:14px;margin-top:6px;max-width:760px;line-height:1.5}
+.filters{display:flex;gap:10px;flex-wrap:wrap}
+.seg-ctl{display:flex;background:#fff;border-radius:999px;padding:4px;box-shadow:0 6px 20px rgba(30,45,80,.06)}
+.seg-ctl button{border:0;background:transparent;font:500 13px Inter,sans-serif;color:var(--page-muted);padding:8px 16px;border-radius:999px;cursor:pointer}
+.seg-ctl button.on{background:#3b5788;color:#fff}
+.changes{max-width:1500px;margin:0 auto 40px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.change{background:#fff;border-radius:18px;padding:16px 18px;box-shadow:0 8px 24px rgba(30,45,80,.06)}
+.change b{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+.change span{font-size:12.5px;color:var(--page-muted);line-height:1.5}
+.change i{font-style:normal;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3b5788;color:#fff;font-size:11px;font-weight:600;margin-right:8px;vertical-align:-5px}
+section.group{max-width:1500px;margin:0 auto 56px}
+section.group>h2{font-weight:500;font-size:15px;color:var(--page-muted);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+section.group>h2::after{content:"";flex:1;height:1px;background:#d5dbe3}
+.grid{display:grid;gap:28px}
+.grid.phones{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.grid.desks{grid-template-columns:repeat(auto-fill,minmax(640px,1fr))}
+.shot{display:flex;flex-direction:column;gap:8px}
+.shot>label{font-size:13.5px;font-weight:600;padding-left:4px}
+.shot>small{font-size:12.5px;color:var(--page-muted);padding:0 4px 6px;line-height:1.45;min-height:58px}
+.fit{position:relative;width:100%}
+.fit>.frame{position:absolute;top:0;left:0;transform-origin:0 0}
+.hidden{display:none!important}
+
+/* Tokens */
+.theme-light{--bg:#eef1f5;--blob1:rgba(61,90,140,.55);--blob2:rgba(120,145,190,.45);--card:rgba(255,255,255,.7);--card-solid:#fff;--stroke:rgba(255,255,255,.9);
+  --ink:#1b2232;--ink2:#5e6779;--muted:#8a93a3;--faint:#b7beca;--line:rgba(27,34,50,.08);--accent:#3b5788;--accent-text:#3b5788;--accent-soft:rgba(59,87,136,.1);
+  --key:#f2f4f8;--shadow:0 10px 30px rgba(30,45,80,.06),0 1px 2px rgba(30,45,80,.04);--ok:#2fa36b;--warn:#d9932b}
+.theme-dark{--bg:#0d121b;--blob1:rgba(70,105,170,.55);--blob2:rgba(50,75,125,.5);--card:rgba(28,36,51,.7);--card-solid:#1f2839;--stroke:rgba(255,255,255,.06);
+  --ink:#e7ecf4;--ink2:#a9b3c6;--muted:#8792a7;--faint:#5a6479;--line:rgba(255,255,255,.07);--accent:#4a6aa3;--accent-text:#9db7e6;--accent-soft:rgba(125,160,220,.14);
+  --key:#1f2838;--shadow:0 12px 32px rgba(0,0,0,.35);--ok:#4cc38a;--warn:#e8a94a}
+
+.frame{font-family:Inter,"Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden;isolation:isolate}
+.frame::before{content:"";position:absolute;z-index:-1;inset:-20% -10% auto -10%;height:70%;
+  background:radial-gradient(40% 55% at 38% 35%,var(--blob1),transparent 70%),radial-gradient(30% 45% at 62% 20%,var(--blob2),transparent 70%),radial-gradient(25% 40% at 18% 10%,var(--blob2),transparent 70%);filter:blur(40px);opacity:.75}
+.card{background:var(--card);border:1px solid var(--stroke);border-radius:20px;box-shadow:var(--shadow);backdrop-filter:blur(18px);padding:14px}
+.ic{flex:none;display:block}
+.sp{flex:1}
+.row{display:flex;align-items:center;gap:8px}
+.circ{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--card-solid);border:1px solid var(--line);color:var(--ink);box-shadow:var(--shadow);flex:none}
+.circ.sm{width:30px;height:30px}
+.circ.navy{background:var(--accent);color:#fff;border-color:transparent}
+.circ.soft{background:var(--key);box-shadow:none}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:7px 12px;border-radius:999px;background:var(--card);border:1px solid var(--stroke);color:var(--muted);white-space:nowrap;font-weight:500}
+.pill.on{background:var(--card-solid);color:var(--ink);box-shadow:var(--shadow);font-weight:600}
+.pill.add{background:transparent;border:1px dashed var(--faint)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+.dot.ok{background:var(--ok)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:6px 11px;border-radius:999px;background:var(--key);color:var(--ink2);border:1px solid var(--line);white-space:nowrap;font-weight:500}
+.chip.on{background:var(--accent);color:#fff;border-color:transparent}
+.chip em{font-style:normal;opacity:.7;font-weight:400}
+.label{font-size:10.5px;color:var(--muted)}
+.h-sec{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;margin:2px 2px 8px}
+.logo{width:38px;height:38px;border-radius:50%;background:#1b0d4d;display:grid;place-items:center;color:#38e0e0;font-weight:600;font-size:15px;box-shadow:0 6px 16px rgba(59,87,136,.35)}
+
+/* Segmented sections */
+.seg{display:flex;background:var(--card);border:1px solid var(--stroke);border-radius:999px;padding:4px;box-shadow:var(--shadow)}
+.seg span{flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--ink2);padding:8px 6px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:6px}
+.seg span.on{background:var(--accent);color:#fff;box-shadow:0 6px 14px rgba(59,87,136,.3)}
+.seg span b{font-size:10px;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:1px 6px}
+.seg span.on b{background:rgba(255,255,255,.25);color:#fff}
+
+/* Breadcrumb */
+.crumbs{display:flex;align-items:center;gap:4px;overflow:hidden;white-space:nowrap}
+.crumb{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink2);padding:6px 10px;border-radius:999px;background:var(--key);border:1px solid var(--line);font-weight:500}
+.crumb.cur{background:var(--accent-soft);color:var(--accent-text);border-color:transparent;font-weight:600}
+.crumbs .sep{color:var(--faint)}
+
+/* Folder cards */
+.folder{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:var(--card-solid);border:1px solid var(--line);box-shadow:var(--shadow)}
+.folder .fi{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-text);flex:none}
+.folder .t{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folder .s{font-size:10.5px;color:var(--muted);margin-top:2px}
+
+/* Thumbs */
+.thumbs{display:grid;gap:8px}
+.th{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:1;background:#3d5a8c}
+.th.sel{outline:3px solid var(--accent);outline-offset:-3px}
+.th .badge{position:absolute;right:6px;bottom:6px;font-size:9.5px;font-weight:600;color:#fff;background:rgba(10,14,22,.62);padding:2px 6px;border-radius:999px}
+.th .kind{position:absolute;left:6px;top:6px;width:20px;height:20px;border-radius:50%;background:rgba(10,14,22,.5);display:grid;place-items:center;color:#fff}
+.th .play{position:absolute;inset:0;margin:auto;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.85);display:grid;place-items:center;color:#1b2232}
+.th .tick{position:absolute;right:6px;top:6px;width:20px;height:20px;border-radius:50%;background:var(--accent);display:grid;place-items:center;color:#fff;border:2px solid #fff}
+.th .name~.badge,.th .badge.top{bottom:auto;top:6px}
+.th .name{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:9.5px;color:#fff;background:linear-gradient(transparent,rgba(10,14,22,.65));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* List rows */
+.li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:14px;background:var(--card-solid);border:1px solid var(--line)}
+.li+.li{margin-top:7px}
+.li.sel{background:var(--accent-soft);border-color:transparent}
+.li .mini{width:44px;height:44px;border-radius:11px;overflow:hidden;position:relative;flex:none}
+.li .t{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .s{font-size:10.5px;color:var(--muted);margin-top:2px}
+.check{width:20px;height:20px;border-radius:50%;border:1.6px solid var(--faint);flex:none;display:grid;place-items:center}
+.check.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Search */
+.search{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:999px;background:var(--card-solid);border:1px solid var(--line);font-size:12px;color:var(--muted);flex:1;min-width:0}
+
+/* Source cards */
+.src{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:18px;background:var(--card-solid);border:1px solid var(--line);box-shadow:var(--shadow)}
+.src .logo2{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--key)}
+.src .t{font-size:13.5px;font-weight:600}
+.src .s{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:5px}
+
+/* Now playing mini */
+.np{display:flex;align-items:center;gap:10px;padding:9px 10px 9px 9px;border-radius:18px;background:linear-gradient(120deg,#2b3c5c,#3d5a8c 55%,#6f88b5);color:#fff;box-shadow:0 12px 26px rgba(40,60,100,.28)}
+.np .mini{width:42px;height:42px;border-radius:12px;overflow:hidden;position:relative;flex:none}
+.np .t{font-size:12px;font-weight:600}
+.np .s{font-size:10px;opacity:.8;margin-top:2px}
+.np .bar{height:3px;border-radius:3px;background:rgba(255,255,255,.3);margin-top:6px;overflow:hidden}
+.np .bar i{display:block;height:100%;width:38%;background:#fff}
+.np .c{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center;flex:none}
+.np .c.w{background:#fff;color:#3b5788}
+
+/* Selection bar */
+.selbar{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 16px;border-radius:999px;background:var(--accent);color:#fff;box-shadow:0 14px 30px rgba(40,60,100,.35)}
+.selbar .t{font-size:12.5px;font-weight:600;white-space:nowrap}
+.selbar .b{white-space:nowrap}
+.selbar .b{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.18)}
+.selbar .b.w{background:#fff;color:#3b5788}
+
+/* Viewer */
+.viewer{position:relative;border-radius:20px;overflow:hidden;box-shadow:0 16px 36px rgba(20,30,50,.25)}
+.viewer .top{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;gap:6px}
+.viewer .tag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(10,14,22,.55);padding:5px 10px;border-radius:999px;backdrop-filter:blur(6px)}
+.viewer .gl{width:32px;height:32px;border-radius:50%;background:rgba(10,14,22,.5);display:grid;place-items:center;color:#fff;backdrop-filter:blur(6px)}
+.viewer .bottom{position:absolute;left:0;right:0;bottom:0;padding:26px 14px 12px;background:linear-gradient(transparent,rgba(10,14,22,.7));color:#fff}
+.viewer .bottom b{font-size:13px;font-weight:600}
+.viewer .bottom span{font-size:10.5px;opacity:.85;display:block;margin-top:2px}
+.strip{display:flex;gap:7px;overflow:hidden}
+.strip .th{width:52px;flex:none;border-radius:11px}
+.strip .th.cur{outline:3px solid var(--accent);outline-offset:-3px}
+.act{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10px;color:var(--ink2);font-weight:500}
+
+/* Tree (desktop) */
+.tree .node{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:12px;font-size:12px;color:var(--ink2);white-space:nowrap}
+.tree .node .ic{color:var(--muted)}
+.tree .node.src{font-weight:600;color:var(--ink);margin-top:6px}
+.tree .node.cur{background:var(--accent);color:#fff;font-weight:600}
+.tree .node.cur .ic{color:#fff}
+.tree .node .n{margin-left:auto;font-size:10px;color:var(--muted)}
+.tree .node.cur .n{color:rgba(255,255,255,.8)}
+
+/* Phone */
+.phone{width:390px;height:844px;border-radius:46px;position:relative;box-shadow:0 0 0 9px #14181f,0 0 0 10px #2a2f38,0 30px 60px rgba(20,30,50,.25)}
+.phone .status{height:46px;display:flex;align-items:center;justify-content:space-between;padding:6px 30px 0;font-size:13px;font-weight:600}
+.phone .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:110px;height:30px;border-radius:20px;background:#0a0c10}
+.m-head{display:flex;align-items:center;gap:9px;padding:4px 16px 0}
+.m-head .who span{font-size:11px;font-weight:700;color:var(--ink)}
+.m-head .who span em{font-style:normal;font-weight:600;color:var(--ink2)}
+.m-head .who b{display:flex;align-items:center;gap:6px;font-weight:400;font-size:16px;margin-top:1px}
+.m-pills{display:flex;gap:7px;padding:10px 16px 0}
+.m-body{position:absolute;top:142px;left:0;right:0;bottom:92px;padding:6px 14px 0;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.m-nav{position:absolute;left:14px;right:14px;bottom:20px;height:62px;border-radius:999px;background:var(--card-solid);border:1px solid var(--stroke);box-shadow:0 12px 30px rgba(30,45,80,.14);display:flex;align-items:center;justify-content:space-around;padding:0 6px}
+.m-nav .t{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--ink2);width:62px;font-weight:600}
+.m-nav .t.on{color:var(--accent-text);font-weight:700}
+.m-nav .t .ib{width:34px;height:28px;display:grid;place-items:center;border-radius:999px;color:var(--muted)}
+.m-nav .t.on .ib{background:var(--accent);color:#fff;width:46px}
+.home-ind{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:120px;height:4px;border-radius:4px;background:var(--ink);opacity:.25}
+
+/* Desktop */
+.desk{width:1280px;height:800px;border-radius:24px;position:relative;box-shadow:0 30px 70px rgba(20,30,50,.18),0 0 0 1px rgba(20,30,50,.06)}
+.d-top{position:absolute;top:0;left:84px;right:24px;height:70px;display:flex;align-items:center;gap:10px}
+.d-rail{position:absolute;top:70px;bottom:0;left:0;width:84px;display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:30px}
+.d-rail .it{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--ink2);font-weight:600}
+.d-rail .it .circ{width:42px;height:42px;color:var(--muted)}
+.d-rail .it.on{color:var(--accent-text);font-weight:700}
+.d-rail .it.on .circ{background:var(--accent);color:#fff}
+.d-main{position:absolute;top:70px;left:84px;right:24px;bottom:20px;display:flex;flex-direction:column}
+.d-title{height:52px;display:flex;align-items:center;gap:14px}
+.d-title h3{font-weight:400;font-size:17px}
+.d-grid{flex:1;display:grid;gap:16px;min-height:0}
+.col{display:flex;flex-direction:column;gap:14px;min-height:0}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div>
+    <h1>Nova aba Mídia — proposta</h1>
+    <p>Navegação de arquivos mais visual: o caminho da pasta sobe para o topo e cada nível é clicável, as pastas viram cards, as fotos e vídeos viram uma grade de miniaturas e a seleção ganha uma barra de ações própria. Celular e Windows, temas claro e escuro.</p>
+  </div>
+  <div class="filters">
+    <div class="seg-ctl" data-filter="plat"><button class="on" data-v="all">Tudo</button><button data-v="phone">Celular</button><button data-v="desk">Windows</button></div>
+    <div class="seg-ctl" data-filter="theme"><button class="on" data-v="all">Claro e escuro</button><button data-v="light">Claro</button><button data-v="dark">Escuro</button></div>
+  </div>
+</div>
+
+<div class="changes">
+  <div class="change"><b><i>1</i>Caminho no topo, clicável</b><span>Hoje o caminho aparece como texto "Meu Drive / Mídia" ao lado de uma seta. Agora ele vira uma faixa de etapas ("Drive › Mídia › Séries"): um toque em qualquer etapa volta direto para ela.</span></div>
+  <div class="change"><b><i>2</i>Fontes como cards</b><span>Na raiz, Google Drive, OneDrive e Neste aparelho aparecem como cards grandes, com o status da conta. As pastas abertas recentemente ficam logo abaixo, para voltar a elas com um toque.</span></div>
+  <div class="change"><b><i>3</i>Pastas e arquivos separados</b><span>As subpastas aparecem primeiro, em cards. Fotos e vídeos vêm em seguida, numa grade de miniaturas com a duração do vídeo. Filtros por tipo mostram quantos itens há de cada um.</span></div>
+  <div class="change"><b><i>4</i>Seleção e reprodução claras</b><span>Ao selecionar vários arquivos, uma barra azul mostra quantos estão marcados e as ações "Fila" e "Tocar na TV". O que está tocando aparece num mini-player fixo.</span></div>
+</div>
+
+<div id="root"></div>
+
+<script>
+const P={
+ back:'<path d="m15 6-6 6 6 6"/>',chev:'<path d="m9 6 6 6-6 6"/>',chevd:'<path d="m6 9 6 6 6-6"/>',
+ home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+ folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+ folderp:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+ grid:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+ list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+ sort:'<path d="M3 6h13M3 12h9M3 18h5"/><path d="M18 9v11M15 17l3 3 3-3"/>',
+ refresh:'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+ film:'<rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>',
+ image:'<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+ music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+ play:'<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
+ pause:'<path d="M8.5 5v14M15.5 5v14" stroke-width="2.6"/>',
+ next:'<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',prev:'<path d="M19 20 9 12l10-8z"/><path d="M5 19V5"/>',
+ cast:'<path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><path d="M2 20h.01"/>',
+ device:'<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
+ queue:'<path d="M3 6h12M3 12h12M3 18h7"/><path d="M17 15v6M14 18h6"/>',
+ playlist:'<path d="M3 6h12M3 12h12M3 18h7"/><path d="M19 16V6l3 1"/><circle cx="17" cy="16" r="2"/>',
+ expand:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+ x:'<path d="M6 6l12 12M18 6 6 18"/>',
+ check:'<path d="m5 12 5 5 9-10"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ tv:'<rect x="2" y="7" width="20" height="14" rx="2.5"/><path d="m17 2-5 5-5-5"/>',
+ power:'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+ menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+ pip:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="11" width="7" height="6" rx="1.5"/>',
+ dialpad:[5,12,19].flatMap(y=>[5,12,19].map(x=>`<circle cx="${x}" cy="${y-1}" r="1.4"/>`)).join('')+'<circle cx="12" cy="22.5" r="1.4"/>',
+ pointer:'<path d="M5 3l14 7-6 2-2 6z"/>',
+ apps:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+ media:'<rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M10 8.5v7l6-3.5z" fill="currentColor"/>',
+ history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+ signal:'<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16"/>',
+ wifi:'<path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><path d="M12 20h.01"/>',
+ battery:'<rect x="2" y="7" width="18" height="10" rx="2.5"/><path d="M22 11v2"/><rect x="4" y="9" width="12" height="6" rx="1" fill="currentColor" stroke="none"/>',
+ info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
+ more:'<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+};
+const ic=(n,s=18,sw=1.7)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${P[n]}</svg>`;
+const DRIVE=s=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M8.2 3h7.6l6 10.4h-7.6z" fill="#f6b400"/><path d="M2.2 13.4 6 20h12l-3.8-6.6z" fill="#2684fc"/><path d="M8.2 3 2.2 13.4 6 20l6-10.4z" fill="#00ac47"/></svg>`;
+const ONEDRIVE=s=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M19.4 11.1A5 5 0 0 0 10 9.4a4 4 0 0 0-6 3.4 3.6 3.6 0 0 0 .3 7.2h14.8a4.4 4.4 0 0 0 .3-8.9z" fill="#0f78d4"/></svg>`;
+
+/* Miniaturas: fotos com paisagem estilizada, vídeos com play e duração */
+const PH=[['#b9cbe6','#4a6698'],['#d9c3a8','#8a6a52'],['#b5d2c1','#4f7a64'],['#e4c9b3','#b06f55'],['#c8cde0','#66729e'],['#d4cbe6','#7b6fa3'],['#a9c4d8','#2f5d7c'],['#e2d6b8','#9a8455']];
+const scene=(a,b)=>`background:linear-gradient(160deg,${a},${b})`;
+const mount=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%"><circle cx="72" cy="28" r="9" fill="rgba(255,255,255,.55)"/><path d="M0 78 28 46l18 20 14-14 40 40V100H0z" fill="rgba(255,255,255,.28)"/><path d="M0 88 34 62l22 18 16-10 28 22v8H0z" fill="rgba(0,0,0,.14)"/></svg>`;
+const photo=(i,o={})=>`<div class="th${o.sel?' sel':''}${o.cur?' cur':''}" style="${scene(...PH[i%PH.length])}">${mount}${o.badge?'':''}${o.tick?`<span class="tick">${ic('check',11,3)}</span>`:''}${o.name?`<span class="name">${o.name}</span>`:''}</div>`;
+const video=(i,dur,o={})=>`<div class="th${o.sel?' sel':''}" style="background:linear-gradient(150deg,${['#2b3c5c','#3a2f4f','#24404a','#4a3a2a'][i%4]},#0f1522)"><span class="play">${ic('play',13)}</span><span class="badge${o.name?' top':''}">${dur}</span>${o.tick?`<span class="tick">${ic('check',11,3)}</span>`:''}${o.name?`<span class="name">${o.name}</span>`:''}</div>`;
+const miniPhoto=i=>`<div class="mini" style="${scene(...PH[i%PH.length])}">${mount}</div>`;
+const miniVideo=i=>`<div class="mini" style="background:linear-gradient(150deg,${['#2b3c5c','#3a2f4f','#24404a'][i%3]},#0f1522);display:grid;place-items:center;color:#fff">${ic('play',14)}</div>`;
+
+const crumbs=(parts)=>`<div class="crumbs">${parts.map((p,i)=>`${i?`<span class="sep">${ic('chev',13)}</span>`:''}<span class="crumb${i===parts.length-1?' cur':''}">${i===0?(p==='Drive'?DRIVE(13):ic('device',13)):''}${p}</span>`).join('')}</div>`;
+
+const seg=(on)=>`<div class="seg">${[['Arquivos','folder'],['Playlists','playlist'],['Fila','queue']].map(([l,i])=>`<span class="${l===on?'on':''}">${ic(i,14)}${l}${l==='Fila'?' <b>2</b>':''}</span>`).join('')}</div>`;
+
+const nowPlaying=()=>`<div class="np">${miniVideo(0)}<div style="flex:1;min-width:0"><div class="t">Chaves - T02E05.mkv</div><div class="s">Na TV · Chromecast · 08:12 / 21:40</div><div class="bar"><i></i></div></div><span class="c">${ic('pause',13)}</span><span class="c w">${ic('next',13)}</span></div>`;
+
+/* ---------- Celular ---------- */
+const NAV=[['Controle','tv'],['Mídia','media'],['Teclas','dialpad'],['Apps','apps']];
+function phone(body,theme){
+  return `<div class="frame phone theme-${theme}"><div class="island"></div>
+  <div class="status"><span>9:41</span><span class="row" style="gap:5px">${ic('signal',15,2)}${ic('wifi',15,2)}${ic('battery',20,1.6)}</span></div>
+  <div class="m-head"><div class="logo"><img src="../../../assets/icons/SixF_Logo_01.png" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover"></div><div class="who"><span>SixF <em>Remote</em></span><b><i class="dot ok"></i>Chromecast</b></div><div class="sp"></div>
+   <span class="circ">${ic('power',16)}</span><span class="circ">${ic(theme==='dark'?'sun':'moon',16)}</span><span class="circ">${ic('menu',16)}</span></div>
+  <div class="m-pills"><span class="pill">${ic('tv',13)}Smart TV</span><span class="pill on"><i class="dot ok"></i>${ic('cast',13)}Chromecast</span><span class="pill add">${ic('plus',12)}Novo</span></div>
+  <div class="m-body">${body}</div>
+  <div class="m-nav">${NAV.map(([l,i])=>`<div class="t ${l==='Mídia'?'on':''}"><span class="ib">${ic(i,18)}</span>${l}</div>`).join('')}</div><div class="home-ind"></div></div>`;
+}
+const PHONES=[
+ ['Raiz: escolha onde estão os arquivos','As fontes viram cards grandes com o status da conta; as pastas recentes ficam logo abaixo.',()=>`
+  ${seg('Arquivos')}
+  <div>
+   <div class="h-sec">Fontes</div>
+   <div class="src"><span class="logo2">${DRIVE(24)}</span><div style="flex:1"><div class="t">Google Drive</div><div class="s"><i class="dot ok"></i>Conta conectada · Meu Drive</div></div><span class="circ sm soft">${ic('chev',15)}</span></div>
+   <div class="src" style="margin-top:8px"><span class="logo2">${ONEDRIVE(24)}</span><div style="flex:1"><div class="t">OneDrive</div><div class="s">Toque para entrar na conta</div></div><span class="circ sm soft">${ic('chev',15)}</span></div>
+   <div class="src" style="margin-top:8px"><span class="logo2" style="color:var(--accent-text)">${ic('device',22)}</span><div style="flex:1"><div class="t">Neste aparelho</div><div class="s">3 pastas salvas</div></div><span class="circ sm soft">${ic('chev',15)}</span></div>
+  </div>
+  <div>
+   <div class="h-sec" style="margin-top:4px">Abertas recentemente</div>
+   <div class="li"><div class="folder" style="padding:0;border:0;box-shadow:none;background:transparent"><span class="fi">${ic('folder',18)}</span></div><div style="min-width:0;flex:1"><div class="t">Séries</div><div class="s">Drive › Mídia › Séries</div></div>${ic('chev',15)}</div>
+   <div class="li"><div class="folder" style="padding:0;border:0;box-shadow:none;background:transparent"><span class="fi">${ic('folder',18)}</span></div><div style="min-width:0;flex:1"><div class="t">Ilustrações</div><div class="s">Drive › Mídia › Ilustrações</div></div>${ic('chev',15)}</div>
+  </div>
+  <div class="li" style="border-style:dashed;background:transparent;justify-content:center;color:var(--accent-text);font-size:12px;font-weight:600;gap:6px">${ic('folderp',16)}Adicionar pasta deste aparelho</div>`],
+ ['Dentro da pasta: grade','O caminho fica no topo e cada etapa é clicável. As subpastas vêm primeiro; fotos e vídeos ficam numa grade.',()=>`
+  <div class="row"><span class="circ sm">${ic('back',15)}</span>${crumbs(['Drive','Mídia','Séries'])}</div>
+  <div class="row" style="align-items:flex-end"><div><div style="font-size:24px;font-weight:300;letter-spacing:-.6px;line-height:1">Séries</div><div class="label" style="margin-top:5px">2 pastas · 6 vídeos · 9 fotos</div></div><div class="sp"></div><span class="circ sm soft">${ic('refresh',14)}</span></div>
+  <div class="row"><div class="search">${ic('search',14)}Buscar nesta pasta</div><span class="circ navy sm">${ic('grid',14)}</span><span class="circ sm">${ic('sort',14)}</span></div>
+  <div class="row" style="gap:6px;overflow:hidden"><span class="chip on">Tudo</span><span class="chip">${ic('folder',12)}Pastas <em>2</em></span><span class="chip">${ic('film',12)}Vídeos <em>6</em></span><span class="chip">${ic('image',12)}Fotos <em>9</em></span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+   <div class="folder"><span class="fi">${ic('folder',18)}</span><div style="min-width:0"><div class="t">Chaves</div><div class="s">32 itens</div></div></div>
+   <div class="folder"><span class="fi">${ic('folder',18)}</span><div style="min-width:0"><div class="t">Chapolin</div><div class="s">24 itens</div></div></div>
+  </div>
+  <div class="thumbs" style="grid-template-columns:repeat(3,1fr)">${video(0,'22:05')}${video(1,'21:58')}${photo(0)}${photo(1)}${video(2,'01:12')}${photo(2)}</div>
+  ${nowPlaying()}`],
+ ['Lista com seleção de vários','Na lista, o círculo marca os arquivos. A barra azul mostra quantos estão marcados e as ações para a fila e a TV.',()=>`
+  <div class="row"><span class="circ sm">${ic('back',15)}</span>${crumbs(['Drive','Mídia','Séries','Chaves'])}</div>
+  <div class="row"><div class="search">${ic('search',14)}Buscar nesta pasta</div><span class="circ sm">${ic('grid',14)}</span><span class="circ navy sm">${ic('list',14)}</span></div>
+  <div class="row" style="gap:6px"><span class="chip">Tudo</span><span class="chip on">${ic('film',12)}Vídeos <em>32</em></span><span class="chip">${ic('image',12)}Fotos <em>0</em></span><div class="sp"></div><span style="font-size:11px;color:var(--accent-text);font-weight:600">Marcar todos</span></div>
+  <div>
+   ${[['T02E01',0,'22:05',1],['T02E02',1,'21:58',1],['T02E03',2,'21:47',1],['T02E04',0,'22:11',0],['T02E05',1,'21:40',0],['T02E06',2,'21:52',0]].map(([n,i,d,s])=>`<div class="li${s?' sel':''}"><span class="check${s?' on':''}">${s?ic('check',11,3):''}</span>${miniVideo(i)}<div style="min-width:0;flex:1"><div class="t">Chaves - ${n}.mkv</div><div class="s">MKV · ${400+i*6} MB · ${d}</div></div></div>`).join('')}
+  </div>
+  <div class="selbar"><span class="t">3 selecionados</span><div class="sp"></div><span class="b">${ic('queue',14)}Fila</span><span class="b w">${ic('cast',14)}Tocar na TV</span></div>`],
+ ['Foto aberta (espelhando na TV)','A foto aparece grande, com a indicação "Na TV". O carrossel e as ações ficam logo abaixo.',()=>`
+  <div class="row"><span class="circ sm">${ic('back',15)}</span>${crumbs(['Drive','Mídia','Ilustrações'])}</div>
+  <div class="viewer" style="height:352px;${scene(...PH[0])}">${mount}
+   <div class="top"><span class="tag"><i class="dot ok"></i>Na TV · Chromecast</span><div class="sp"></div><span class="gl">${ic('expand',14)}</span><span class="gl">${ic('x',14)}</span></div>
+   <div class="bottom"><b>Paisagem_03.jpg</b><span>3 de 12 · 2,4 MB</span></div></div>
+  <div class="strip">${[0,1,2,3,4,5].map(i=>photo((i+6)%8,{cur:i===2})).join('')}</div>
+  <div class="card" style="padding:12px 10px;display:flex;justify-content:space-around">
+   <div class="act"><span class="circ">${ic('prev',15)}</span>Anterior</div>
+   <div class="act"><span class="circ">${ic('expand',15)}</span>Tela cheia</div>
+   <div class="act"><span class="circ navy">${ic('cast',15)}</span>Na TV</div>
+   <div class="act"><span class="circ">${ic('next',15)}</span>Próxima</div></div>`],
+];
+
+/* ---------- Windows ---------- */
+function desk(body,theme){
+  const rail=[['Controle','tv'],['Mídia','media'],['Teclas','dialpad'],['Apps','apps']]; // Chromecast: sem Trackpad
+  return `<div class="frame desk theme-${theme}">
+   <div class="d-top"><div class="logo"><img src="../../../assets/icons/SixF_Logo_01.png" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover"></div><div class="m-head" style="padding:0"><div class="who"><span>SixF <em>Remote</em></span><b><i class="dot ok"></i>Chromecast</b></div></div><div class="sp"></div>
+    <span class="circ">${ic('pip',16)}</span><span class="circ">${ic('power',16)}</span><span class="circ">${ic('cast',16)}</span><span class="circ">${ic(theme==='dark'?'sun':'moon',16)}</span><span class="circ">${ic('menu',16)}</span></div>
+   <div class="d-rail">${rail.map(([l,i])=>`<div class="it ${l==='Mídia'?'on':''}"><span class="circ">${ic(i,18)}</span>${l}</div>`).join('')}</div>
+   <div class="d-main"><div class="d-title"><h3>Mídia</h3><span class="pill">${ic('tv',13)}Smart TV</span><span class="pill on"><i class="dot ok"></i>${ic('cast',13)}Chromecast</span><div class="sp"></div><div style="width:330px">${seg('Arquivos')}</div></div>${body}</div></div>`;
+}
+const tree=(cur)=>`<div class="card tree" style="padding:12px 10px;overflow:hidden">
+  <div class="h-sec" style="padding-left:6px">Fontes e pastas</div>
+  <div class="node src">${DRIVE(15)}Google Drive<span class="n">${ic('chevd',13)}</span></div>
+  <div class="node" style="padding-left:24px">${ic('folder',15)}Meu Drive</div>
+  <div class="node" style="padding-left:38px">${ic('folder',15)}Mídia</div>
+  ${['Google Earth','HQs','Ilustrações','Livros','Séries'].map(n=>`<div class="node${n===cur?' cur':''}" style="padding-left:52px">${ic('folder',15)}${n}${n==='Séries'?'<span class="n">2</span>':''}</div>`).join('')}
+  <div class="node src">${ONEDRIVE(15)}OneDrive<span class="n" style="color:var(--accent-text);font-weight:600">Entrar</span></div>
+  <div class="node src">${ic('device',15)}Neste aparelho<span class="n">3</span></div>
+  <div class="node" style="padding-left:24px">${ic('folder',15)}Downloads</div>
+  <div class="node" style="padding-left:24px">${ic('folder',15)}Vídeos</div>
+  <div class="node" style="margin-top:10px;border:1px dashed var(--faint);justify-content:center;color:var(--accent-text);font-weight:600">${ic('folderp',15)}Adicionar pasta</div>
+</div>`;
+const rightCol=(extra='')=>`<div class="col">
+  <div class="card"><div class="row" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Agora na TV</span><div class="sp"></div><span class="label">Chromecast</span></div>
+   <div class="viewer" style="height:150px;background:linear-gradient(150deg,#2b3c5c,#0f1522)"><span class="th play" style="position:absolute;inset:0;margin:auto;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.85);display:grid;place-items:center;color:#1b2232">${ic('pause',16)}</span>
+    <div class="bottom"><b>Chaves - T02E05.mkv</b><span>08:12 / 21:40</span></div></div>
+   <div style="height:5px;border-radius:5px;background:var(--key);margin:12px 0 0;overflow:hidden"><div style="width:38%;height:100%;background:var(--accent)"></div></div>
+   <div class="row" style="justify-content:space-around;margin-top:12px"><span class="circ">${ic('prev',14)}</span><span class="circ navy" style="width:44px;height:44px">${ic('pause',16)}</span><span class="circ">${ic('next',14)}</span></div></div>
+  ${extra}
+  <div class="card" style="flex:1;overflow:hidden"><div class="row" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Fila</span><span class="label">2 a seguir</span><div class="sp"></div><span class="label" style="color:var(--accent-text);font-weight:600">Limpar</span></div>
+   ${['T02E06','T02E07'].map((n,i)=>`<div class="li">${miniVideo(i+1)}<div style="min-width:0;flex:1"><div class="t">Chaves - ${n}.mkv</div><div class="s">MKV · 21:${50+i} </div></div></div>`).join('')}</div>
+</div>`;
+const DESKS=[
+ ['Navegação com árvore de pastas','A árvore à esquerda mostra onde você está e permite pular de pasta. No centro ficam o caminho, os filtros e a grade; à direita, o que está tocando.',()=>`
+  <div class="d-grid" style="grid-template-columns:250px 1fr 300px">
+   ${tree('Séries')}
+   <div class="card" style="display:flex;flex-direction:column;gap:12px;padding:16px 18px;overflow:hidden">
+    <div class="row"><span class="circ sm">${ic('back',15)}</span>${crumbs(['Drive','Meu Drive','Mídia','Séries'])}<div class="sp"></div><span class="circ sm soft">${ic('refresh',14)}</span></div>
+    <div class="row" style="align-items:flex-end"><div><div style="font-size:34px;font-weight:300;letter-spacing:-1px;line-height:1">Séries</div><div class="label" style="margin-top:6px">2 pastas · 6 vídeos · 9 fotos</div></div><div class="sp"></div>
+     <div class="search" style="flex:0 0 240px">${ic('search',14)}Buscar nesta pasta</div><span class="circ navy sm">${ic('grid',14)}</span><span class="circ sm">${ic('list',14)}</span><span class="circ sm">${ic('sort',14)}</span></div>
+    <div class="row" style="gap:6px"><span class="chip on">Tudo</span><span class="chip">${ic('folder',12)}Pastas <em>2</em></span><span class="chip">${ic('film',12)}Vídeos <em>6</em></span><span class="chip">${ic('image',12)}Fotos <em>9</em></span><span class="chip">${ic('music',12)}Áudios <em>0</em></span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+     <div class="folder"><span class="fi">${ic('folder',18)}</span><div style="min-width:0"><div class="t">Chaves</div><div class="s">32 itens</div></div></div>
+     <div class="folder"><span class="fi">${ic('folder',18)}</span><div style="min-width:0"><div class="t">Chapolin</div><div class="s">24 itens</div></div></div></div>
+    <div class="thumbs" style="grid-template-columns:repeat(5,1fr)">${photo(2,{name:'Fundo.jpg'})}${video(1,'02:31',{name:'Tema.mp4'})}${photo(5,{name:'Bastidores.jpg'})}${video(0,'22:05',{name:'Abertura.mp4'})}${video(1,'21:58',{name:'Especial.mkv'})}${photo(0,{name:'Capa.jpg'})}${photo(1,{name:'Elenco.jpg'})}${video(2,'01:12',{name:'Trailer.mp4'})}${photo(2,{name:'Vila.jpg'})}${photo(3,{name:'Cena_01.jpg'})}${photo(4,{name:'Cena_02.jpg'})}${video(3,'21:40',{name:'Making-of.mkv'})}${photo(5,{name:'Cena_03.jpg'})}${photo(6,{name:'Cena_04.jpg'})}${photo(7,{name:'Cartaz.jpg'})}</div>
+   </div>
+   ${rightCol()}
+  </div>`],
+ ['Foto aberta, com seleção na grade','A foto abre grande no centro, com o carrossel embaixo, enquanto a árvore continua visível. Ao marcar arquivos, aparece a barra de ações.',()=>`
+  <div class="d-grid" style="grid-template-columns:250px 1fr 300px">
+   ${tree('Ilustrações')}
+   <div class="card" style="display:flex;flex-direction:column;gap:12px;padding:16px 18px;overflow:hidden;position:relative">
+    <div class="row"><span class="circ sm">${ic('back',15)}</span>${crumbs(['Drive','Meu Drive','Mídia','Ilustrações'])}<div class="sp"></div><span class="circ sm soft">${ic('refresh',14)}</span></div>
+    <div class="viewer" style="flex:1;min-height:0;${scene(...PH[0])}">${mount}
+     <div class="top"><span class="tag"><i class="dot ok"></i>Na TV · Chromecast</span><div class="sp"></div><span class="gl">${ic('prev',13)}</span><span class="gl">${ic('next',13)}</span><span class="gl">${ic('expand',14)}</span><span class="gl">${ic('x',14)}</span></div>
+     <div class="bottom"><b>Paisagem_03.jpg</b><span>3 de 12 · 2,4 MB</span></div></div>
+    <div class="strip">${[0,1,2,3,4,5,6,7,0,1,2].map((v,i)=>photo((v+6)%8,{cur:i===2,tick:i===5||i===6,sel:i===5||i===6})).join('')}</div>
+    <div class="selbar"><span class="t">2 selecionados</span><div class="sp"></div><span class="b">${ic('playlist',14)}Playlist</span><span class="b">${ic('queue',14)}Fila</span><span class="b w">${ic('cast',14)}Mostrar na TV</span><span class="b" style="padding:8px">${ic('x',13)}</span></div>
+   </div>
+   ${rightCol()}
+  </div>`],
+];
+
+/* ---------- Montagem ---------- */
+const groups=[['phone','light','Celular · tema claro',PHONES,phone,390,844],['phone','dark','Celular · tema escuro',PHONES,phone,390,844],
+ ['desk','light','Windows · tema claro',DESKS,desk,1280,800],['desk','dark','Windows · tema escuro',DESKS,desk,1280,800]];
+document.getElementById('root').innerHTML=groups.map(([plat,theme,title,list,fn,w,h])=>`<section class="group" data-plat="${plat}" data-theme="${theme}"><h2>${title}</h2>
+ <div class="grid ${plat==='phone'?'phones':'desks'}">${list.map(([t,d,b])=>`<div class="shot"><label>${t}</label><small>${d}</small>
+ <div class="fit" data-w="${w}" data-h="${h}" data-pad="${plat==='phone'?10:0}">${fn(b(),theme)}</div></div>`).join('')}</div></section>`).join('');
+function fit(){document.querySelectorAll('.fit').forEach(el=>{const w=+el.dataset.w,h=+el.dataset.h,p=+el.dataset.pad,avail=el.clientWidth-p*2;const s=Math.min(1,avail/w);
+ el.firstElementChild.style.transform=`translate(${p+(avail-w*s)/2}px,${p}px) scale(${s})`;el.style.height=(h*s+p*2)+'px';});}
+addEventListener('resize',fit);fit();document.fonts&&document.fonts.ready.then(fit);
+const state={plat:'all',theme:'all'};
+document.querySelectorAll('.seg-ctl').forEach(seg=>seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));state[seg.dataset.filter]=b.dataset.v;
+ document.querySelectorAll('section.group').forEach(g=>g.classList.toggle('hidden',(state.plat!=='all'&&g.dataset.plat!==state.plat)||(state.theme!=='all'&&g.dataset.theme!==state.theme)));fit();}));
+</script>
+</body>
+</html>

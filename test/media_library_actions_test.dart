@@ -11,10 +11,13 @@ import 'package:sixf_remote/controllers/media_cast_controller.dart';
 import 'package:sixf_remote/controllers/remote_controller.dart';
 import 'package:sixf_remote/services/media_remux_service.dart';
 import 'package:sixf_remote/ui/views/media_library.dart';
+import 'package:sixf_remote/ui/widgets/media_progress_slider.dart';
 
 import 'media_controls_gallery_widget_test.dart' show ScopedRemote;
 import 'media_gallery_cast_test.dart' show SimulatedCast;
 import 'security_lifecycle_test.dart' show LocalMediaServer, RealHttp;
+
+String? _lastOverflow;
 
 void main() {
   testWidgets(
@@ -22,6 +25,14 @@ void main() {
     (tester) async {
       tester.view.physicalSize = const Size(600, 1400);
       tester.view.devicePixelRatio = 1;
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        final m = RegExp(r'lib/[a-z_/]+\.dart:\d+')
+            .firstMatch(details.toString());
+        if (m != null) _lastOverflow = m.group(0);
+        previousOnError?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = previousOnError);
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final dir = Directory.systemTemp.createTempSync('sixf-actions-');
@@ -104,13 +115,13 @@ void main() {
       await settleIO();
       await tester.tap(find.text('Arquivos'));
       await settleIO();
-      // Regra: ao abrir uma pasta, o padrão é visualizar no próprio app —
-      // mesmo com a TV conectada, nada é enviado até o usuário pedir.
+      // Regra: ao abrir uma pasta, ela aparece na grade e nada é enviado à
+      // TV (nem aberto no visualizador) até o usuário pedir.
       expect(remote.isConnected, isTrue);
-      expect(find.text('Local'), findsWidgets);
       expect(find.text('Na TV'), findsNothing);
       expect(receiver.loadedUrl, isNull);
-      await tester.tap(find.text('clip.mp4').first);
+      // Segurar o arquivo abre as opções (fila, playlist, enviar à TV).
+      await tester.longPress(find.text('clip.mp4').first);
       await tester.pumpAndSettle();
       expect(find.text('Reproduzir agora na televisão'), findsOneWidget);
       await tester.tap(find.text('Adicionar à playlist'));
@@ -172,10 +183,11 @@ void main() {
           tester.view.physicalSize = size;
           tester.platformDispatcher.textScaleFactorTestValue = scale;
           await tester.pump();
+          final error = tester.takeException();
           expect(
-            tester.takeException(),
+            error,
             isNull,
-            reason: '$size, text scale $scale',
+            reason: '$size, text scale $scale ${_lastOverflow ?? ''}',
           );
         }
       }
@@ -203,6 +215,45 @@ void main() {
       await waitPhoto('photo.png');
       await tester.tap(find.byKey(const ValueKey('media-thumbnail-0')));
       await waitPhoto('clip.mp4');
+      await tester.pump();
+      // A linha do tempo precisa estar visível (é o caso do aparelho real).
+      expect(
+        find.byType(MediaProgressSlider),
+        findsOneWidget,
+        reason: 'linha do tempo do vídeo na TV',
+      );
+      // Vídeo tocando na TV: o card do player não pode estourar em nenhuma
+      // medida (celular deitado como o S23 Ultra, janelas baixas, fonte grande).
+      for (final size in [
+        const Size(915, 412), // Galaxy S23 Ultra deitado
+        const Size(
+          915,
+          390,
+        ), // S23 Ultra deitado, descontando a barra de status
+        const Size(915, 365), // idem, com barra de navegação por botões
+        const Size(780, 412),
+        const Size(700, 320),
+        const Size(740, 360),
+        const Size(640, 300),
+        const Size(844, 390),
+        const Size(1024, 600),
+        const Size(393, 852),
+      ]) {
+        for (final scale in [1.0, 1.15, 1.3]) {
+          tester.view.physicalSize = size;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(
+            tester.takeException(),
+            isNull,
+            reason:
+                'vídeo tocando: $size, fonte x$scale ${_lastOverflow ?? ''}',
+          );
+        }
+      }
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      tester.view.physicalSize = const Size(600, 1400);
       await tester.pump();
       expect(find.byTooltip('Reproduzir vídeo'), findsOneWidget);
       expect(find.byTooltip('Pausar vídeo'), findsOneWidget);

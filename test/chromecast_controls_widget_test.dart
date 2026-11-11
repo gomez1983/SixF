@@ -7,7 +7,6 @@ import 'package:sixf_remote/services/drivers/google_tv_driver.dart';
 import 'package:sixf_remote/services/drivers/tv_driver.dart';
 import 'package:sixf_remote/ui/widgets/dpad_widget.dart';
 import 'package:sixf_remote/ui/widgets/system_navigation_controls.dart';
-import 'package:sixf_remote/ui/widgets/remote_button.dart';
 import 'package:sixf_remote/ui/widgets/volume_channel_controls.dart';
 import 'package:sixf_remote/ui/widgets/voice_listening_dialog.dart';
 
@@ -59,9 +58,7 @@ void main() {
         await tester.pump();
         final wheel = find.byKey(const Key('chromecast-dpad'));
         final back = find.byKey(const Key('chromecast-back'));
-        final home = find.byWidgetPredicate(
-          (w) => w is RemoteButton && w.label == 'HOME',
-        );
+        final home = find.text('HOME');
 
         final googleWheelCenter = tester.getCenter(wheel);
         final googleWheelSize = tester.getSize(wheel);

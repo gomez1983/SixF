@@ -128,8 +128,14 @@ void main() {
         expect(find.text('EXIT'), findsOneWidget);
         expect(find.text('VOL'), findsOneWidget);
         expect(find.text('CH'), findsOneWidget);
-        expect(find.text('MUTE'), findsOneWidget);
-        expect(find.text('VOZ'), findsOneWidget);
+        // Mudo e Voz viraram botões circulares nos cards de Volume e Canal.
+        expect(find.byTooltip('Mutar Áudio'), findsOneWidget);
+        expect(
+          find.byTooltip(
+            'Comando de Voz (Segure para falar • Deslize para travar 🔒)',
+          ),
+          findsOneWidget,
+        );
         expect(find.text('OK'), findsOneWidget);
 
         // Verifica botões de entrada ao lado do D-Pad (Aba 1)
@@ -229,15 +235,19 @@ void main() {
         await tester.pumpWidget(const SixFRemoteApp());
         await tester.pumpAndSettle();
 
+        // Desktop: trilho lateral, Controle em cards e atalhos do teclado.
         expect(
-          find.text('LG Magic Pointer (Trackpad Virtual)'),
+          find.text('Atalhos do teclado físico'),
           findsOneWidget,
         );
-        expect(
-          find.text('Atalhos de Teclado Físico (Desktop)'),
-          findsOneWidget,
-        );
+        expect(find.text('Aparelho ativo'), findsOneWidget);
+        expect(find.byType(TrackpadWidget), findsNothing);
+
+        // O trackpad virou uma aba própria do trilho lateral.
+        await tester.tap(find.text(tabTrackpadLabel));
+        await tester.pumpAndSettle();
         expect(find.byType(TrackpadWidget), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
 

@@ -106,56 +106,49 @@ class MultimediaControls extends StatelessWidget {
       ),
     ];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: mediaActions.map((item) {
-              return RemoteButton(
-                width: 46,
-                height: 46,
-                isCircular: true,
-                isSelected: item.isPrimary,
-                backgroundColor: item.isPrimary
-                    ? AppColors.iconHighlightOf(context).withValues(alpha: 0.18)
-                    : AppColors.surfaceInteractiveOf(context),
-                borderColor: item.isPrimary
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.borderSubtleOf(context),
-                foregroundColor: item.isPrimary
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.textPrimaryOf(context),
-                icon: item.icon,
-                iconSize: item.isPrimary ? 24 : 20,
-                tooltip: item.tooltip,
-                onPressed: item.onPressed,
-              );
-            }).toList(),
+    // Padrão Payno: círculos cinza-claros; o ativo em azul-marinho sólido.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          spacing: 8,
+          runSpacing: 8,
+          children: mediaActions.map((item) {
+            return RemoteButton(
+              width: 44,
+              height: 44,
+              isCircular: true,
+              isSelected: item.isPrimary,
+              backgroundColor: AppColors.surfaceInteractiveOf(context),
+              foregroundColor: AppColors.textPrimaryOf(context),
+              icon: item.icon,
+              iconSize: 20,
+              tooltip: item.tooltip,
+              onPressed: item.onPressed,
+            );
+          }).toList(),
+        ),
+        if (media != null)
+          MediaSessionControls(
+            controller: media,
+            enabled: local,
+            showTransportControls: false,
+            showPlaybackModes: false,
           ),
-          if (media != null)
-            MediaSessionControls(
-              controller: media,
-              enabled: local,
-              showTransportControls: false,
-              showPlaybackModes: false,
-            ),
-          if (!local)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                'Linha do tempo e repetição: transmita um arquivo pelo SixF.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11),
+        if (!local)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              'Linha do tempo e repetição: transmita um arquivo pelo SixF.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textMutedOf(context),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }

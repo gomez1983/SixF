@@ -6,7 +6,10 @@ import 'remote_button.dart';
 
 /// Teclado Numérico clássico com teclas de 0 a 9, traço (-) e Backspace.
 class NumericKeypad extends StatelessWidget {
-  const NumericKeypad({super.key});
+  /// Altura de cada tecla.
+  final double keyHeight;
+
+  const NumericKeypad({super.key, this.keyHeight = 48});
 
   @override
   Widget build(BuildContext context) {
@@ -27,51 +30,60 @@ class NumericKeypad extends StatelessWidget {
       _KeypadItem.backspace(),
     ];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: AppColors.glassCardDecoration(context, borderRadius: 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Grade 3x4
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: keys.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.6,
-            ),
-            itemBuilder: (context, index) {
-              final item = keys[index];
-              return RemoteButton(
-                borderRadius: 10,
-                backgroundColor: item.isAction
-                    ? AppColors.surfaceElevatedOf(context)
-                    : AppColors.surfaceInteractiveOf(context),
-                foregroundColor: item.isAction
-                    ? AppColors.iconHighlightOf(context)
-                    : AppColors.textPrimaryOf(context),
-                label: item.label,
-                icon: item.icon,
-                iconSize: 18,
-                tooltip: item.tooltip,
-                onPressed: () {
-                  if (item.digit != null) {
-                    controller.sendDigit(item.digit!);
-                  } else if (item.isDash) {
-                    controller.sendDash();
-                  } else if (item.isBackspace) {
-                    controller.sendBackspace();
-                  }
-                },
-              );
-            },
+    // Padrão Payno: teclas cinza-claras lisas, números em peso leve.
+    final rows = <List<_KeypadItem>>[
+      for (var i = 0; i < keys.length; i += 3) keys.sublist(i, i + 3),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 9),
+          Row(
+            children: [
+              for (var c = 0; c < 3; c++) ...[
+                if (c > 0) const SizedBox(width: 9),
+                Expanded(child: _key(context, controller, rows[r][c])),
+              ],
+            ],
           ),
         ],
-      ),
+      ],
+    );
+  }
+
+  Widget _key(BuildContext context, RemoteController controller, _KeypadItem item) {
+    return RemoteButton(
+      height: keyHeight,
+      borderRadius: 16,
+      backgroundColor: AppColors.surfaceInteractiveOf(context),
+      foregroundColor: item.isAction
+          ? AppColors.textMutedOf(context)
+          : AppColors.textPrimaryOf(context),
+      icon: item.icon,
+      iconSize: 20,
+      tooltip: item.tooltip,
+      onPressed: () {
+        if (item.digit != null) {
+          controller.sendDigit(item.digit!);
+        } else if (item.isDash) {
+          controller.sendDash();
+        } else if (item.isBackspace) {
+          controller.sendBackspace();
+        }
+      },
+      child: item.label == null
+          ? null
+          : Text(
+              item.label!,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w300,
+                color: item.isAction
+                    ? AppColors.textMutedOf(context)
+                    : AppColors.textPrimaryOf(context),
+              ),
+            ),
     );
   }
 }

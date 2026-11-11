@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -240,6 +241,21 @@ class LibrarySources {
     _activeClients.clear();
   }
 
+  /// Espera o app voltar ao primeiro plano (até 2 minutos) e dá um instante
+  /// para a rede se restabelecer. Em testes (sem ciclo de vida) retorna já.
+  static Future<void> _waitForeground() async {
+    final binding = WidgetsBinding.instance;
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    while (binding.lifecycleState != null &&
+        binding.lifecycleState != AppLifecycleState.resumed &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (binding.lifecycleState == AppLifecycleState.resumed) {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    }
+  }
+
   Future<String> token(LibrarySource source) async {
     await _ensureStoredTokensLoaded();
     final cached = _tokens[source];
@@ -294,18 +310,52 @@ class LibrarySources {
           ? 'https://oauth2.googleapis.com/token'
           : 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
     );
+    // Motivo da última recusa do provedor (ex.: invalid_grant), para o
+    // usuário saber o que houve em vez de uma mensagem genérica.
+    String? failure;
     Future<String?> exchange(Map<String, String> grant) async {
-      final response = await http
-          .post(
-            endpoint,
-            body: {
-              'client_id': client,
-              if (google && secret.isNotEmpty) 'client_secret': secret,
-              ...grant,
-            },
-          )
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) return null;
+      // Falhas de rede (comuns logo depois de voltar do navegador, quando o
+      // Android ainda restringe a rede do app) são repetidas algumas vezes.
+      http.Response? response;
+      Object? networkError;
+      for (var attempt = 0; attempt < 4; attempt++) {
+        try {
+          response = await http
+              .post(
+                endpoint,
+                body: {
+                  'client_id': client,
+                  if (google && secret.isNotEmpty) 'client_secret': secret,
+                  ...grant,
+                },
+              )
+              .timeout(const Duration(seconds: 30));
+          networkError = null;
+          break;
+        } on SocketException catch (e) {
+          networkError = e;
+        } on http.ClientException catch (e) {
+          networkError = e;
+        } on TimeoutException catch (e) {
+          networkError = e;
+        }
+        await Future<void>.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+      }
+      if (response == null) {
+        throw FormatException(
+          'Sem conexão com ${google ? 'o Google' : 'a Microsoft'} para concluir o login '
+          '(${networkError.runtimeType}). Verifique a internet e tente de novo.',
+        );
+      }
+      if (response.statusCode != 200) {
+        try {
+          final body = jsonDecode(response.body);
+          failure = '${body['error'] ?? response.statusCode}';
+        } catch (_) {
+          failure = '${response.statusCode}';
+        }
+        return null;
+      }
       final data = jsonDecode(response.body);
       final value = data['access_token'] as String;
       String? newRefresh;
@@ -395,13 +445,21 @@ class LibrarySources {
         throw const FormatException('Não foi possível abrir o navegador.');
       }
       final code = await result.future.timeout(const Duration(minutes: 3));
+      // O código chega enquanto o navegador ainda está na frente. Em
+      // aparelhos recentes (Android 14+, Samsung) o app em segundo plano
+      // pode ficar sem rede: espera voltar ao primeiro plano antes de trocar
+      // o código pelo acesso.
+      await _waitForeground();
       return await exchange({
             'grant_type': 'authorization_code',
             'code': code,
             'code_verifier': verifier,
             'redirect_uri': redirect,
           }) ??
-          (throw const FormatException('A conta não autorizou o acesso.'));
+          (throw FormatException(
+            'A conta não autorizou o acesso'
+            '${failure == null ? '' : ' ($failure)'}. Tente entrar de novo.',
+          ));
     } finally {
       await server.close(force: true);
     }
@@ -556,7 +614,7 @@ class LibrarySources {
         if (response.statusCode != 200) {
           _tokens.remove(src);
           throw const FormatException(
-            'Não foi possível abrir a pasta. Verifique a conta e tente novamente.',
+            'Não foi possível abrir a pasta. Verifique a conta e a permissão de acesso ao Drive.',
           );
         }
         final data = jsonDecode(utf8.decode(response.bodyBytes));

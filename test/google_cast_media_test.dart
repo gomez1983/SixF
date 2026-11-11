@@ -106,6 +106,10 @@ void main() {
     expect(commands.last['mediaSessionId'], 42);
     await cast.command('SEEK', currentTime: 12.5);
     expect(commands.last['currentTime'], 12.5);
+    expect(commands.last.containsKey('resumeState'), isFalse);
+    // Repetir: o salto ao início pede para continuar tocando.
+    await cast.command('SEEK', currentTime: 0, resumeState: 'PLAYBACK_START');
+    expect(commands.last['resumeState'], 'PLAYBACK_START');
     await cast.refresh();
     expect(commands.last['type'], 'GET_STATUS');
     await cast.reload();

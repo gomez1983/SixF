@@ -77,7 +77,11 @@ class SimulatedCast extends GoogleCastMedia {
   }
 
   @override
-  Future<void> command(String type, {double? currentTime}) async {
+  Future<void> command(
+    String type, {
+    double? currentTime,
+    String? resumeState,
+  }) async {
     commands.add('$type:$currentTime');
     if (type == 'SEEK' && pendingSeek != null) await pendingSeek!.future;
     if (type == 'SEEK' && rejectSeek) throw StateError('Recusado');
