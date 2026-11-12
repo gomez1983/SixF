@@ -19,7 +19,7 @@ class ActiveDeviceCard extends StatelessWidget {
     final controller = context.watch<RemoteController>();
     final device = controller.activeDevice;
     final dark = AppColors.isDark(context);
-    final ink = dark ? Colors.white : const Color(0xFF22345A);
+    final ink = dark ? Colors.white : const Color(0xFF2A2A29);
     final connected = controller.isConnected;
     final status = connected
         ? 'Conectado'
@@ -36,12 +36,12 @@ class ActiveDeviceCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: dark
-              ? const [Color(0xFF1D2638), Color(0xFF2B3C5C), Color(0xFF4A6AA3), Color(0xFF7E9ED6)]
-              : const [Color(0xFFF4F6F9), Color(0xFFDFE5EE), Color(0xFF9FB0CC), Color(0xFF3D5A8C)],
+              ? const [Color(0xFF232322), Color(0xFF333332), Color(0xFF545451), Color(0xFF8A8A85)]
+              : const [Color(0xFFF4F4F2), Color(0xFFDADAD6), Color(0xFF8E8E89), Color(0xFF414140)],
           stops: const [0, 0.32, 0.66, 1],
         ),
         boxShadow: const [
-          BoxShadow(color: Color(0x2E283C64), blurRadius: 30, offset: Offset(0, 14)),
+          BoxShadow(color: Color(0x40282826), blurRadius: 30, offset: Offset(0, 14)),
         ],
       ),
       child: Stack(

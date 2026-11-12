@@ -152,7 +152,7 @@ class RemoteButton extends StatelessWidget {
                   ? AppColors.circleOf(context)
                   : AppColors.surfaceInteractiveOf(context));
     final fg = isSelected && !kGlassUi
-        ? Colors.white
+        ? AppColors.onAccentOf(context)
         : foregroundColor ?? AppColors.textPrimaryOf(context);
     final border = isSelected && !kGlassUi
         ? Colors.transparent

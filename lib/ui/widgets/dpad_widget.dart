@@ -210,7 +210,7 @@ class DPadWidget extends StatelessWidget {
                   isCircular: true,
                   backgroundColor: AppColors.accentFillOf(context),
                   borderColor: Colors.transparent,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onAccentOf(context),
                   label: 'OK',
                   tooltip: 'Confirmar / OK (Enter ou Espaço)',
                   onPressed: () => controller.dpadOk(),

@@ -911,7 +911,7 @@ class _NetworkDrawerState extends State<NetworkDrawer> {
                             ),
                             if (device.isDefault) ...[
                               const SizedBox(width: 4),
-                              Icon(Icons.star_rounded, size: 12, color: Colors.amber.shade400),
+                              Icon(Icons.star_rounded, size: 12, color: highlight),
                             ],
                           ],
                         ),

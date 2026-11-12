@@ -505,11 +505,11 @@ class _RemoteViewState extends State<RemoteView> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 15, color: Colors.white),
+              Icon(icon, size: 15, color: AppColors.onAccentOf(context)),
               const SizedBox(width: 7),
               Text(
                 label,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                style: TextStyle(color: AppColors.onAccentOf(context), fontSize: 12),
               ),
             ],
           ),
@@ -940,7 +940,7 @@ class _RemoteViewState extends State<RemoteView> {
       child: Icon(
         icon,
         size: size * 0.44,
-        color: active ? Colors.white : AppColors.textMutedOf(context),
+        color: active ? AppColors.onAccentOf(context) : AppColors.textMutedOf(context),
       ),
     );
   }
@@ -1203,14 +1203,14 @@ class _RemoteViewState extends State<RemoteView> {
           height: 64,
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            color: dark ? const Color(0xF21A2232) : const Color(0xF2FFFFFF),
+            color: dark ? const Color(0xF21A1A19) : const Color(0xF2FAFAF9),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: dark ? const Color(0x14FFFFFF) : const Color(0xE6FFFFFF),
             ),
             boxShadow: [
               BoxShadow(
-                color: dark ? const Color(0x66000000) : const Color(0x1F1E2D50),
+                color: dark ? const Color(0x80000000) : const Color(0x26282826),
                 blurRadius: 30,
                 offset: const Offset(0, 12),
               ),
@@ -1241,7 +1241,7 @@ class _RemoteViewState extends State<RemoteView> {
                             item.icon,
                             size: 18,
                             color: _selectedTabIndex == item.index
-                                ? Colors.white
+                                ? AppColors.onAccentOf(context)
                                 : AppColors.textMutedOf(context),
                           ),
                         ),

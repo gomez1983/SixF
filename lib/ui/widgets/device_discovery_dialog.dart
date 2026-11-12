@@ -317,14 +317,14 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                         alpha: 0.12,
                                       )
                                     : isThisTvPairing
-                                    ? Colors.amber.withValues(alpha: 0.1)
+                                    ? AppColors.iconHighlightOf(context).withValues(alpha: 0.1)
                                     : AppColors.surfaceCardOf(context),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: isThisTvConnected
                                       ? AppColors.statusConnected
                                       : isThisTvPairing
-                                      ? Colors.amber.withValues(alpha: 0.6)
+                                      ? AppColors.iconHighlightOf(context).withValues(alpha: 0.6)
                                       : AppColors.borderSubtleOf(context),
                                   width: isThisTvConnected || isThisTvPairing
                                       ? 1.5
@@ -344,7 +344,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                               ? AppColors.statusConnected
                                                     .withValues(alpha: 0.2)
                                               : isThisTvPairing
-                                              ? Colors.amber.withValues(
+                                              ? AppColors.iconHighlightOf(context).withValues(
                                                   alpha: 0.2,
                                                 )
                                               : AppColors.surfaceInteractiveOf(
@@ -359,7 +359,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                           color: isThisTvConnected
                                               ? AppColors.statusConnected
                                               : isThisTvPairing
-                                              ? Colors.amber
+                                              ? AppColors.iconHighlightOf(context)
                                               : AppColors.iconHighlightOf(
                                                   context,
                                                 ),
@@ -535,19 +535,19 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.amber.withValues(
+                                            color: AppColors.iconHighlightOf(context).withValues(
                                               alpha: 0.15,
                                             ),
                                             borderRadius: BorderRadius.circular(
                                               6,
                                             ),
                                             border: Border.all(
-                                              color: Colors.amber.withValues(
+                                              color: AppColors.iconHighlightOf(context).withValues(
                                                 alpha: 0.4,
                                               ),
                                             ),
                                           ),
-                                          child: const Row(
+                                          child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               SizedBox(
@@ -556,7 +556,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                                 child:
                                                     CircularProgressIndicator(
                                                       strokeWidth: 2,
-                                                      color: Colors.amber,
+                                                      color: AppColors.iconHighlightOf(context),
                                                     ),
                                               ),
                                               SizedBox(width: 6),
@@ -565,7 +565,7 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.amber,
+                                                  color: AppColors.iconHighlightOf(context),
                                                 ),
                                               ),
                                             ],
@@ -613,22 +613,22 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                         vertical: 8,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.amber.withValues(
+                                        color: AppColors.iconHighlightOf(context).withValues(
                                           alpha: 0.12,
                                         ),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
-                                          color: Colors.amber.withValues(
+                                          color: AppColors.iconHighlightOf(context).withValues(
                                             alpha: 0.3,
                                           ),
                                         ),
                                       ),
                                       child: Row(
                                         children: [
-                                          const Icon(
+                                          Icon(
                                             Icons.touch_app_rounded,
                                             size: 16,
-                                            color: Colors.amber,
+                                            color: AppColors.iconHighlightOf(context),
                                           ),
                                           const SizedBox(width: 8),
                                           Expanded(
@@ -638,10 +638,10 @@ class _DeviceDiscoveryDialogState extends State<DeviceDiscoveryDialog> {
                                                   : tv.brand == TvBrand.samsungTizen
                                                   ? 'Olhe para a tela da TV Samsung e selecione "Permitir" usando o controle remoto.'
                                                   : 'Confirme a permissão de conexão na tela da TV.',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.amber,
+                                                color: AppColors.iconHighlightOf(context),
                                               ),
                                             ),
                                           ),

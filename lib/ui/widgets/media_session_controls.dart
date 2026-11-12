@@ -15,12 +15,89 @@ class MediaSessionControls extends StatelessWidget {
     this.enabled = true,
     this.showTransportControls = true,
     this.showPlaybackModes = true,
+    this.showTrackButtons = true,
   });
   final MediaCastController controller;
   final bool showTimeline;
   final bool enabled;
   final bool showTransportControls;
   final bool showPlaybackModes;
+
+  /// Botões Legenda/Áudio abaixo da linha do tempo. O visualizador da Mídia
+  /// os desliga e usa [trackIconButtons] na própria linha de transporte, para
+  /// não gastar uma linha inteira de altura.
+  final bool showTrackButtons;
+
+  /// Legenda e Áudio da transmissão como botões só de ícone, para entrar na
+  /// linha de transporte do visualizador. Mesma escolha com confirmação.
+  static List<Widget> trackIconButtons(
+    BuildContext context,
+    MediaCastController c,
+  ) {
+    void pick({
+      required String title,
+      required List<MediaTrack> tracks,
+      required MediaTrack? selected,
+      required Future<void> Function(MediaTrack?) onConfirm,
+    }) => showTrackPickerDialog<MediaTrack>(
+      context,
+      title: title,
+      tracks: tracks,
+      selected: selected,
+      labelOf: (t) => t.title,
+      detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+      onConfirm: onConfirm,
+    );
+    return [
+      MediaTrackButton(
+        iconOnly: true,
+        icon: Icons.subtitles_outlined,
+        activeIcon: Icons.subtitles_rounded,
+        label: 'Legenda',
+        selectedTitle: c.selectedSubtitleTrack?.title,
+        tooltip: c.selectedSubtitleTrack != null
+            ? 'Legenda: ${c.selectedSubtitleTrack!.title}'
+            : 'Legendas embutidas',
+        onPressed: c.isStreaming
+            ? () => pick(
+                title: 'Legendas',
+                tracks: c.subtitleTracks,
+                selected: c.selectedSubtitleTrack,
+                onConfirm: c.selectSubtitleTrack,
+              )
+            : null,
+      ),
+      MediaTrackButton(
+        iconOnly: true,
+        icon: Icons.audiotrack_outlined,
+        activeIcon: Icons.audiotrack_rounded,
+        label: 'Áudio',
+        selectedTitle: c.selectedAudioTrack?.title,
+        tooltip: c.selectedAudioTrack != null
+            ? 'Áudio: ${c.selectedAudioTrack!.title}'
+            : 'Faixa de áudio',
+        onPressed: c.isStreaming
+            ? () => pick(
+                title: 'Faixas de Áudio',
+                tracks: c.audioTracks,
+                selected: c.selectedAudioTrack,
+                onConfirm: c.selectAudioTrack,
+              )
+            : null,
+      ),
+      if (c.selectedSubtitleTrack != null &&
+          c.transport == MediaCastTransport.cast)
+        IconButton(
+          tooltip: 'Sincronia da legenda',
+          icon: const Icon(Icons.sync_alt_rounded, size: 20),
+          onPressed: c.canAdjustSubtitleOffset
+              ? () =>
+                    MediaSessionControls(controller: c)
+                        ._showSubtitleSync(context)
+              : null,
+        ),
+    ];
+  }
 
   void _showSubtitleSync(BuildContext context) {
     showDialog<void>(
@@ -169,6 +246,7 @@ class MediaSessionControls extends StatelessWidget {
                       IconButton(
                         tooltip: 'Repetir arquivo',
                         isSelected: enabled && c.isLooping,
+                        style: modeToggleStyle(context, enabled && c.isLooping),
                         onPressed: enabled && (c.canLoop || c.isLooping)
                             ? c.toggleLoop
                             : null,
@@ -178,6 +256,10 @@ class MediaSessionControls extends StatelessWidget {
                       IconButton(
                         tooltip: 'Ordem aleatória dos arquivos selecionados',
                         isSelected: enabled && c.isShuffling,
+                        style: modeToggleStyle(
+                          context,
+                          enabled && c.isShuffling,
+                        ),
                         onPressed: enabled && c.canShuffle
                             ? c.toggleShuffle
                             : null,
@@ -226,25 +308,27 @@ class MediaSessionControls extends StatelessWidget {
                             icon: const Icon(Icons.replay_10),
                             label: const Text('−10 s'),
                           ),
-                        MediaTrackButton(
-                          icon: Icons.subtitles_outlined,
-                          activeIcon: Icons.subtitles_rounded,
-                          label: 'Legenda',
-                          selectedTitle: c.selectedSubtitleTrack?.title,
-                          tooltip: c.selectedSubtitleTrack != null
-                              ? 'Legenda: ${c.selectedSubtitleTrack!.title}'
-                              : 'Legendas embutidas',
-                          onPressed: c.isStreaming
-                              ? () => _showTracksDialog(
-                                  context,
-                                  title: 'Legendas',
-                                  tracks: subtitles,
-                                  selected: c.selectedSubtitleTrack,
-                                  onConfirm: c.selectSubtitleTrack,
-                                )
-                              : null,
-                        ),
-                        if (c.selectedSubtitleTrack != null &&
+                        if (showTrackButtons)
+                          MediaTrackButton(
+                            icon: Icons.subtitles_outlined,
+                            activeIcon: Icons.subtitles_rounded,
+                            label: 'Legenda',
+                            selectedTitle: c.selectedSubtitleTrack?.title,
+                            tooltip: c.selectedSubtitleTrack != null
+                                ? 'Legenda: ${c.selectedSubtitleTrack!.title}'
+                                : 'Legendas embutidas',
+                            onPressed: c.isStreaming
+                                ? () => _showTracksDialog(
+                                    context,
+                                    title: 'Legendas',
+                                    tracks: subtitles,
+                                    selected: c.selectedSubtitleTrack,
+                                    onConfirm: c.selectSubtitleTrack,
+                                  )
+                                : null,
+                          ),
+                        if (showTrackButtons &&
+                            c.selectedSubtitleTrack != null &&
                             c.transport == MediaCastTransport.cast)
                           IconButton(
                             tooltip: 'Sincronia da legenda',
@@ -253,24 +337,25 @@ class MediaSessionControls extends StatelessWidget {
                                 ? () => _showSubtitleSync(context)
                                 : null,
                           ),
-                        MediaTrackButton(
-                          icon: Icons.audiotrack_outlined,
-                          activeIcon: Icons.audiotrack_rounded,
-                          label: 'Áudio',
-                          selectedTitle: c.selectedAudioTrack?.title,
-                          tooltip: c.selectedAudioTrack != null
-                              ? 'Áudio: ${c.selectedAudioTrack!.title}'
-                              : 'Faixa de áudio',
-                          onPressed: c.isStreaming
-                              ? () => _showTracksDialog(
-                                  context,
-                                  title: 'Faixas de Áudio',
-                                  tracks: audios,
-                                  selected: c.selectedAudioTrack,
-                                  onConfirm: c.selectAudioTrack,
-                                )
-                              : null,
-                        ),
+                        if (showTrackButtons)
+                          MediaTrackButton(
+                            icon: Icons.audiotrack_outlined,
+                            activeIcon: Icons.audiotrack_rounded,
+                            label: 'Áudio',
+                            selectedTitle: c.selectedAudioTrack?.title,
+                            tooltip: c.selectedAudioTrack != null
+                                ? 'Áudio: ${c.selectedAudioTrack!.title}'
+                                : 'Faixa de áudio',
+                            onPressed: c.isStreaming
+                                ? () => _showTracksDialog(
+                                    context,
+                                    title: 'Faixas de Áudio',
+                                    tracks: audios,
+                                    selected: c.selectedAudioTrack,
+                                    onConfirm: c.selectAudioTrack,
+                                  )
+                                : null,
+                          ),
                         if (showTransportControls && c.hasProgress)
                           TextButton.icon(
                             onPressed: c.canSeek
@@ -502,9 +587,18 @@ void showTrackPickerDialog<T>(
   );
 }
 
+/// Estilo dos botões Repetir e Aleatório: ligados ficam num círculo sólido
+/// no destaque do tema (grafite no claro), para o estado ser visível.
+ButtonStyle modeToggleStyle(BuildContext context, bool on) =>
+    IconButton.styleFrom(
+      backgroundColor: on ? AppColors.accentFillOf(context) : null,
+      foregroundColor: on ? AppColors.onAccentOf(context) : null,
+    );
+
 /// Botão rotulado de faixa de mídia ("Legenda" / "Áudio"). Abre a lista de
 /// faixas; a escolha só vale depois de confirmada no diálogo. Com uma faixa
 /// ativa, o rótulo passa a ser o nome dela e o botão fica em destaque.
+/// Com [iconOnly], vira um botão redondo só de ícone (linha de transporte).
 class MediaTrackButton extends StatelessWidget {
   const MediaTrackButton({
     super.key,
@@ -514,6 +608,7 @@ class MediaTrackButton extends StatelessWidget {
     required this.tooltip,
     this.selectedTitle,
     this.onPressed,
+    this.iconOnly = false,
   });
 
   final IconData icon;
@@ -522,10 +617,21 @@ class MediaTrackButton extends StatelessWidget {
   final String tooltip;
   final String? selectedTitle;
   final VoidCallback? onPressed;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
     final active = selectedTitle != null;
+    if (iconOnly) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(active ? activeIcon : icon),
+        style: IconButton.styleFrom(
+          backgroundColor: active ? AppColors.accentSoftOf(context) : null,
+        ),
+      );
+    }
     final color = active
         ? AppColors.iconHighlightOf(context)
         : AppColors.textPrimaryOf(context);

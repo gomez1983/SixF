@@ -166,7 +166,7 @@ class DeviceSelectorBar extends StatelessWidget {
               Icon(
                 Icons.star_rounded,
                 size: 13,
-                color: Colors.amber.shade400,
+                color: AppColors.iconHighlightOf(context),
               ),
             ],
           ],
@@ -322,7 +322,7 @@ class DeviceSelectorBar extends StatelessWidget {
                 // Definir como padrão
                 if (!device.isDefault)
                   ListTile(
-                    leading: const Icon(Icons.star_outline_rounded, color: Colors.amber),
+                    leading: Icon(Icons.star_outline_rounded, color: AppColors.iconHighlightOf(context)),
                     title: const Text('Definir como aparelho principal'),
                     onTap: () {
                       Navigator.of(modalContext).pop();

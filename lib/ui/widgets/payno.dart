@@ -36,12 +36,18 @@ class PaynoBackdrop extends StatelessWidget {
                   ),
                 );
             final base = w < h ? w : h;
+            final dark = AppColors.isDark(context);
+            // Padrão ZIXO: halo claro no topo e dois halos difusos da paleta
+            // (verde à direita, vermelho embaixo à esquerda), bem sutis.
+            final green = AppColors.zixoGreen.withValues(alpha: dark ? 0.06 : 0.07);
+            final red = AppColors.zixoRed.withValues(alpha: dark ? 0.05 : 0.06);
             return Stack(
               clipBehavior: Clip.hardEdge,
               children: [
-                blob(w * 0.38, h * 0.04, base * 1.25, primary),
+                blob(w * 0.5, -h * 0.06, base * 1.5, primary),
                 blob(w * 0.66, -h * 0.02, base * 0.95, secondary),
-                blob(w * 0.12, -h * 0.04, base * 0.8, secondary),
+                blob(w * 1.02, h * 0.45, base * 1.1, green),
+                blob(-w * 0.02, h * 0.95, base * 1.1, red),
               ],
             );
           },
@@ -184,8 +190,8 @@ class PaynoHatchedBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = AppColors.isDark(context)
-        ? const Color(0xFF86A5DC)
-        : const Color(0xFF4A6698);
+        ? AppColors.iconHighlight
+        : AppColors.lightIconHighlight;
     return Container(
       height: height,
       decoration: BoxDecoration(
@@ -256,7 +262,7 @@ class PaynoActionCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? Colors.white : AppColors.textPrimaryOf(context);
+    final fg = filled ? AppColors.onAccentOf(context) : AppColors.textPrimaryOf(context);
     Widget circle = Material(
       color: filled ? AppColors.accentFillOf(context) : AppColors.circleOf(context),
       shape: CircleBorder(
@@ -322,7 +328,7 @@ class PaynoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = selected
-        ? Colors.white
+        ? AppColors.onAccentOf(context)
         : accent
         ? AppColors.iconHighlightOf(context)
         : AppColors.textMutedOf(context);

@@ -522,7 +522,7 @@ class _SlotPickerSheetState extends State<_SlotPickerSheet> {
           : Icon(
               icon,
               size: 16,
-              color: selected ? Colors.white : AppColors.textMutedOf(context),
+              color: selected ? AppColors.onAccentOf(context) : AppColors.textMutedOf(context),
             ),
       selected: selected,
       showCheckmark: false,
@@ -535,7 +535,7 @@ class _SlotPickerSheetState extends State<_SlotPickerSheet> {
       ),
       labelStyle: TextStyle(
         fontSize: 12,
-        color: selected ? Colors.white : AppColors.textPrimaryOf(context),
+        color: selected ? AppColors.onAccentOf(context) : AppColors.textPrimaryOf(context),
       ),
       visualDensity: VisualDensity.compact,
       onSelected: (_) => setState(() => _choice = value),

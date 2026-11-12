@@ -178,7 +178,7 @@ class VolumeChannelControls extends StatelessWidget {
         child: Icon(
           locked ? Icons.lock_open_rounded : Icons.mic_rounded,
           size: round * 0.44,
-          color: Colors.white,
+          color: AppColors.onAccentOf(context),
         ),
       ),
     );

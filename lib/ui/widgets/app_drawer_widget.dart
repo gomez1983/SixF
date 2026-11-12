@@ -471,7 +471,7 @@ class _AppDrawerWidgetState extends State<AppDrawerWidget> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentFillOf(context),
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onAccentOf(context),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

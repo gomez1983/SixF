@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../glass/glass_flags.dart';
 import '../glass/liquid_glass.dart' show GlassTokens;
 import 'app_colors.dart';
+
+/// Família de fonte única do app (arquivos em assets/Fonts, declarada no
+/// pubspec.yaml). Pesos 300–800, sem itálico.
+const String kAppFontFamily = 'OpenSans';
 
 /// Configuração do ThemeData para o aplicativo Desktop com estética Fluent/Flat
 /// suportando Modo Escuro (Dark Mode) e Modo Claro (Light Mode).
@@ -14,12 +18,13 @@ class AppTheme {
   static ThemeData get lightTheme =>
       kGlassUi ? _glassify(_light) : _payno(_light);
 
-  /// Padrão Payno: cantos bem arredondados, azul-marinho como cor primária e
+  /// Padrão ZIXO: cantos bem arredondados, grafite como cor primária e
   /// componentes do Material (diálogos, chips, menus, botões) sem sombras
   /// duras, para telas e diálogos comuns seguirem o mesmo visual.
   static ThemeData _payno(ThemeData base) {
     final dark = base.brightness == Brightness.dark;
     final accent = dark ? AppColors.accentFill : AppColors.lightAccentFill;
+    final onAccent = dark ? AppColors.onAccentFill : AppColors.lightOnAccentFill;
     final surface = dark ? AppColors.remoteChassis : AppColors.lightRemoteChassis;
     final line = dark ? AppColors.borderSubtle : AppColors.lightBorderSubtle;
     final ink = dark ? AppColors.textPrimary : AppColors.lightTextPrimary;
@@ -40,12 +45,12 @@ class AppTheme {
       // e sempre leva conteúdo branco.
       colorScheme: base.colorScheme.copyWith(
         primary: accent,
-        onPrimary: Colors.white,
+        onPrimary: onAccent,
         secondary: dark ? AppColors.iconHighlight : AppColors.lightIconHighlight,
-        onSecondary: dark ? AppColors.background : Colors.white,
-        primaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE3E9F3),
+        onSecondary: onAccent,
+        primaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE9E9E7),
         onPrimaryContainer: ink,
-        secondaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE3E9F3),
+        secondaryContainer: dark ? AppColors.surfaceElevated : const Color(0xFFE9E9E7),
         onSecondaryContainer: ink,
         tertiaryContainer: key,
         onTertiaryContainer: ink,
@@ -88,7 +93,7 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: accent,
-          foregroundColor: Colors.white,
+          foregroundColor: onAccent,
           shape: shape(999, border: false),
         ),
       ),
@@ -108,18 +113,20 @@ class AppTheme {
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: key,
         selectedColor: accent,
-        checkmarkColor: Colors.white,
+        checkmarkColor: onAccent,
         surfaceTintColor: Colors.transparent,
         side: BorderSide(color: line),
         shape: const StadiumBorder(),
         labelStyle: TextStyle(color: ink, fontSize: 12),
-        secondaryLabelStyle: const TextStyle(color: Colors.white, fontSize: 12),
+        secondaryLabelStyle: TextStyle(color: onAccent, fontSize: 12),
       ),
       switchTheme: SwitchThemeData(
         trackColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? accent : key,
         ),
-        thumbColor: const WidgetStatePropertyAll(Colors.white),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? onAccent : Colors.white,
+        ),
         trackOutlineColor: WidgetStatePropertyAll(line),
       ),
       sliderTheme: base.sliderTheme.copyWith(
@@ -136,7 +143,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
-      fontFamily: 'Segoe UI',
+      fontFamily: kAppFontFamily,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.lgRed,
         secondary: AppColors.iconHighlight,
@@ -223,7 +230,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.lightBackground,
-      fontFamily: 'Segoe UI',
+      fontFamily: kAppFontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.lgRed,
         secondary: AppColors.lightIconHighlight,

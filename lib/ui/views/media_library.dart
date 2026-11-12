@@ -644,7 +644,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
     backgroundColor: active
         ? AppColors.accentFillOf(context)
         : AppColors.surfaceInteractiveOf(context),
-    foregroundColor: active ? Colors.white : AppColors.textPrimaryOf(context),
+    foregroundColor: active
+        ? AppColors.onAccentOf(context)
+        : AppColors.textPrimaryOf(context),
   );
 
   Widget _buildViewModeToggleButton() {
@@ -1412,9 +1414,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 builder: (context) {
                   final item = tabs[i];
                   final isActive = tab == item.index;
-                  // Padrão Payno: a seção ativa em azul-marinho sólido.
+                  // Padrão ZIXO: a seção ativa no destaque sólido (grafite no claro).
                   final textColor = isActive
-                      ? Colors.white
+                      ? AppColors.onAccentOf(context)
                       : (isDark
                             ? AppColors.textSecondary
                             : AppColors.lightTextSecondary);
@@ -1990,10 +1992,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
                                   ),
                                 ),
                                 child: isItemMultiSelected
-                                    ? const Icon(
+                                    ? Icon(
                                         Icons.check,
                                         size: 10,
-                                        color: Colors.white,
+                                        color: AppColors.onAccentOf(context),
                                       )
                                     : null,
                               ),
@@ -2029,6 +2031,26 @@ class _MediaLibraryState extends State<MediaLibrary> {
         ),
       ),
     );
+  }
+
+  /// Entrada em tela cheia do player embutido sem travar a orientação.
+  /// No celular só esconde as barras do sistema (o vídeo segue a orientação
+  /// em que o aparelho já está e só gira quando o aparelho girar); no
+  /// desktop mantém a tela cheia nativa da janela. A saída usa o padrão do
+  /// media_kit, que libera todas as orientações e devolve as barras.
+  static Future<void> _enterFullscreenKeepingOrientation() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      try {
+        await SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.immersiveSticky,
+          overlays: [],
+        );
+      } catch (_) {
+        // Sem barras escondidas o vídeo continua em tela cheia; não é fatal.
+      }
+      return;
+    }
+    await defaultEnterNativeFullscreen();
   }
 
   /// Caixa de visualização grande do carrossel (foto com zoom ou miniatura expandida do vídeo)
@@ -2106,6 +2128,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
               // o vídeo fica sem sobreposição e usa os botões do painel ao lado.
               controls: height < 96 ? NoVideoControls : AdaptiveVideoControls,
               fill: Colors.black,
+              // Tela cheia mantém a orientação do aparelho: em pé continua em
+              // pé, deitado continua deitado. O padrão do media_kit travava
+              // em paisagem no celular.
+              onEnterFullscreen: _enterFullscreenKeepingOrientation,
             ),
           ),
           if (current.isAudio)
@@ -2454,7 +2480,6 @@ class _MediaLibraryState extends State<MediaLibrary> {
               current,
               highlight,
             ),
-            _buildLocalTrackButtons(current),
             if (isTv && cast != null && isStreamingToTarget)
               MediaSessionControls(
                 controller: cast,
@@ -2462,6 +2487,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 showTimeline: true,
                 showTransportControls: false,
                 showPlaybackModes: false,
+                showTrackButtons: false,
               ),
           ],
         ],
@@ -2489,7 +2515,6 @@ class _MediaLibraryState extends State<MediaLibrary> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildTransportRow(tv, cast, isStreamingToTarget, current, highlight),
-          _buildLocalTrackButtons(current),
           if (isTv && cast != null && isStreamingToTarget)
             MediaSessionControls(
               controller: cast,
@@ -2497,6 +2522,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
               showTimeline: true,
               showTransportControls: false,
               showPlaybackModes: false,
+              showTrackButtons: false,
             ),
         ],
       ),
@@ -2567,7 +2593,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
           tooltip: tip,
           isSelected: on,
           onPressed: onTap,
-          icon: Icon(icon, color: on ? highlight : null),
+          style: modeToggleStyle(context, on),
+          icon: Icon(icon),
         );
 
     return FittedBox(
@@ -2614,6 +2641,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
           const SizedBox(width: 6),
           mode('Repetir vídeo', Icons.repeat_rounded, repeatOn, onRepeat),
           mode('Ordem aleatória', Icons.shuffle_rounded, shuffleOn, onShuffle),
+          // Legenda e Áudio na mesma linha, só com ícone: a prévia do vídeo
+          // não perde a altura de uma linha extra.
+          if (isTv && cast != null && isStreamingToTarget) ...[
+            const SizedBox(width: 6),
+            ...MediaSessionControls.trackIconButtons(context, cast),
+          ] else
+            _buildLocalTrackButtons(current, iconOnly: true),
         ],
       ),
     );
@@ -2636,8 +2670,12 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
   /// Botões "Legenda" e "Áudio" do vídeo que toca neste aparelho. Mesmo
   /// padrão da transmissão para a TV: abre a lista, seleciona e confirma.
-  /// Só aparecem para vídeo carregado no player embutido.
-  Widget _buildLocalTrackButtons(LibraryEntry current) {
+  /// Só aparecem para vídeo carregado no player embutido. Com [iconOnly],
+  /// viram dois botões só de ícone dentro da linha de transporte.
+  Widget _buildLocalTrackButtons(
+    LibraryEntry current, {
+    bool iconOnly = false,
+  }) {
     final player = _localPlayer;
     if (player == null || !current.isVideo || !_isPlayingHere(current)) {
       return const SizedBox.shrink();
@@ -2661,13 +2699,16 @@ class _MediaLibraryState extends State<MediaLibrary> {
           final selAudio = audios.where((t) => t.id == curAudio.id).firstOrNull;
           return Padding(
             key: const ValueKey('local-track-buttons'),
-            padding: const EdgeInsets.only(top: 4),
+            padding: iconOnly
+                ? const EdgeInsets.only(left: 6)
+                : const EdgeInsets.only(top: 4),
             child: Wrap(
               alignment: WrapAlignment.center,
               spacing: 6,
               runSpacing: 4,
               children: [
                 MediaTrackButton(
+                  iconOnly: iconOnly,
                   icon: Icons.subtitles_outlined,
                   activeIcon: Icons.subtitles_rounded,
                   label: 'Legenda',
@@ -2685,12 +2726,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     tracks: subs,
                     selected: selSub,
                     labelOf: (t) => _localTrackLabel(t.id, t.title, t.language),
-                    detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+                    detailOf: (t) =>
+                        t.codec != null ? 'Codec: ${t.codec}' : null,
                     onConfirm: (t) =>
                         player.setSubtitleTrack(t ?? SubtitleTrack.no()),
                   ),
                 ),
                 MediaTrackButton(
+                  iconOnly: iconOnly,
                   icon: Icons.audiotrack_outlined,
                   activeIcon: Icons.audiotrack_rounded,
                   label: 'Áudio',
@@ -2708,7 +2751,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     tracks: audios,
                     selected: selAudio,
                     labelOf: (t) => _localTrackLabel(t.id, t.title, t.language),
-                    detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+                    detailOf: (t) =>
+                        t.codec != null ? 'Codec: ${t.codec}' : null,
                     onConfirm: (t) =>
                         player.setAudioTrack(t ?? AudioTrack.auto()),
                   ),
@@ -2905,7 +2949,6 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     current,
                     highlight,
                   ),
-                  _buildLocalTrackButtons(current),
                   if (isTv && cast != null && isStreamingToTarget)
                     MediaSessionControls(
                       controller: cast,
@@ -2913,6 +2956,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                       showTimeline: true,
                       showTransportControls: false,
                       showPlaybackModes: false,
+                      showTrackButtons: false,
                     ),
                 ],
                 const SizedBox(height: 6),
@@ -3148,8 +3192,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: tv.isConnected
-                            ? const Color(0xFF22C55E)
-                            : const Color(0xFFEF4444),
+                            ? AppColors.statusConnected
+                            : AppColors.powerRed,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -3192,13 +3236,17 @@ class _MediaLibraryState extends State<MediaLibrary> {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.12),
+                color: AppColors.accentSoftOf(context),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                border: Border.all(color: AppColors.borderSubtleOf(context)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, color: Colors.amber, size: 16),
+                  Icon(
+                    Icons.info_outline,
+                    color: AppColors.iconHighlightOf(context),
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -3751,7 +3799,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
             ListTile(
               leading: Icon(
                 l.favorite ? Icons.star_rounded : Icons.playlist_play_rounded,
-                color: l.favorite ? Colors.amber : null,
+                color: l.favorite ? AppColors.iconHighlightOf(context) : null,
               ),
               title: Text(l.name),
               subtitle: Text('${l.items.length} itens'),
@@ -3769,7 +3817,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   IconButton(
                     tooltip: 'Favoritar playlist',
                     icon: Icon(l.favorite ? Icons.star : Icons.star_border),
-                    color: l.favorite ? Colors.amber : null,
+                    color: l.favorite
+                        ? AppColors.iconHighlightOf(context)
+                        : null,
                     onPressed: () {
                       setState(() => l.favorite = !l.favorite);
                       save();
@@ -3899,8 +3949,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
   /// Visão de Navegação em Pastas e Arquivos (Locais e Nuvem) com Miniaturas de Fotos e Login Persistente
   // ---------------------------------------------------------------------
-  // Navegação de arquivos (padrão Payno, mockup aprovado em
-  // docs/design/mockups/sixf-midia-mockup.html): caminho em etapas
+  // Navegação de arquivos (padrão ZIXO, mockup aprovado em
+  // docs/design/mockups/sixf-zixo-mockup.html): caminho em etapas
   // clicáveis no topo, fontes como cards, subpastas em cards e arquivos em
   // grade de miniaturas (ou lista), seleção com círculos e barra de ações.
   // ---------------------------------------------------------------------
@@ -4396,7 +4446,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
             child: Icon(
               icon,
               size: size * 0.48,
-              color: active ? Colors.white : AppColors.textPrimaryOf(context),
+              color: active
+                  ? AppColors.onAccentOf(context)
+                  : AppColors.textPrimaryOf(context),
             ),
           ),
         ),
@@ -4406,7 +4458,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
   Widget _typeChip(String id, String label, IconData? icon, int? count) {
     final on = _typeFilter == id;
-    final fg = on ? Colors.white : AppColors.textSecondaryOf(context);
+    final fg = on
+        ? AppColors.onAccentOf(context)
+        : AppColors.textSecondaryOf(context);
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: Material(
@@ -4842,7 +4896,11 @@ class _MediaLibraryState extends State<MediaLibrary> {
               ),
             ),
             child: on
-                ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 14,
+                    color: AppColors.onAccentOf(context),
+                  )
                 : null,
           ),
         ),
@@ -5028,7 +5086,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       Widget? trailing,
     }) {
       final fg = current
-          ? Colors.white
+          ? AppColors.onAccentOf(context)
           : (source
                 ? AppColors.textPrimaryOf(context)
                 : AppColors.textSecondaryOf(context));
@@ -5058,7 +5116,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         Icons.folder_outlined,
                         size: 16,
                         color: current
-                            ? Colors.white
+                            ? AppColors.onAccentOf(context)
                             : AppColors.textMutedOf(context),
                       ),
                     const SizedBox(width: 8),
@@ -5170,11 +5228,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
     );
   }
 
-  /// Barra de ações dos itens selecionados (azul-marinho, padrão Payno):
+  /// Barra de ações dos itens selecionados (destaque sólido, padrão ZIXO):
   /// tocar na TV, adicionar à fila temporária ou criar playlist.
   Widget selectionBar() {
     final count = selected.length;
     final tv = context.read<RemoteController>();
+    final accent = AppColors.accentFillOf(context);
+    final onAccent = AppColors.onAccentOf(context);
     Widget action(
       IconData icon,
       String label,
@@ -5185,7 +5245,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
       return Tooltip(
         message: tooltip,
         child: Material(
-          color: primary ? Colors.white : const Color(0x2EFFFFFF),
+          color: primary ? onAccent : onAccent.withValues(alpha: 0.18),
           shape: const StadiumBorder(),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -5198,20 +5258,14 @@ class _MediaLibraryState extends State<MediaLibrary> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      icon,
-                      size: 16,
-                      color: primary ? AppColors.lightAccentFill : Colors.white,
-                    ),
+                    Icon(icon, size: 16, color: primary ? accent : onAccent),
                     const SizedBox(width: 6),
                     Text(
                       label,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: primary
-                            ? AppColors.lightAccentFill
-                            : Colors.white,
+                        color: primary ? accent : onAccent,
                       ),
                     ),
                   ],
@@ -5247,10 +5301,10 @@ class _MediaLibraryState extends State<MediaLibrary> {
         children: [
           Text(
             '$count ${count == 1 ? 'selecionado' : 'selecionados'}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: onAccent,
             ),
           ),
           Wrap(
@@ -5291,11 +5345,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
               IconButton(
                 tooltip: 'Limpar seleção',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: Colors.white,
-                ),
+                icon: Icon(Icons.close_rounded, size: 18, color: onAccent),
                 onPressed: () => setState(() {
                   selected.clear();
                   _selectAnchor = null;
