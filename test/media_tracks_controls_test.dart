@@ -119,8 +119,10 @@ void main() {
     const detailsMpeg2 = MediaDetails(tracks: [], videoCodec: 'mpeg2video');
     expect(detailsMpeg2.isChromecastVideoCompatible, isFalse);
 
+    // Imagens (webp, png, gif...) não passam por transcodificação de vídeo:
+    // o código as trata como compatíveis de propósito.
     const detailsWebp = MediaDetails(tracks: [], videoCodec: 'webp');
-    expect(detailsWebp.isChromecastVideoCompatible, isFalse);
+    expect(detailsWebp.isChromecastVideoCompatible, isTrue);
 
     const detailsHi10p = MediaDetails(tracks: [], videoCodec: 'h264', videoPixFmt: 'yuv420p10le');
     expect(detailsHi10p.isChromecastVideoCompatible, isFalse);

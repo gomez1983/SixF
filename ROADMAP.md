@@ -36,7 +36,6 @@ Implementado não equivale a homologado em todos os modelos de TV. Consulte `doc
 
 - [ ] Remover a interface experimental Liquid Glass (`lib/ui/glass/`, `lib/main_glass_preview.dart`, `multimedia_controls.dart` e os ramos `kGlassUi` nos widgets), substituída pelo visual ZIXO.
 - [ ] Renomear `payno.dart`/`paynoCardDecoration` para nomes neutros (hoje desenham o visual ZIXO).
-- [ ] Teste `MediaDetails identifica compatibilidade de codecs com decodificador Chromecast` falha: espera `webp` incompatível e recebe compatível. Anterior ao visual ZIXO.
 - [ ] Refresh token do Google Drive/OneDrive em `shared_preferences` sem proteção do sistema operacional; migrar para armazenamento protegido exige nova dependência e aprovação.
 - [ ] Primeiro uso sem cadastro legado predefinido.
 - [ ] Identidade estável de aparelho e armazenamento de credenciais protegido pelo sistema operacional.
