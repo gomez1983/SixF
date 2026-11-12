@@ -20,6 +20,23 @@ class AdbUnavailableException implements Exception {
   String toString() => 'A conexão ADB com o Chromecast não está ativa.';
 }
 
+/// O pareamento está resolvido (ou foi dispensado), mas falta informar a
+/// porta de conexão da tela "Depuração por Wi-Fi". A interface troca de etapa
+/// em vez de tratar como erro de pareamento.
+class AdbConnectionPortException implements Exception {
+  const AdbConnectionPortException({
+    required this.paired,
+    required this.message,
+  });
+
+  /// O pareamento por código foi concluído nesta mesma tentativa.
+  final bool paired;
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Optional, separately authorized ADB channel for installed launcher activities.
 class GoogleTvAppsAdb {
   static final _identities = <String, Future<AdbCrypto>>{};
@@ -99,15 +116,27 @@ class GoogleTvAppsAdb {
         throw StateError('Código de pareamento recusado. Gere um novo na TV.');
       }
     }
+    final pairedNow = pairingPort != null;
     port ??= await discoverPort(host);
     if (port == null) {
-      throw StateError(
-        'Pareado, mas a porta de conexão não foi encontrada. Informe a porta '
-        'mostrada em "Endereço IP e porta" na tela de Depuração por Wi-Fi.',
+      throw AdbConnectionPortException(
+        paired: pairedNow,
+        message: 'O SixF não achou a porta de conexão sozinho.',
       );
     }
     _validate(host, port);
-    final reply = await _command(host, port, identity, 'echo SIXF_ADB_OK');
+    final String reply;
+    try {
+      reply = await _command(host, port, identity, 'echo SIXF_ADB_OK');
+    } on StateError {
+      // Pareou agora e mesmo assim a TV não aceitou: o que falta é a porta de
+      // conexão certa, não um novo pareamento.
+      if (!pairedNow) rethrow;
+      throw const AdbConnectionPortException(
+        paired: true,
+        message: 'A TV não aceitou a conexão nessa porta.',
+      );
+    }
     if (!reply
         .split(RegExp(r'[\r\n]+'))
         .any((line) => line.trim() == 'SIXF_ADB_OK')) {
@@ -139,7 +168,11 @@ class GoogleTvAppsAdb {
         if (!connected) await connection.disconnect();
       }
       if (!connected) {
-        throw StateError('Autorize o SixF na TV e confira a porta ADB.');
+        throw StateError(
+          'A TV recusou a conexão: o SixF ainda não está pareado com ela ou a '
+          'porta de conexão mudou. Pareie com a porta do código e o código de '
+          '6 dígitos.',
+        );
       }
       final shell = await connection.openShell();
       final bytes = <int>[];

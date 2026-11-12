@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -250,8 +251,84 @@ void main() {
             reason:
                 'vídeo tocando: $size, fonte x$scale ${_lastOverflow ?? ''}',
           );
+          // Tela deitada: o visualizador é um card próprio que ocupa a
+          // altura inteira, e o carrossel fica na coluna da direita.
+          if (size.width > size.height) {
+            final viewer = find.byKey(const ValueKey('wide-viewer-card'));
+            final side = find.byKey(const ValueKey('wide-side-card'));
+            expect(viewer, findsOneWidget, reason: '$size');
+            expect(
+              tester.getSize(viewer).height,
+              // O teste monta a biblioteca com AppBar própria (não embutida).
+              greaterThan(size.height - kToolbarHeight - 24),
+              reason: 'visualizador sem a altura inteira em $size',
+            );
+            expect(
+              find.descendant(
+                of: side,
+                matching: find.byKey(const ValueKey('photo-thumbnail-0')),
+              ),
+              findsOneWidget,
+              reason: 'carrossel fora da coluna direita em $size',
+            );
+            expect(
+              find.descendant(
+                of: viewer,
+                matching: find.byKey(const ValueKey('photo-thumbnail-0')),
+              ),
+              findsNothing,
+            );
+          }
         }
       }
+      // Coluna direita baixa (celular deitado): arrastar a lista recolhe o
+      // topo (dados da mídia, carrossel, abas) e a lista ganha a altura toda.
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      tester.view.physicalSize = const Size(915, 412);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final sideCard = find.byKey(const ValueKey('wide-side-card'));
+      final closeButton = find.byTooltip('Fechar visualizador de fotos');
+      final before = tester.getTopLeft(closeButton).dy;
+      final sideRect = tester.getRect(sideCard);
+      final nested = tester.state<NestedScrollViewState>(
+        find.byType(NestedScrollView),
+      );
+      // A lista da aba usa o controle interno do NestedScrollView: é isso
+      // que faz o arrasto da lista recolher o topo antes de rolar a lista.
+      expect(nested.innerController.positions, isNotEmpty);
+      await tester.dragFrom(
+        Offset(sideRect.center.dx, sideRect.top + 30),
+        const Offset(0, -150),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        tester.getTopLeft(closeButton).dy,
+        lessThan(before - 40),
+        reason: 'o topo da coluna direita não recolheu ao rolar',
+      );
+      await tester.dragFrom(
+        Offset(sideRect.center.dx, sideRect.top + 60),
+        const Offset(0, 300),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getTopLeft(closeButton).dy, closeTo(before, 1));
+      expect(tester.takeException(), isNull);
+      // No Windows a lista também precisa herdar o controle interno.
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      tester.view.physicalSize = const Size(916, 412);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final inheritedOnWindows = tester
+          .state<NestedScrollViewState>(find.byType(NestedScrollView))
+          .innerController
+          .positions
+          .isNotEmpty;
+      debugDefaultTargetPlatformOverride = null;
+      expect(inheritedOnWindows, isTrue);
+      await tester.pump();
       tester.platformDispatcher.clearTextScaleFactorTestValue();
       tester.view.physicalSize = const Size(600, 1400);
       await tester.pump();

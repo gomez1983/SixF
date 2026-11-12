@@ -15,6 +15,7 @@ class GoogleTvAdbPanel extends StatefulWidget {
     required this.wasConfigured,
     required this.onConnected,
     this.compact = false,
+    this.configure = GoogleTvAppsAdb.configure,
   });
 
   final String host;
@@ -24,6 +25,15 @@ class GoogleTvAdbPanel extends StatefulWidget {
   final Future<void> Function() onConnected;
   final bool compact;
 
+  /// Pareamento/conexão ADB. Substituível nos testes de widget.
+  final Future<void> Function(
+    String host,
+    int? port, {
+    int? pairingPort,
+    String? code,
+  })
+  configure;
+
   @override
   State<GoogleTvAdbPanel> createState() => _GoogleTvAdbPanelState();
 }
@@ -32,8 +42,15 @@ class _GoogleTvAdbPanelState extends State<GoogleTvAdbPanel> {
   final _pairPort = TextEditingController();
   final _code = TextEditingController();
   final _connPort = TextEditingController();
+  final _connPortFocus = FocusNode();
   bool _busy = false;
-  bool _askConnectionPort = false;
+
+  /// Etapa 2: o pareamento está resolvido e só falta a porta de conexão.
+  /// Enquanto for `false`, a tela mostra apenas os campos do pareamento.
+  bool _needsConnectionPort = false;
+
+  /// O pareamento por código foi concluído nesta tela (aviso de sucesso).
+  bool _pairedNow = false;
   String? _error;
 
   @override
@@ -41,6 +58,7 @@ class _GoogleTvAdbPanelState extends State<GoogleTvAdbPanel> {
     _pairPort.dispose();
     _code.dispose();
     _connPort.dispose();
+    _connPortFocus.dispose();
     super.dispose();
   }
 
@@ -52,40 +70,64 @@ class _GoogleTvAdbPanelState extends State<GoogleTvAdbPanel> {
     try {
       await action();
       await widget.onConnected();
+    } on AdbConnectionPortException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        // Na primeira vez a troca de etapa já explica o que falta; a mensagem
+        // só vira erro se a porta digitada na etapa 2 também falhar.
+        _error = _needsConnectionPort ? e.message : null;
+        _pairedNow = _pairedNow || e.paired;
+        _needsConnectionPort = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _connPortFocus.requestFocus();
+      });
     } catch (e) {
       if (!mounted) return;
-      final text = e.toString().replaceFirst('Bad state: ', '');
-      setState(() {
-        _error = text;
-        if (text.contains('porta de conexão')) _askConnectionPort = true;
-      });
+      setState(() => _error = e.toString().replaceFirst('Bad state: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _connect() => _run(() async {
+  /// Etapa 1: pareia com a porta e o código da janela de pareamento.
+  Future<void> _pair() => _run(() async {
     final pairPort = GoogleTvAppsAdb.parsePort(_pairPort.text);
     final code = _code.text.trim();
-    final connPort = GoogleTvAppsAdb.parsePort(_connPort.text);
-    if (pairPort == null && connPort == null) {
-      throw StateError('Informe a porta exibida na TV.');
+    if (pairPort == null) {
+      throw StateError(
+        'Informe a porta do código. Ela aparece na TV na mesma janela do '
+        'código de 6 dígitos.',
+      );
     }
-    if (pairPort != null && code.length != 6) {
+    if (code.length != 6) {
       throw StateError('Informe os 6 dígitos do código exibido na TV.');
     }
-    await GoogleTvAppsAdb.configure(
+    await widget.configure(
       widget.host,
-      connPort,
+      null,
       pairingPort: pairPort,
-      code: pairPort != null ? code : null,
+      code: code,
     );
   });
 
-  /// Sem novo pareamento: só procura a porta atual (TV já autorizada).
-  Future<void> _retry() => _run(() async {
+  /// Etapa 2: TV já pareada, conecta na porta informada.
+  Future<void> _connectPort() => _run(() async {
     final connPort = GoogleTvAppsAdb.parsePort(_connPort.text);
-    await GoogleTvAppsAdb.configure(widget.host, connPort);
+    if (connPort == null) {
+      throw StateError('Informe a porta de conexão exibida na TV.');
+    }
+    await widget.configure(widget.host, connPort);
+  });
+
+  /// Sem novo pareamento: só procura a porta atual (TV já autorizada).
+  Future<void> _retry() => _run(() => widget.configure(widget.host, null));
+
+  void _backToPairing() => setState(() {
+    _needsConnectionPort = false;
+    _pairedNow = false;
+    _error = null;
+    _connPort.clear();
   });
 
   @override
@@ -139,6 +181,229 @@ class _GoogleTvAdbPanelState extends State<GoogleTvAdbPanel> {
       border: const OutlineInputBorder(),
     );
 
+    final errorText = _error == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: AppColors.powerRed, fontSize: 12),
+            ),
+          );
+
+    Widget spinnerOr(IconData icon) => _busy
+        ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(icon, size: 18);
+
+    // Etapa 2: só a porta de conexão. Os campos do pareamento somem.
+    final connectionStep = <Widget>[
+      Row(
+        children: [
+          Icon(
+            _pairedNow ? Icons.check_circle_rounded : Icons.link_off_rounded,
+            color: _pairedNow ? AppColors.buttonGreen : highlight,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _pairedNow ? 'Pareado com a TV' : 'Falta a porta de conexão',
+              key: const ValueKey('adb-step-connection'),
+              style: TextStyle(
+                color: primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Falta só um número: o SixF não achou a porta de conexão sozinho.',
+        style: TextStyle(color: secondary, fontSize: 12),
+      ),
+      const SizedBox(height: 10),
+      step(
+        1,
+        TextSpan(
+          children: [
+            const TextSpan(text: 'Na TV, volte para a tela '),
+            b('Depuração por Wi-Fi'),
+            const TextSpan(text: ' (feche a janela do código).'),
+          ],
+        ),
+      ),
+      step(
+        2,
+        TextSpan(
+          children: [
+            const TextSpan(text: 'Em '),
+            b('Endereço IP e porta'),
+            const TextSpan(text: ', digite aqui o número depois dos “:”.'),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      TextField(
+        key: const ValueKey('adb-conn-port'),
+        controller: _connPort,
+        focusNode: _connPortFocus,
+        enabled: !_busy,
+        keyboardType: TextInputType.number,
+        decoration: field('Porta de conexão', 'ex.: 46761'),
+        onSubmitted: (_) => _busy ? null : _connectPort(),
+      ),
+      ?errorText,
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _connectPort,
+              icon: spinnerOr(Icons.link_rounded),
+              label: const Text('Conectar'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _busy ? null : _backToPairing,
+            child: const Text('Parear de novo'),
+          ),
+        ],
+      ),
+    ];
+
+    // Etapa 1: só a porta do código e o código.
+    final pairingStep = <Widget>[
+      Row(
+        children: [
+          Icon(Icons.link_off_rounded, color: highlight, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.wasConfigured
+                  ? 'Reconectar a lista de aplicativos'
+                  : 'Mostrar os aplicativos do Chromecast',
+              style: TextStyle(
+                color: primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text(
+        widget.wasConfigured
+            ? 'A conexão ADB caiu (o controle continua funcionando). '
+                  'Faça isto no Chromecast:'
+            : 'Faça isto uma vez no Chromecast:',
+        style: TextStyle(color: secondary, fontSize: 12),
+      ),
+      const SizedBox(height: 10),
+      step(
+        1,
+        TextSpan(
+          children: [
+            const TextSpan(text: 'Abra '),
+            b('Configurações › Sistema › Opções do desenvolvedor'),
+            const TextSpan(text: ' e ative '),
+            b('Depuração por Wi-Fi'),
+            const TextSpan(text: '.'),
+          ],
+        ),
+      ),
+      step(
+        2,
+        TextSpan(
+          children: [
+            const TextSpan(text: 'Entre em '),
+            b('Depuração por Wi-Fi'),
+            const TextSpan(text: ' e toque em '),
+            b('Parear o dispositivo com um código de pareamento'),
+            const TextSpan(text: '.'),
+          ],
+        ),
+      ),
+      step(
+        3,
+        TextSpan(
+          children: [
+            const TextSpan(text: 'A TV abre uma janela com o '),
+            b('código de 6 dígitos'),
+            const TextSpan(text: ' e um '),
+            b('Endereço IP e porta'),
+            const TextSpan(text: '. Digite aqui os dois: a '),
+            b('porta dessa janela'),
+            const TextSpan(text: ' (o número depois dos “:”) e o código.'),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('adb-pair-port'),
+              controller: _pairPort,
+              enabled: !_busy,
+              keyboardType: TextInputType.number,
+              decoration: field('Porta do código', 'ex.: 37123'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              key: const ValueKey('adb-pair-code'),
+              controller: _code,
+              enabled: !_busy,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: field(
+                'Código',
+                '6 dígitos',
+              ).copyWith(counterText: ''),
+              onSubmitted: (_) => _busy ? null : _pair(),
+            ),
+          ),
+        ],
+      ),
+      ?errorText,
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _pair,
+              icon: spinnerOr(Icons.link_rounded),
+              label: const Text('Conectar'),
+            ),
+          ),
+          if (widget.wasConfigured) ...[
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: _busy ? null : _retry,
+              child: const Text('Tentar de novo'),
+            ),
+          ],
+        ],
+      ),
+      if (widget.wasConfigured) ...[
+        const SizedBox(height: 6),
+        Text(
+          'Se a TV já foi pareada antes, basta ativar a Depuração por Wi-Fi '
+          '(passo 1) e tocar em Tentar de novo.',
+          style: TextStyle(color: secondary, fontSize: 11),
+        ),
+      ],
+    ];
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -149,157 +414,7 @@ class _GoogleTvAdbPanelState extends State<GoogleTvAdbPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.link_off_rounded, color: highlight, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.wasConfigured
-                      ? 'Reconectar a lista de aplicativos'
-                      : 'Mostrar os aplicativos do Chromecast',
-                  style: TextStyle(
-                    color: primary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.wasConfigured
-                ? 'A conexão ADB caiu (o controle continua funcionando). '
-                      'Faça isto no Chromecast:'
-                : 'Faça isto uma vez no Chromecast:',
-            style: TextStyle(color: secondary, fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          step(
-            1,
-            TextSpan(
-              children: [
-                const TextSpan(text: 'Abra '),
-                b('Configurações › Sistema › Opções do desenvolvedor'),
-                const TextSpan(text: ' e ative '),
-                b('Depuração por Wi-Fi'),
-                const TextSpan(text: '.'),
-              ],
-            ),
-          ),
-          step(
-            2,
-            TextSpan(
-              children: [
-                const TextSpan(text: 'Entre em '),
-                b('Depuração por Wi-Fi'),
-                const TextSpan(text: ' e toque em '),
-                b('Parear o dispositivo com um código de pareamento'),
-                const TextSpan(text: '.'),
-              ],
-            ),
-          ),
-          step(
-            3,
-            TextSpan(
-              children: [
-                const TextSpan(text: 'Digite aqui a '),
-                b('porta'),
-                const TextSpan(text: ' (o número depois dos “:” em '),
-                b('Endereço IP e porta'),
-                const TextSpan(text: ') e o '),
-                b('código de 6 dígitos'),
-                const TextSpan(text: ' que aparecem na TV.'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                flex: 5,
-                child: TextField(
-                  key: const ValueKey('adb-pair-port'),
-                  controller: _pairPort,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.number,
-                  decoration: field('Porta', 'ex.: 37123'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 5,
-                child: TextField(
-                  key: const ValueKey('adb-pair-code'),
-                  controller: _code,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: field(
-                    'Código',
-                    '6 dígitos',
-                  ).copyWith(counterText: ''),
-                  onSubmitted: (_) => _busy ? null : _connect(),
-                ),
-              ),
-            ],
-          ),
-          if (_askConnectionPort) ...[
-            const SizedBox(height: 8),
-            TextField(
-              key: const ValueKey('adb-conn-port'),
-              controller: _connPort,
-              enabled: !_busy,
-              keyboardType: TextInputType.number,
-              decoration: field(
-                'Porta de conexão',
-                'número depois dos “:” na tela Depuração por Wi-Fi',
-              ),
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: const TextStyle(color: AppColors.powerRed, fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : _connect,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.link_rounded, size: 18),
-                  label: const Text('Conectar'),
-                ),
-              ),
-              if (widget.wasConfigured) ...[
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _busy ? null : _retry,
-                  child: const Text('Tentar de novo'),
-                ),
-              ],
-            ],
-          ),
-          if (widget.wasConfigured) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Se a TV já foi pareada antes, basta ativar a Depuração por Wi-Fi '
-              '(passo 1) e tocar em Tentar de novo.',
-              style: TextStyle(color: secondary, fontSize: 11),
-            ),
-          ],
-        ],
+        children: _needsConnectionPort ? connectionStep : pairingStep,
       ),
     );
   }

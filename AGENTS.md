@@ -90,6 +90,23 @@ foreach ($f in @("$telemetryDir\plugin.json", "$telemetryDir\hooks.json", "$tele
 }
 ```
 
+## 7. Política de Builds — Somente Release
+
+Regra definida pelo desenvolvedor em 11/11/2026 para acabar com a confusão entre versões de teste, debug e produção.
+
+1. **Somente Release.** O assistente gera sempre e apenas builds Release. Nunca usar `flutter run`, `flutter build ... --debug` nem `--profile`, e nunca indicar ao desenvolvedor um executável ou APK Debug para teste.
+2. **Sem sobras de Debug.** Não deixar artefatos Debug executáveis em `build/` (pasta `build\windows\x64\runner\Debug`, `app-debug.apk`). Se existirem, apagar antes de entregar.
+3. **Build ao final de toda alteração.** Ao terminar qualquer alteração de código, gerar os dois Releases, sempre com o arquivo de segredos (sem ele o login do Google Drive/OneDrive não funciona — ver `docs/BIBLIOTECA.md`):
+   ```powershell
+   flutter build windows --release --dart-define-from-file=.local-secrets/drive-build.json
+   flutter build apk --release --dart-define-from-file=.local-secrets/drive-build.json
+   ```
+4. **Informar os caminhos completos** na resposta final, sempre os dois:
+   - Windows: `C:\Projetos\SixF\build\windows\x64\runner\Release\sixf_remote.exe`
+   - Android: `C:\Projetos\SixF\build\app\outputs\flutter-apk\app-release.apk`
+5. **APK Release exige assinatura.** O build Android Release só compila com `android/key.properties` apontando para a chave de distribuição (ver `docs/DISTRIBUTION.md`, seção "Android release"). Se a chave não estiver configurada, o assistente **avisa o desenvolvedor e não gera APK Debug como substituto**; também não cria chave de assinatura por conta própria.
+6. Se um dos builds falhar, dizer qual falhou e por quê, em vez de entregar só o outro em silêncio.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

@@ -41,8 +41,21 @@ class _Collection {
 }
 
 class MediaLibrary extends StatefulWidget {
-  const MediaLibrary({super.key, this.embedded = false});
+  const MediaLibrary({
+    super.key,
+    this.embedded = false,
+    this.wideHeader,
+    this.onWideViewerChanged,
+  });
   final bool embedded;
+
+  /// Cabeçalho do app (nome, botões, aparelhos) para o topo da coluna direita
+  /// quando o visualizador ocupa toda a altura (tela deitada / janela larga).
+  /// Quem hospeda a biblioteca esconde o próprio cabeçalho nesse momento.
+  final Widget? wideHeader;
+
+  /// Avisa quando o visualizador de altura inteira entra ou sai de cena.
+  final ValueChanged<bool>? onWideViewerChanged;
   @override
   State<MediaLibrary> createState() => _MediaLibraryState();
 }
@@ -60,6 +73,7 @@ class _MediaLibraryState extends State<MediaLibrary> {
   String? queueTitle;
   bool queueExpanded = true;
   int tab = 0, generation = 0, _playGeneration = 0;
+  bool _reportedWideViewer = false;
   bool ready = false, loading = false, casting = false;
   bool loadFailed = false;
   String filter = '', folderError = '';
@@ -1864,14 +1878,19 @@ class _MediaLibraryState extends State<MediaLibrary> {
     List<LibraryEntry> carouselItems,
     LibraryEntry current,
     Color highlight,
-    RemoteController tv,
-  ) {
+    RemoteController tv, {
+    bool showNames = true,
+  }) {
     if (carouselItems.isEmpty) return const SizedBox.shrink();
 
     final textScale = MediaQuery.textScalerOf(context)
         .scale(1.0)
         .clamp(1.0, 2.0);
-    final carouselHeight = (64.0 + 18.0 * textScale).clamp(82.0, 104.0);
+    // Sem os nomes (coluna direita do visualizador de altura inteira) o
+    // carrossel fica só com as miniaturas e poupa altura para a lista.
+    final carouselHeight = showNames
+        ? (64.0 + 18.0 * textScale).clamp(82.0, 104.0)
+        : 58.0;
 
     return SizedBox(
       height: carouselHeight,
@@ -1981,24 +2000,26 @@ class _MediaLibraryState extends State<MediaLibrary> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Flexible(
-                        child: Text(
-                          item.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isCurrent
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: isCurrent
-                                ? highlight
-                                : AppColors.textSecondaryOf(context),
+                      if (showNames) ...[
+                        const SizedBox(height: 2),
+                        Flexible(
+                          child: Text(
+                            item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isCurrent
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isCurrent
+                                  ? highlight
+                                  : AppColors.textSecondaryOf(context),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -2641,11 +2662,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
     RemoteController tv,
     MediaCastController? cast,
     bool isStreamingToTarget, {
-    Widget? sidePanel,
+    List<Widget>? wideTop,
+    Widget? wideBody,
   }) {
     if (activePhotos.isEmpty && activeMediaItem == null) {
       return const SizedBox.shrink();
     }
+    final wide = wideBody != null;
     final safeIdx = activePhotos.isNotEmpty
         ? activePhotoIndex.clamp(0, activePhotos.length - 1)
         : 0;
@@ -2716,10 +2739,118 @@ class _MediaLibraryState extends State<MediaLibrary> {
             (screenHeight * (isLandscape ? 0.62 : 0.42)).clamp(170.0, 520.0),
           );
 
-          if (isLandscape || sidePanel != null) {
-            // Com painel lateral (widescreen), o card ocupa toda a altura:
-            // visualizador em destaque à esquerda; player + lista à direita.
-            final fill = sidePanel != null;
+          if (wide) {
+            // Tela deitada / janela larga: o visualizador é um card próprio
+            // que ocupa toda a altura. Todo o resto (cabeçalho do app, dados
+            // da mídia, carrossel, abas e lista) fica condensado à direita.
+            final viewerCard = Container(
+              key: const ValueKey('wide-viewer-card'),
+              margin: const EdgeInsets.fromLTRB(16, 4, 6, 12),
+              padding: const EdgeInsets.all(8),
+              decoration: AppColors.glassCardDecoration(
+                context,
+                borderRadius: 16,
+              ),
+              child: LayoutBuilder(
+                builder: (context, box) => _buildPreviewBox(
+                  current,
+                  canPrev,
+                  canNext,
+                  height: box.maxHeight,
+                ),
+              ),
+            );
+            final isTv = getPlaybackTarget(tv) == PlaybackTarget.tv;
+            final top = Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...?wideTop?.take(1),
+                if (isMultiSelecting) _buildMultiSelectionBar(highlight),
+                _buildViewerHeader(
+                  tv,
+                  current,
+                  safeIdx,
+                  curCarouselIdx,
+                  carouselItems,
+                  highlight,
+                  isLandscape: true,
+                ),
+                if (!current.isImage) ...[
+                  const SizedBox(height: 6),
+                  _buildTransportRow(
+                    tv,
+                    cast,
+                    isStreamingToTarget,
+                    current,
+                    highlight,
+                  ),
+                  if (isTv &&
+                      cast != null &&
+                      isStreamingToTarget &&
+                      cast.hasProgress)
+                    MediaSessionControls(
+                      controller: cast,
+                      enabled: true,
+                      showTimeline: true,
+                      showTransportControls: false,
+                      showPlaybackModes: false,
+                    ),
+                ],
+                const SizedBox(height: 6),
+                _buildThumbnailsCarousel(
+                  carouselItems,
+                  current,
+                  highlight,
+                  tv,
+                  showNames: false,
+                ),
+                ...?wideTop?.skip(1),
+              ],
+            );
+            final sideCard = Container(
+              key: const ValueKey('wide-side-card'),
+              margin: const EdgeInsets.fromLTRB(6, 4, 16, 12),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+              clipBehavior: Clip.antiAlias,
+              decoration: AppColors.glassCardDecoration(
+                context,
+                borderRadius: 16,
+              ),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // Coluna alta: tudo fixo e só a lista rola. Coluna baixa
+                  // (celular deitado): o topo recolhe junto com a rolagem da
+                  // lista, que passa a usar a altura inteira e nunca fica
+                  // cortada.
+                  if (box.maxHeight >= 560) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        top,
+                        Expanded(child: wideBody),
+                      ],
+                    );
+                  }
+                  return NestedScrollView(
+                    headerSliverBuilder: (context, _) => [
+                      SliverToBoxAdapter(child: top),
+                    ],
+                    body: wideBody,
+                  );
+                },
+              ),
+            );
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 6, child: viewerCard),
+                Expanded(flex: 5, child: sideCard),
+              ],
+            );
+          }
+
+          if (isLandscape) {
             final controls = _buildLandscapeMediaControlsPanel(
               tv,
               cast,
@@ -2728,15 +2859,13 @@ class _MediaLibraryState extends State<MediaLibrary> {
               highlight,
             );
             final row = Row(
-              crossAxisAlignment: fill
-                  ? CrossAxisAlignment.stretch
-                  : CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Coluna 1 (Esquerda): visualizador + carrossel
                 Expanded(
                   flex: 6,
                   child: Column(
-                    mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildViewerHeader(
                         tv,
@@ -2748,24 +2877,12 @@ class _MediaLibraryState extends State<MediaLibrary> {
                         isLandscape: true,
                       ),
                       const SizedBox(height: 8),
-                      if (fill)
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, box) => _buildPreviewBox(
-                              current,
-                              canPrev,
-                              canNext,
-                              height: box.maxHeight,
-                            ),
-                          ),
-                        )
-                      else
-                        _buildPreviewBox(
-                          current,
-                          canPrev,
-                          canNext,
-                          height: previewHeight,
-                        ),
+                      _buildPreviewBox(
+                        current,
+                        canPrev,
+                        canNext,
+                        height: previewHeight,
+                      ),
                       const SizedBox(height: 8),
                       _buildThumbnailsCarousel(
                         carouselItems,
@@ -2777,44 +2894,22 @@ class _MediaLibraryState extends State<MediaLibrary> {
                   ),
                 ),
                 const SizedBox(width: 14),
-                // Coluna 2 (Direita): player e, abaixo, a navegação da aba
-                Expanded(
-                  flex: 5,
-                  child: fill
-                      ? LayoutBuilder(
-                          // Em telas baixas (celular deitado, texto grande) o
-                          // card do player rola dentro de até 55% da coluna,
-                          // garantindo espaço para a lista logo abaixo.
-                          builder: (context, box) => Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxHeight: box.maxHeight * 0.55,
-                                ),
-                                child: SingleChildScrollView(child: controls),
-                              ),
-                              const SizedBox(height: 6),
-                              Expanded(child: sidePanel),
-                            ],
-                          ),
-                        )
-                      : controls,
-                ),
+                // Coluna 2 (Direita): player
+                Expanded(flex: 5, child: controls),
               ],
             );
             return Container(
-              margin: EdgeInsets.fromLTRB(16, 4, 16, fill ? 12 : 8),
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               padding: const EdgeInsets.all(12),
               decoration: AppColors.glassCardDecoration(
                 context,
                 borderRadius: 16,
               ),
               child: Column(
-                mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (isMultiSelecting) _buildMultiSelectionBar(highlight),
-                  if (fill) Expanded(child: row) else row,
+                  row,
                 ],
               ),
             );
@@ -2888,6 +2983,12 @@ class _MediaLibraryState extends State<MediaLibrary> {
         viewerActive &&
         (MediaQuery.orientationOf(context) == Orientation.landscape ||
             (screen.width >= 600 && screen.width > screen.height * 0.7));
+    if (wideViewer != _reportedWideViewer) {
+      _reportedWideViewer = wideViewer;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onWideViewerChanged?.call(wideViewer);
+      });
+    }
 
     // Cabeçalho da Biblioteca com indicação clara do aparelho de destino e botão de limpeza rápida
     final Widget libraryHeader = Padding(
@@ -3028,45 +3129,52 @@ class _MediaLibraryState extends State<MediaLibrary> {
 
     final Widget content;
     if (wideViewer) {
-      // Widescreen: visualizador em destaque ocupando toda a altura à esquerda;
-      // à direita, o card do player e, logo abaixo, as abas (Playlists, Fila,
-      // Arquivos) com a lista rolando dentro da coluna.
-      final compactHeight = screen.height < 520;
+      // Widescreen: o visualizador é um card próprio de altura inteira à
+      // esquerda; à direita, numa coluna condensada, o cabeçalho do app, os
+      // dados da mídia, o carrossel e as abas (Arquivos, Playlists, Fila).
+      final showClearQueue = casting || isStreamingToTarget || queue.isNotEmpty;
       content = SafeArea(
-        child: Column(
-          children: [
-            if (!compactHeight) libraryHeader,
-            ?connectBanner,
-            Expanded(
-              child: _buildPhotoViewerCard(
-                tv,
-                cast,
-                isStreamingToTarget,
-                sidePanel: LayoutBuilder(
-                  builder: (context, box) {
-                    final panel = Column(
-                      children: [
-                        _buildSectionSelector(
-                          context,
-                          tv,
-                          horizontalPadding: 0,
-                        ),
-                        ?castingRow,
-                        Expanded(child: tabContent),
-                      ],
-                    );
-                    // Altura mínima usável para caminho, busca e lista; abaixo
-                    // disso (tela baixa / texto grande) o painel todo rola.
-                    const minPanel = 260.0;
-                    if (box.maxHeight >= minPanel) return panel;
-                    return SingleChildScrollView(
-                      child: SizedBox(height: minPanel, child: panel),
-                    );
-                  },
-                ),
-              ),
+        child: _buildPhotoViewerCard(
+          tv,
+          cast,
+          isStreamingToTarget,
+          wideTop: [
+            // O primeiro item vai acima dos dados da mídia; os demais, abaixo
+            // do carrossel.
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ?widget.wideHeader,
+                ?connectBanner,
+                const SizedBox(height: 4),
+              ],
             ),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSectionSelector(
+                    context,
+                    tv,
+                    horizontalPadding: 0,
+                  ),
+                ),
+                if (showClearQueue)
+                  IconButton(
+                    tooltip: 'Limpar fila',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => abortAndClearQueue(clearQueueItems: true),
+                    icon: const Icon(
+                      Icons.cleaning_services_rounded,
+                      size: 16,
+                      color: AppColors.powerRed,
+                    ),
+                  ),
+              ],
+            ),
+            ?castingRow,
           ],
+          wideBody: tabContent,
         ),
       );
     } else {
@@ -3075,7 +3183,9 @@ class _MediaLibraryState extends State<MediaLibrary> {
           slivers: [
             SliverList.list(
               children: [
-                libraryHeader,
+                // Tela baixa (celular deitado): o título da biblioteca sai
+                // para sobrar altura para as pastas.
+                if (screen.height >= 520 || viewerActive) libraryHeader,
                 ?connectBanner,
                 // Seletor de 3 seções no padrão Liquid Glass idêntico ao seletor de dispositivos
                 _buildSectionSelector(context, tv),
@@ -3092,15 +3202,22 @@ class _MediaLibraryState extends State<MediaLibrary> {
             // Short screens and large text scroll the cards instead of squeezing
             // a fixed-height photo preview into the outer Column.
             SliverLayoutBuilder(
-              builder: (context, constraints) => SliverToBoxAdapter(
-                child: SizedBox(
-                  height:
-                      (constraints.viewportMainAxisExtent -
-                              constraints.precedingScrollExtent)
-                          .clamp(240.0, double.infinity),
-                  child: tabContent,
-                ),
-              ),
+              builder: (context, constraints) {
+                final remaining =
+                    constraints.viewportMainAxisExtent -
+                    constraints.precedingScrollExtent;
+                // Havendo um mínimo usável, a lista ocupa exatamente o que
+                // sobra da tela e rola sozinha. Forçar 240 px aqui empurrava a
+                // parte de baixo da lista para fora da área visível: em
+                // paisagem só a primeira linha de pastas aparecia e as demais
+                // ficavam inalcançáveis.
+                return SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: remaining >= 150 ? remaining : 240,
+                    child: tabContent,
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -3996,7 +4113,26 @@ class _MediaLibraryState extends State<MediaLibrary> {
           onTap: addRoot,
         ),
         if (recent.isNotEmpty) ...[
-          _sectionLabel('Abertas recentemente'),
+          Row(
+            children: [
+              Expanded(child: _sectionLabel('Abertas recentemente')),
+              TextButton.icon(
+                key: const ValueKey('library-clear-recent'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondaryOf(context),
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () {
+                  setState(recent.clear);
+                  unawaited(save());
+                  message('Lista de abertas recentemente limpa.');
+                },
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                label: const Text('Limpar'),
+              ),
+            ],
+          ),
           for (final path in recent)
             _rowCard(
               leading: Icon(

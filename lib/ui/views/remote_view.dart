@@ -47,6 +47,40 @@ class RemoteView extends StatefulWidget {
 
 class _RemoteViewState extends State<RemoteView> {
   final GlobalKey _libraryKey = GlobalKey();
+
+  /// A biblioteca está com o visualizador de altura inteira (tela deitada ou
+  /// janela larga com uma mídia aberta). Nesse momento o cabeçalho do app sai
+  /// do topo e vai, condensado, para a coluna direita da própria biblioteca.
+  bool _mediaWideViewer = false;
+
+  bool get _hideHeaderForViewer => _mediaWideViewer && _selectedTabIndex == 3;
+
+  /// Biblioteca de mídia. Com [moveHeader], ela recebe o cabeçalho do app
+  /// para exibir na coluna direita enquanto o visualizador ocupa a altura toda.
+  Widget _mediaLibrary({bool moveHeader = false}) => MediaLibrary(
+    key: _libraryKey,
+    embedded: true,
+    wideHeader: moveHeader
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              HeaderBar(
+                onToggleCompact: !kIsWeb && Platform.isWindows
+                    ? _toggleCompact
+                    : null,
+                onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
+              ),
+              const DeviceSelectorBar(),
+            ],
+          )
+        : null,
+    onWideViewerChanged: (wide) {
+      if (mounted && wide != _mediaWideViewer) {
+        setState(() => _mediaWideViewer = wide);
+      }
+    },
+  );
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _focusNode = FocusNode();
   final Stopwatch _repeatClock = Stopwatch()..start();
@@ -144,9 +178,15 @@ class _RemoteViewState extends State<RemoteView> {
       return KeyEventResult.ignored;
     }
 
-    final primaryFocusWidget =
-        FocusManager.instance.primaryFocus?.context?.widget;
-    if (primaryFocusWidget is EditableText) {
+    // O contexto do foco de um campo é o Focus interno do EditableText, não o
+    // EditableText em si: é preciso subir na árvore para reconhecê-lo. Sem
+    // isso, dígitos, espaço, M e Backspace viram comandos da TV e o campo
+    // (ex.: porta/código do ADB) não recebe nada.
+    final primaryContext = FocusManager.instance.primaryFocus?.context;
+    if (primaryContext != null &&
+        (primaryContext.widget is EditableText ||
+            primaryContext.findAncestorWidgetOfExactType<EditableText>() !=
+                null)) {
       return KeyEventResult.ignored;
     }
 
@@ -310,30 +350,30 @@ class _RemoteViewState extends State<RemoteView> {
         endDrawer: const NetworkDrawer(),
         body: _withGlassBackdrop(
           SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWideScreen = constraints.maxWidth >= 840;
-              // Celular deitado (ou janela baixa e larga): layout próprio de
-              // paisagem. Vem antes do modo desktop, pois o S23 Ultra deitado
-              // passa de 840 dp e antes caía no layout de PC encolhido.
-              final isCompactLandscape =
-                  constraints.maxWidth > constraints.maxHeight &&
-                  constraints.maxHeight < 560;
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWideScreen = constraints.maxWidth >= 840;
+                // Celular deitado (ou janela baixa e larga): layout próprio de
+                // paisagem. Vem antes do modo desktop, pois o S23 Ultra deitado
+                // passa de 840 dp e antes caía no layout de PC encolhido.
+                final isCompactLandscape =
+                    constraints.maxWidth > constraints.maxHeight &&
+                    constraints.maxHeight < 560;
 
-              return SizedBox(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                child: _compact
-                    ? CompactRemote(onExpand: _toggleCompact)
-                    : isCompactLandscape
-                    ? _buildLandscapeShell()
-                    : isWideScreen && !kGlassUi
-                    ? _buildDesktopShell()
-                    : _buildMobileTabLayout(constraints),
-              );
-            },
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: _compact
+                      ? CompactRemote(onExpand: _toggleCompact)
+                      : isCompactLandscape
+                      ? _buildLandscapeShell()
+                      : isWideScreen && !kGlassUi
+                      ? _buildDesktopShell()
+                      : _buildMobileTabLayout(constraints),
+                );
+              },
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -343,10 +383,7 @@ class _RemoteViewState extends State<RemoteView> {
   /// sobre o fundo ambiente, que é o que dá sentido ao vidro.
   Widget _withGlassBackdrop(Widget child) => Stack(
     fit: StackFit.expand,
-    children: [
-      kGlassUi ? const GlassBackdrop() : const PaynoBackdrop(),
-      child,
-    ],
+    children: [kGlassUi ? const GlassBackdrop() : const PaynoBackdrop(), child],
   );
 
   /// Desktop / tablet largo (padrão Payno): trilho de ícones à esquerda,
@@ -379,33 +416,38 @@ class _RemoteViewState extends State<RemoteView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                HeaderBar(
-                  onToggleCompact: !kIsWeb && Platform.isWindows
-                      ? _toggleCompact
-                      : null,
-                  onOpenDrawer: () =>
-                      _scaffoldKey.currentState?.openEndDrawer(),
-                ),
-                SizedBox(
-                  height: 60,
-                  child: Row(
-                    children: [
-                      Text(
-                        titles[_selectedTabIndex],
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: -0.2,
-                          color: AppColors.textPrimaryOf(context),
-                        ),
-                      ),
-                      const SizedBox(width: 24),
-                      // Aparelhos salvos (pílulas) ao lado do título
-                      const Expanded(child: DeviceSelectorBar()),
-                      if (action != null) ...[const SizedBox(width: 12), action],
-                    ],
+                if (!_hideHeaderForViewer)
+                  HeaderBar(
+                    onToggleCompact: !kIsWeb && Platform.isWindows
+                        ? _toggleCompact
+                        : null,
+                    onOpenDrawer: () =>
+                        _scaffoldKey.currentState?.openEndDrawer(),
                   ),
-                ),
+                if (!_hideHeaderForViewer)
+                  SizedBox(
+                    height: 60,
+                    child: Row(
+                      children: [
+                        Text(
+                          titles[_selectedTabIndex],
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: -0.2,
+                            color: AppColors.textPrimaryOf(context),
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        // Aparelhos salvos (pílulas) ao lado do título
+                        const Expanded(child: DeviceSelectorBar()),
+                        if (action != null) ...[
+                          const SizedBox(width: 12),
+                          action,
+                        ],
+                      ],
+                    ),
+                  ),
                 Expanded(
                   child: IndexedStack(
                     index: _selectedTabIndex,
@@ -415,9 +457,7 @@ class _RemoteViewState extends State<RemoteView> {
                       controller.supportsTrackpad
                           ? _buildTab3Trackpad()
                           : const SizedBox.shrink(),
-                      _materialCard(
-                        MediaLibrary(key: _libraryKey, embedded: true),
-                      ),
+                      _materialCard(_mediaLibrary(moveHeader: true)),
                       _buildDesktopApps(),
                     ],
                   ),
@@ -673,7 +713,7 @@ class _RemoteViewState extends State<RemoteView> {
             context.watch<RemoteController>().supportsTrackpad
                 ? _buildTab3Trackpad()
                 : const SizedBox.shrink(),
-            MediaLibrary(key: _libraryKey, embedded: true),
+            _mediaLibrary(),
             const AppDrawerWidget(),
           ],
         ),
@@ -708,7 +748,7 @@ class _RemoteViewState extends State<RemoteView> {
               context.watch<RemoteController>().supportsTrackpad
                   ? _buildTab3Trackpad()
                   : const SizedBox.shrink(),
-              MediaLibrary(key: _libraryKey, embedded: true),
+              _mediaLibrary(),
               const AppDrawerWidget(),
             ],
           ),
@@ -731,35 +771,36 @@ class _RemoteViewState extends State<RemoteView> {
         Expanded(
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 16, 2),
-                child: LayoutBuilder(
-                  builder: (context, c) {
-                    final header = HeaderBar(
-                      onToggleCompact: !kIsWeb && Platform.isWindows
-                          ? _toggleCompact
-                          : null,
-                      onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openEndDrawer(),
-                    );
-                    // Largura suficiente: cabeçalho e aparelhos lado a lado,
-                    // poupando altura. Senão, um sobre o outro.
-                    if (c.maxWidth < 620) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [header, const DeviceSelectorBar()],
+              if (!_hideHeaderForViewer)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 16, 2),
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final header = HeaderBar(
+                        onToggleCompact: !kIsWeb && Platform.isWindows
+                            ? _toggleCompact
+                            : null,
+                        onOpenDrawer: () =>
+                            _scaffoldKey.currentState?.openEndDrawer(),
                       );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(flex: 5, child: header),
-                        const SizedBox(width: 12),
-                        const Expanded(flex: 6, child: DeviceSelectorBar()),
-                      ],
-                    );
-                  },
+                      // Largura suficiente: cabeçalho e aparelhos lado a lado,
+                      // poupando altura. Senão, um sobre o outro.
+                      if (c.maxWidth < 620) {
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [header, const DeviceSelectorBar()],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(flex: 5, child: header),
+                          const SizedBox(width: 12),
+                          const Expanded(flex: 6, child: DeviceSelectorBar()),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
               Expanded(
                 child: IndexedStack(
                   index: _selectedTabIndex,
@@ -769,7 +810,7 @@ class _RemoteViewState extends State<RemoteView> {
                     controller.supportsTrackpad
                         ? _buildTab3Trackpad()
                         : const SizedBox.shrink(),
-                    MediaLibrary(key: _libraryKey, embedded: true),
+                    _mediaLibrary(moveHeader: true),
                     const AppDrawerWidget(),
                   ],
                 ),
@@ -830,9 +871,16 @@ class _RemoteViewState extends State<RemoteView> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _navCircle(item.icon, _selectedTabIndex == item.index, 42),
+                            _navCircle(
+                              item.icon,
+                              _selectedTabIndex == item.index,
+                              42,
+                            ),
                             const SizedBox(height: 4),
-                            _navLabel(item.title, _selectedTabIndex == item.index),
+                            _navLabel(
+                              item.title,
+                              _selectedTabIndex == item.index,
+                            ),
                           ],
                         ),
                       ),
@@ -853,14 +901,19 @@ class _RemoteViewState extends State<RemoteView> {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: active ? AppColors.accentFillOf(context) : AppColors.circleOf(context),
+        color: active
+            ? AppColors.accentFillOf(context)
+            : AppColors.circleOf(context),
         border: Border.all(
-          color: active ? Colors.transparent : AppColors.borderSubtleOf(context),
+          color: active
+              ? Colors.transparent
+              : AppColors.borderSubtleOf(context),
         ),
         boxShadow: active
             ? [
                 BoxShadow(
-                  color: AppColors.accentFillOf(context).withValues(alpha: 0.35),
+                  color: AppColors.accentFillOf(context)
+                      .withValues(alpha: 0.35),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -935,7 +988,10 @@ class _RemoteViewState extends State<RemoteView> {
                     VolumeChannelControls(height: volumeHeight),
                     const SizedBox(height: 14),
                     const PaynoCard(
-                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       child: SystemNavigationControls(circleSize: 42),
                     ),
                   ],
@@ -1225,27 +1281,26 @@ class _RemoteViewState extends State<RemoteView> {
           const SizedBox(width: 8),
           Flexible(
             child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.circleOf(context),
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: AppColors.borderSubtleOf(context)),
-            ),
-            child: Text(
-              keys,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimaryOf(context),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.circleOf(context),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: AppColors.borderSubtleOf(context)),
+              ),
+              child: Text(
+                keys,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimaryOf(context),
+                ),
               ),
             ),
-          ),
           ),
         ],
       ),
     );
   }
-
 }
