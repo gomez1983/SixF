@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SixF · Mockup ZIXO fiel</title>
+<style>
+/* Fonte única do app: Open Sans (assets/Fonts), sem itálico. */
+@font-face{font-family:'OpenSans';font-weight:300;src:url('../../../assets/Fonts/OpenSans-Light.ttf')}
+@font-face{font-family:'OpenSans';font-weight:400;src:url('../../../assets/Fonts/OpenSans-Regular.ttf')}
+@font-face{font-family:'OpenSans';font-weight:500;src:url('../../../assets/Fonts/OpenSans-Medium.ttf')}
+@font-face{font-family:'OpenSans';font-weight:600;src:url('../../../assets/Fonts/OpenSans-SemiBold.ttf')}
+@font-face{font-family:'OpenSans';font-weight:700;src:url('../../../assets/Fonts/OpenSans-Bold.ttf')}
+@font-face{font-family:'OpenSans';font-weight:800;src:url('../../../assets/Fonts/OpenSans-ExtraBold.ttf')}
+</style><!--
+  SixF Smart Remote · mockup FIEL à estrutura real do app, com a pele ZIXO.
+  A estrutura de cada tela (blocos, ordem, botões, textos) foi lida do código em lib/ui;
+  só mudam cores, fontes, superfícies e formas. Paleta fechada do guia ZIXO:
+  #414140 · #FFFFFF · #38BC37 · #F44336.
+  Tema escuro = extrapolação (o guia só traz o claro).
+  Parâmetros de URL: ?theme=dark|light|both &ori=p|l|d|all &scr=<id>
+-->
+<style>
+:root{
+  --page:#E7E7E5; --ink:#141414; --mut:#77776F; --line:rgba(20,20,20,.08);
+  --card:rgba(255,255,255,.6); --act:#414140; --act-ink:#fff;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --page:#101010; --ink:#F1F1EE; --mut:#8D8D88; --line:rgba(255,255,255,.08); --card:rgba(255,255,255,.05); --act:#F1F1EE; --act-ink:#141414}}
+:root[data-theme="dark"]{--page:#101010; --ink:#F1F1EE; --mut:#8D8D88; --line:rgba(255,255,255,.08); --card:rgba(255,255,255,.05); --act:#F1F1EE; --act-ink:#141414}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--page);color:var(--ink)}
+body{font-family:'OpenSans',system-ui,sans-serif;font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased;
+  background:radial-gradient(900px 500px at 8% -5%,rgba(255,255,255,.55),transparent 70%),radial-gradient(700px 420px at 100% 10%,rgba(56,188,55,.06),transparent 70%),radial-gradient(700px 420px at 0% 100%,rgba(244,67,54,.05),transparent 70%),var(--page);min-height:100vh}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.top{max-width:1480px;margin:0 auto;padding:40px 32px 8px}
+.top .eyebrow{font-size:13px;color:var(--mut)}
+.top h1{font-family:'OpenSans',system-ui,sans-serif;font-weight:300;font-size:46px;line-height:1.05;letter-spacing:-.02em;margin:6px 0 10px}
+.top p{max-width:820px;color:var(--mut);font-size:15px}
+.system{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0 4px}
+.sw{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12.5px}
+.sw i{width:22px;height:22px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.sw b{font-weight:500}.sw span{color:var(--mut)}
+.bar{position:sticky;top:0;z-index:50;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);background:color-mix(in srgb,var(--page) 78%,transparent);border-bottom:1px solid var(--line)}
+.bar .in{max-width:1480px;margin:0 auto;padding:12px 32px;display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
+.seg{display:flex;align-items:center;gap:8px}.seg label{font-size:12px;color:var(--mut)}
+.pill{display:flex;padding:4px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
+.pill button{padding:7px 14px;border-radius:999px;font-size:13px;font-weight:500;color:var(--mut)}
+.pill button.on{background:var(--act);color:var(--act-ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:6px 12px;border-radius:999px;font-size:12.5px;border:1px solid var(--line);background:var(--card);color:var(--mut)}
+.chips button.on{background:var(--act);color:var(--act-ink);border-color:transparent}
+main{max-width:1480px;margin:0 auto;padding:12px 32px 80px}
+.scr{padding:36px 0 18px;border-bottom:1px solid var(--line)}
+.scr header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.scr header .n{font-size:13px;color:var(--mut)}
+.scr header h2{font-family:'OpenSans',system-ui,sans-serif;font-weight:300;font-size:30px;letter-spacing:-.015em}
+.scr header code{font-size:11.5px;color:var(--mut);padding:3px 8px;border-radius:6px;border:1px solid var(--line)}
+.scr .desc{color:var(--mut);max-width:880px;margin-bottom:18px;font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;margin-bottom:26px}
+.cap{font-size:12px;color:var(--mut);margin:0 0 10px 6px;display:flex;gap:8px;align-items:center}
+.cap i{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.6}
+
+/* ───── molduras ───── */
+.dev{--r:46px;position:relative;border-radius:var(--r);padding:10px;background:#1C1C1C;box-shadow:0 0 0 1.5px #3a3a3a,0 0 0 3px #0c0c0c,0 40px 80px -30px rgba(0,0,0,.45)}
+.dev.p{width:410px;height:864px}
+.dev.l{width:935px;height:432px;--r:40px}
+.dev.d{--r:16px;width:1200px;height:760px;padding:0;background:#222;box-shadow:0 0 0 1px rgba(0,0,0,.3),0 40px 80px -30px rgba(0,0,0,.5)}
+.dev.p::after,.dev.l::after{content:"";position:absolute;width:11px;height:11px;border-radius:50%;background:#050505;z-index:30}
+.dev.p::after{top:22px;left:50%;transform:translateX(-50%)}
+.dev.l::after{left:22px;top:50%;transform:translateY(-50%)}
+.zoomwrap{display:block}
+
+/* ───── tokens ───── */
+.ui{position:relative;width:100%;height:100%;border-radius:calc(var(--r) - 10px);overflow:hidden;font-family:'OpenSans',system-ui,sans-serif;color:var(--tx);font-size:13px;line-height:1.35}
+.dev.d .ui{border-radius:0}
+.ui.light{--tx:#141414;--tx2:#414140;--mu:#8B8B87;--mu2:#B4B4AF;--ln:rgba(20,20,20,.07);
+  --glass:linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.55));--solid:rgba(250,250,249,.94);--gb:rgba(255,255,255,.95);
+  --sh:0 1px 0 rgba(255,255,255,.9) inset,0 14px 30px -18px rgba(40,40,38,.28);--shl:0 30px 60px -24px rgba(40,40,38,.35);
+  --ac:#414140;--aci:#fff;--acs:0 10px 22px -10px rgba(40,40,38,.6);--cir:rgba(255,255,255,.75);--trk:rgba(20,20,20,.11);--well:rgba(20,20,20,.035);--scrim:rgba(232,232,230,.55);--acsoft:rgba(65,65,64,.08);
+  background:radial-gradient(120% 60% at 50% -10%,#fff 0,transparent 60%),radial-gradient(70% 40% at 105% 45%,rgba(56,188,55,.07),transparent 70%),radial-gradient(70% 40% at -5% 95%,rgba(244,67,54,.06),transparent 70%),linear-gradient(180deg,#F2F2F0,#E7E7E5)}
+.ui.dark{--tx:#F2F2EF;--tx2:#D6D6D2;--mu:#8E8E89;--mu2:#5C5C58;--ln:rgba(255,255,255,.07);
+  --glass:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.035));--solid:rgba(30,30,29,.95);--gb:rgba(255,255,255,.09);
+  --sh:0 1px 0 rgba(255,255,255,.06) inset,0 16px 30px -18px rgba(0,0,0,.7);--shl:0 30px 60px -24px rgba(0,0,0,.8);
+  --ac:#EFEFEC;--aci:#141414;--acs:0 10px 24px -10px rgba(0,0,0,.8);--cir:rgba(255,255,255,.06);--trk:rgba(255,255,255,.13);--well:rgba(255,255,255,.03);--scrim:rgba(8,8,8,.55);--acsoft:rgba(255,255,255,.08);
+  background:radial-gradient(120% 60% at 50% -10%,rgba(255,255,255,.07) 0,transparent 60%),radial-gradient(70% 40% at 105% 45%,rgba(56,188,55,.06),transparent 70%),radial-gradient(70% 40% at -5% 95%,rgba(244,67,54,.05),transparent 70%),linear-gradient(180deg,#151515,#0D0D0D)}
+.ui .ok{color:#38BC37}.ui .bad{color:#F44336}.ui .mu{color:var(--mu)}.ui .mu2{color:var(--mu2)}
+.ui svg{display:block;flex:none}
+.serif{font-family:'OpenSans',system-ui,sans-serif;font-weight:300;letter-spacing:-.01em}
+.gl{background:var(--glass);border:1px solid var(--gb);box-shadow:var(--sh);border-radius:20px}
+.circ{display:grid;place-items:center;border-radius:50%;background:var(--cir);border:1px solid var(--gb);box-shadow:var(--sh);color:var(--tx2);flex:none}
+.act{background:var(--ac)!important;color:var(--aci)!important;border-color:transparent!important;box-shadow:var(--acs)!important}
+.led{width:7px;height:7px;border-radius:50%;background:var(--mu2);flex:none;display:inline-block}.led.ok{background:#38BC37}.led.bad{background:#F44336}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;font-size:11px;white-space:nowrap;background:var(--well);border:1px solid var(--ln);color:var(--mu)}
+.chip.sel{background:var(--ac);color:var(--aci);border-color:transparent}
+.chip.acc{background:var(--acsoft);color:var(--tx);border-color:transparent;font-weight:500}
+.sec{font-size:11px;font-weight:500;color:var(--mu);margin:2px 2px 8px;letter-spacing:.04em;text-transform:uppercase}
+.card{padding:14px 16px 16px;border-radius:20px;background:var(--glass);border:1px solid var(--gb);box-shadow:var(--sh)}
+.ch{display:flex;align-items:center;gap:8px;margin-bottom:12px}.ch b{font-weight:500;font-size:13px;flex:1}.ch .mu{display:flex}
+.big{font-family:'OpenSans',system-ui,sans-serif;font-weight:300;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.big small{font-family:'OpenSans';font-size:.36em;letter-spacing:0;color:var(--mu);margin-left:5px;font-weight:400}
+.field{height:42px;border-radius:999px;background:var(--well);border:1px solid var(--ln);display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--mu);font-size:13px}
+.field.sq{border-radius:14px}
+.field b{color:var(--tx);font-weight:500}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:500;background:var(--cir);border:1px solid var(--gb);box-shadow:var(--sh);color:var(--tx);white-space:nowrap}
+.btn.ok2{color:#38BC37;background:rgba(56,188,55,.1);border-color:rgba(56,188,55,.35);box-shadow:none}
+.btn.bad2{color:#F44336;background:rgba(244,67,54,.08);border-color:rgba(244,67,54,.3);box-shadow:none}
+.tog{width:40px;height:24px;border-radius:999px;background:var(--trk);position:relative;flex:none}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.tog.on{background:var(--ac)}.tog.on::after{left:19px;background:var(--aci)}.ui.dark .tog.on::after{background:#141414}
+.cut{-webkit-mask:linear-gradient(#000 calc(100% - 28px),transparent);mask:linear-gradient(#000 calc(100% - 28px),transparent)}
+.sp{flex:1;min-width:0}.rw{display:flex;align-items:center}.cl{display:flex;flex-direction:column}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* barra de status */
+.sbar{height:40px;display:flex;align-items:center;justify-content:space-between;padding:6px 28px 0 30px;font-size:13px;font-weight:600;flex:none}
+.sbar .r{display:flex;gap:6px;align-items:center}
+
+/* cabeçalho (HeaderBar) */
+.hdr{display:flex;align-items:center;min-height:52px;gap:0}
+.hdr .lg{width:40px;height:40px;border-radius:50%;background:#1B0D4D;overflow:hidden;flex:none;box-shadow:0 6px 16px rgba(40,40,38,.3);display:grid;place-items:center;color:#fff;font-weight:600;font-size:14px}
+.hdr .lg img{width:100%;height:100%;object-fit:cover;display:block}
+.hdr .ht{flex:1;min-width:0;margin-left:10px}
+.hdr .s1{font-size:11px;color:var(--tx2)}.hdr .s1 b{font-weight:700;color:var(--tx);margin-right:4px}
+.hdr .s2{display:flex;align-items:center;gap:6px;font-size:16px;letter-spacing:-.2px;margin-top:2px}
+.hdr .c{margin-left:6px}
+.hdr.nr .lg{width:34px;height:34px}.hdr.nr .c{margin-left:4px}
+
+/* seletor de aparelhos (pílulas) */
+.dsel{display:flex;gap:8px;height:48px;align-items:center;overflow:hidden;margin:2px 0}
+.dp{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--glass);border:1px solid var(--ln);font-size:12px;font-weight:500;color:var(--mu);white-space:nowrap;flex:none}
+.dp.a{background:var(--cir);border-color:var(--tx2);color:var(--tx);font-weight:600;box-shadow:var(--sh)}
+.dp.add{background:transparent;border-color:var(--mu2);border-style:solid;font-weight:600}
+.dp svg{color:var(--mu)}.dp.a svg{color:var(--tx)}
+
+/* navegação inferior em pílula */
+.nav{position:absolute;left:16px;right:16px;bottom:12px;height:64px;border-radius:999px;display:flex;align-items:center;padding:0 6px;
+  background:var(--solid);border:1px solid var(--gb);box-shadow:var(--shl);z-index:5}
+.nav .it{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--tx2)}
+.nav .it .ib{width:34px;height:28px;display:grid;place-items:center;border-radius:999px;color:var(--mu)}
+.nav .it.on .ib{background:var(--ac);color:var(--aci);width:46px}
+.nav .it.on{color:var(--tx);font-weight:700}
+
+/* trilho lateral */
+.rail{width:84px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.rail .it{display:flex;flex-direction:column;align-items:center;gap:4px;padding:3px 6px;font-size:10.5px;font-weight:600;color:var(--tx2)}
+.rail .it .circ{width:42px;height:42px;color:var(--mu)}
+.rail .it.on{color:var(--tx);font-weight:700}.rail .it.on .circ{background:var(--ac);color:var(--aci);border-color:transparent;box-shadow:var(--acs)}
+
+/* faixa de slots */
+.strip{display:flex;gap:8px;padding:10px;border-radius:20px;background:var(--glass);border:1px solid var(--gb);box-shadow:var(--sh)}
+.slot{flex:1;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.03em;background:var(--cir);border:1px solid var(--gb);min-width:0}
+.slot.empty{border-style:dashed;border-color:var(--mu2);background:transparent;color:var(--mu)}
+.slot .ap{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-family:'OpenSans',system-ui,sans-serif;font-size:13px;background:var(--acsoft);flex:none}
+.strip.sm{padding:7px}.strip.sm .slot{height:40px}
+
+/* volume + canal */
+.vp{border-radius:999px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 0;background:var(--well);border:1px solid var(--ln);flex:none}
+.vp .bg{display:grid;place-items:center;border-radius:50%;color:var(--tx)}
+.vp .v{text-align:center}.vp .v .big{font-weight:300}
+.vp .v small{display:block;font-size:10px;letter-spacing:.12em;font-weight:600;color:var(--mu);margin-top:3px;font-family:'OpenSans'}
+.vmid{display:flex;flex-direction:column;align-items:center;flex:none}
+
+/* d-pad */
+.dpr{display:flex;align-items:center;justify-content:center;gap:12px}
+.sidebtn{width:58px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:9.5px;font-weight:600;letter-spacing:.03em;background:var(--cir);border:1px solid var(--gb);box-shadow:var(--sh);color:var(--tx)}
+.wheel{position:relative;border-radius:50%;background:var(--cir);border:1px solid var(--gb);box-shadow:var(--sh);flex:none}
+.wheel .ring{position:absolute;inset:9%;border-radius:50%;border:1px solid var(--ln)}
+.wheel .ar{position:absolute;display:grid;place-items:center;color:var(--tx)}
+.wheel .okb{position:absolute;inset:0;margin:auto;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:15px;letter-spacing:.04em}
+
+/* listas e linhas */
+.lrow{display:flex;align-items:center;gap:12px;padding:9px 0}
+.lrow+.lrow{border-top:1px solid var(--ln)}
+.th{border-radius:11px;position:relative;overflow:hidden;flex:none;background:linear-gradient(135deg,#d9d9d6,#a7a7a2)}
+.ui.dark .th{background:linear-gradient(135deg,#3a3a38,#1f1f1e)}
+.th.v2{background:linear-gradient(160deg,#e3e3df,#8f8f8a)}.th.v3{background:linear-gradient(120deg,#cfd9cf,#9aa59a)}.th.vv{background:linear-gradient(150deg,#4a4a47,#161615)}
+.ui.dark .th.v2{background:linear-gradient(160deg,#44443f,#191918)}.ui.dark .th.v3{background:linear-gradient(120deg,#2f3a2f,#182018)}
+.th svg.sc{position:absolute;inset:0;width:100%;height:100%}
+.th .pl{position:absolute;inset:0;margin:auto;width:42%;max-width:30px;aspect-ratio:1;border-radius:50%;background:rgba(0,0,0,.5);display:grid;place-items:center;color:#fff}
+.th .nm{position:absolute;left:0;right:0;bottom:0;padding:14px 7px 5px;font-size:10px;font-weight:500;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.65));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th .ex{position:absolute;left:6px;top:6px;padding:2px 6px;border-radius:999px;font-size:9px;font-weight:700;color:#fff;background:rgba(10,14,22,.62)}
+.th .sc2{position:absolute;right:4px;top:4px;width:22px;height:22px;border-radius:50%;border:1.6px solid #fff;background:rgba(0,0,0,.33);display:grid;place-items:center;color:#fff}
+.th .sc2.on{background:var(--ac);color:var(--aci)}
+.th.cur{outline:2px solid var(--tx);outline-offset:1px}
+.th.sel{outline:3px solid var(--ac);outline-offset:-3px}
+.fcard{display:flex;align-items:center;gap:10px;padding:10px;border-radius:16px;background:var(--cir);border:1px solid var(--ln)}
+.fcard .fi{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--acsoft);flex:none}
+.fcard b{font-size:12.5px;font-weight:600}
+.crumb{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:500;color:var(--tx2);background:var(--well);border:1px solid var(--ln);white-space:nowrap}
+.crumb.cur{background:var(--acsoft);border-color:transparent;font-weight:700;color:var(--tx)}
+.seg3{display:flex;gap:8px}
+.seg3 div{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;border-radius:999px;font-size:12px;color:var(--tx2);background:var(--glass);border:1px solid var(--ln);white-space:nowrap}
+.seg3 div.on{background:var(--ac);color:var(--aci);border-color:transparent;font-weight:600;box-shadow:var(--acs)}
+.selbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 8px;padding:8px 6px 8px 16px;border-radius:26px;background:var(--ac);color:var(--aci);box-shadow:var(--acs)}
+.selbar b{font-size:13px;font-weight:700}
+.selbar .a{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(255,255,255,.18)}
+.ui.dark .selbar .a{background:rgba(0,0,0,.12)}
+.selbar .a.w{background:var(--aci);color:var(--ac)}
+.srcrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:var(--cir);border:1px solid var(--ln);margin-bottom:8px}
+.srcrow.dash{border-style:dashed;border-color:var(--mu2);background:transparent}
+.srcrow .tt{font-size:13.5px;font-weight:600}.srcrow .st{font-size:11px;color:var(--mu);display:flex;align-items:center;gap:5px;margin-top:2px}
+.tile{border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 4px;position:relative;border:1px solid var(--ln);background:var(--well)}
+.tile .ib{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-family:'OpenSans',system-ui,sans-serif;font-size:20px;background:var(--acsoft);border:1px solid var(--ln)}
+.tile span{font-size:11px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.tile .st{position:absolute;top:6px;right:6px;color:var(--tx2)}
+.key{height:46px;border-radius:16px;display:grid;place-items:center;font-family:'OpenSans',system-ui,sans-serif;font-weight:300;font-size:21px;background:var(--well);border:1px solid var(--ln);color:var(--tx)}
+.key.ac{color:var(--mu)}
+.cbtn{height:38px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:10.5px;font-weight:500;letter-spacing:.05em;background:var(--well);border:1px solid var(--ln)}
+.cbtn i{width:9px;height:9px;border-radius:50%}
+.srow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:14px;background:var(--well);border:1px solid var(--ln);margin-bottom:8px;font-size:12px}
+.srow kbd{margin-left:auto;font:500 10.5px 'OpenSans';padding:3px 7px;border-radius:7px;background:var(--cir);border:1px solid var(--ln)}
+.mcard{border-radius:20px;overflow:hidden;position:relative;background:linear-gradient(150deg,#F4F4F2,#DADAD6 40%,#9A9A95 70%,#414140);border:1px solid var(--gb)}
+.ui.dark .mcard{background:linear-gradient(150deg,#2A2A29,#3a3a38 40%,#5a5a56 70%,#8a8a85)}
+.sl{height:4.5px;border-radius:3px;background:var(--trk);position:relative}.sl i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--tx2)}
+.sl u{position:absolute;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;border-radius:50%;background:var(--ac);box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:500;color:var(--tx2);border:1px solid var(--ln);background:var(--well)}
+.tbtn.sel{border-color:var(--tx2);color:var(--tx)}
+.tg{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:700;background:var(--well);border:1px solid var(--ln)}
+.tg.tv{background:var(--acsoft);border-color:var(--tx2)}
+.ib2{width:30px;height:30px;display:grid;place-items:center;color:var(--tx2)}
+
+/* diálogos */
+.base{position:absolute;inset:0;filter:blur(7px) saturate(.9);transform:scale(1.02)}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;background:var(--solid);border:1px solid var(--gb);box-shadow:var(--shl);z-index:3;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--trk);margin:10px auto 6px}
+.alert{border-radius:28px;padding:22px 22px 14px}
+.alert h4{font-family:'OpenSans',system-ui,sans-serif;font-weight:300;font-size:26px;letter-spacing:-.01em;margin-bottom:12px}
+.alert .acts{display:flex;justify-content:flex-end;gap:6px;margin-top:16px}
+.tx{height:46px;border-radius:12px;border:1px solid var(--tx2);display:flex;align-items:center;padding:0 14px;position:relative;font-size:16px}
+.tx label{position:absolute;top:-8px;left:10px;padding:0 5px;background:var(--solid);font-size:11px;color:var(--tx2)}
+.codebox{display:flex;gap:8px;justify-content:center}
+.codebox div{width:40px;height:52px;border-radius:14px;display:grid;place-items:center;font-family:'OpenSans',system-ui,sans-serif;font-size:27px;font-weight:300;background:var(--well);border:1px solid var(--ln)}
+.codebox .cur{border-color:var(--tx2);box-shadow:0 0 0 3px var(--trk)}
+.radar{position:relative;border-radius:50%;display:grid;place-items:center}
+.radar i{position:absolute;inset:0;border-radius:50%;border:1px solid var(--trk);animation:pulse 2.6s ease-out infinite;opacity:0}
+.radar i:nth-child(2){animation-delay:.85s}.radar i:nth-child(3){animation-delay:1.7s}
+@keyframes pulse{0%{transform:scale(.35);opacity:.9}100%{transform:scale(1);opacity:0}}
+.step{display:flex;gap:10px;font-size:12px;color:var(--tx2);margin-bottom:8px}
+.step .no{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--well);border:1px solid var(--ln)}
+.step b{color:var(--tx);font-weight:600}
+.photo{position:absolute;inset:0;background:radial-gradient(80% 60% at 70% 30%,rgba(255,255,255,.55),transparent 60%),linear-gradient(180deg,#cfd3cf,#aab1aa 45%,#6f776f 70%,#3c423c)}
+.ui.dark .photo{background:radial-gradient(80% 60% at 70% 30%,rgba(255,255,255,.18),transparent 60%),linear-gradient(180deg,#4a4f4a,#363b36 45%,#1f231f 70%,#0e100e)}
+.gdk{background:rgba(20,20,20,.42);border:1px solid rgba(255,255,255,.25);color:#fff;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:none}
+.win-t{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 0 0 14px;font-size:12px;color:#d6d6d2;background:#262625;flex:none}
+.win-t .w{display:flex}.win-t .w span{width:46px;height:34px;display:grid;place-items:center;color:#d6d6d2}
+.hide{display:none!important}
+@media (max-width:700px){.top{padding:28px 16px 8px}.top h1{font-size:32px}.bar .in,main{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="eyebrow">SixF Smart Remote · docs/design/mockups</div>
+  <h1>Mockup ZIXO, fiel ao app</h1>
+  <p>A estrutura de cada tela vem do código atual: mesmos blocos, mesma ordem, mesmos botões e textos. Só a pele muda, para o padrão ZIXO (vidro fosco, grafite, Open Sans Light nos números). Cada tela aparece em vertical (celular), horizontal (celular deitado, com trilho lateral) e Windows (janela larga), nos temas claro e escuro.</p>
+  <div class="system">
+    <div class="sw"><i style="background:#414140"></i><b>#414140</b><span>ativo, texto forte</span></div>
+    <div class="sw"><i style="background:#fff"></i><b>#FFFFFF</b><span>superfícies</span></div>
+    <div class="sw"><i style="background:#38BC37"></i><b>#38BC37</b><span>conectado</span></div>
+    <div class="sw"><i style="background:#F44336"></i><b>#F44336</b><span>desligar, erro</span></div>
+    <div class="sw"><i style="background:transparent;display:grid;place-items:center;font:500 12px 'OpenSans'">Aa</i><b>Open Sans</b><span>300 · 400 · 500 · 600 · 700</span></div>
+    <div class="sw"><i style="background:transparent;display:grid;place-items:center;font:300 14px 'OpenSans'">Aa</i><b>Open Sans Light</b><span>números e títulos</span></div>
+  </div>
+</div>
+<div class="bar"><div class="in">
+  <div class="seg"><label>Tema</label><div class="pill" id="fTheme"><button data-v="light" class="on">Claro</button><button data-v="dark">Escuro</button><button data-v="both">Ambos</button></div></div>
+  <div class="seg"><label>Formato</label><div class="pill" id="fOri"><button data-v="all" class="on">Todos</button><button data-v="p">Vertical</button><button data-v="l">Horizontal</button><button data-v="d">Windows</button></div></div>
+  <div class="seg"><label>Tela</label><div class="chips" id="fScr"></div></div>
+</div></div>
+<main id="root"></main>
+
+<script>
+/* ═════════ ícones ═════════ */
+const P={
+ tv:'<rect x="3" y="5" width="18" height="12.5" rx="2.6"/><path d="M8.5 20.5h7"/>',
+ tv2:'<rect x="3" y="4.5" width="18" height="12" rx="2.4"/><path d="M8 20h8M12 16.5V20"/>',
+ media:'<rect x="3" y="4" width="18" height="16" rx="3.2"/><path d="M10.2 9.2v5.6l4.8-2.8z" fill="currentColor" stroke="none"/>',
+ pointer:'<path d="M6 4.5l12.5 6-5.4 1.7-2.2 5.3z"/>',
+ dial:'<g fill="currentColor" stroke="none"><circle cx="6.5" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="17.5" cy="5" r="1.5"/><circle cx="6.5" cy="10.5" r="1.5"/><circle cx="12" cy="10.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="6.5" cy="16" r="1.5"/><circle cx="12" cy="16" r="1.5"/><circle cx="17.5" cy="16" r="1.5"/><circle cx="12" cy="21" r="1.5"/></g>',
+ grid:'<rect x="4" y="4" width="6.6" height="6.6" rx="2.2"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="2.2"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="2.2"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="2.2"/>',
+ power:'<path d="M12 3.5v7.5"/><path d="M6.6 7.2a7.6 7.6 0 1 0 10.8 0"/>',
+ tune:'<path d="M4 7h9M18 7h2M4 17h2.5M11 17h9"/><circle cx="15.5" cy="7" r="2.2"/><circle cx="8.8" cy="17" r="2.2"/>',
+ pip:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="11" width="7" height="6" rx="1.5" fill="currentColor"/>',
+ cast:'<path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6"/><path d="M3 13a6 6 0 0 1 6 6M3 16.5A2.5 2.5 0 0 1 5.5 19"/>',
+ castc:'<path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6"/><path d="M3 13a6 6 0 0 1 6 6M3 16.5A2.5 2.5 0 0 1 5.5 19"/><path d="M8.5 13.5l2 2 4-4.2" stroke-width="1.4"/>',
+ moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+ search:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+ mic:'<rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+ mute:'<path d="M4 9.8v4.4h3.4L12 18.2V5.8L7.4 9.8z"/><path d="M16 9.8l4.2 4.4M20.2 9.8L16 14.2"/>',
+ vol:'<path d="M4 9.8v4.4h3.4L12 18.2V5.8L7.4 9.8z"/><path d="M16 9.4a4 4 0 0 1 0 5.2M18.6 6.8a7.6 7.6 0 0 1 0 10.4"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',
+ up:'<path d="M6 15l6-6 6 6"/>',down:'<path d="M6 9l6 6 6-6"/>',left:'<path d="M15 6l-6 6 6 6"/>',right:'<path d="M9 6l6 6-6 6"/>',
+ back:'<path d="M9 7.5L4.5 12 9 16.5"/><path d="M4.5 12h10a5 5 0 0 1 0 10H12" transform="translate(0 -5)"/>',
+ undo:'<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+ home:'<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19.5h12V9.5"/>',
+ menu:'<path d="M4 7h16M4 12h16M4 17h10"/>',
+ input:'<rect x="3" y="5.5" width="18" height="13" rx="2.6"/><path d="M10.5 9l3 3-3 3M3 12h10"/>',
+ exit:'<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+ play:'<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>',
+ pause:'<g fill="currentColor" stroke="none"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></g>',
+ stop:'<rect x="6.5" y="6.5" width="11" height="11" rx="2.2" fill="currentColor" stroke="none"/>',
+ prev:'<path d="M6.5 6v12"/><path d="M18 6.5v11L10 12z" fill="currentColor" stroke="none"/>',
+ next:'<path d="M17.5 6v12"/><path d="M6 6.5v11L14 12z" fill="currentColor" stroke="none"/>',
+ r10:'<path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.5 4v4h4"/><text x="12" y="15.2" text-anchor="middle" font-size="7" font-family="OpenSans" font-weight="600" fill="currentColor" stroke="none">10</text>',
+ f10:'<path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.5 4v4h-4"/><text x="12" y="15.2" text-anchor="middle" font-size="7" font-family="OpenSans" font-weight="600" fill="currentColor" stroke="none">10</text>',
+ repeat:'<path d="M17 3.5l3 3-3 3"/><path d="M4 11V9.5a3 3 0 0 1 3-3h13"/><path d="M7 20.5l-3-3 3-3"/><path d="M20 13v1.5a3 3 0 0 1-3 3H4"/>',
+ shuffle:'<path d="M16 4h4v4M4 20L20 4M20 16v4h-4M14.5 14.5L20 20M4 4l5 5"/>',
+ cc:'<rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.6 10.3a2.3 2.3 0 1 0 0 3.4M16.4 10.3a2.3 2.3 0 1 0 0 3.4"/>',
+ wave:'<path d="M4 10v4M8 7v10M12 4.5v15M16 8v8M20 10.5v3"/>',
+ folder:'<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+ folderp:'<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/>',
+ image:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.6"/><circle cx="9" cy="9.5" r="1.6"/><path d="M20.5 15.5l-5-5L5 19.5"/>',
+ film:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.6"/><path d="M8 4.5v15M16 4.5v15M3.5 9.5H8M3.5 14.5H8M16 9.5h4.5M16 14.5h4.5"/>',
+ music:'<path d="M9 18V6.2l11-2.2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+ cloud:'<path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
+ phone:'<rect x="7" y="2.5" width="10" height="19" rx="2.6"/><path d="M11 18.5h2"/>',
+ x:'<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+ check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+ refresh:'<path d="M20 11a8 8 0 0 0-14.6-4.5M4 4v3.5h3.5M4 13a8 8 0 0 0 14.6 4.5M20 20v-3.5h-3.5"/>',
+ more:'<g fill="currentColor" stroke="none"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></g>',
+ morev:'<g fill="currentColor" stroke="none"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></g>',
+ hdmi:'<path d="M4 8h16v5l-2.2 3H6.2L4 13z"/><path d="M8 11.5h8"/>',
+ antenna:'<path d="M12 13v8M8.5 21h7"/><circle cx="12" cy="11" r="1.8"/><path d="M8 7a5.6 5.6 0 0 0 0 8M16 7a5.6 5.6 0 0 1 0 8M5.2 4.2a9.6 9.6 0 0 0 0 13.6M18.8 4.2a9.6 9.6 0 0 1 0 13.6"/>',
+ star:'<path d="M12 4.2l2.4 4.9 5.4.7-3.9 3.8.9 5.4L12 16.4 7.2 19l.9-5.4-3.9-3.8 5.4-.7z"/>',
+ starf:'<path d="M12 4.2l2.4 4.9 5.4.7-3.9 3.8.9 5.4L12 16.4 7.2 19l.9-5.4-3.9-3.8 5.4-.7z" fill="currentColor"/>',
+ wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 15.8a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/>',
+ ur:'<path d="M7 17L17 7M9 7h8v8"/>',
+ full:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+ fullx:'<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+ link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+ unlink:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/><path d="M4 4l16 16"/>',
+ shield:'<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/>',
+ vibe:'<rect x="8" y="4" width="8" height="16" rx="2.2"/><path d="M4.5 9v6M19.5 9v6"/>',
+ pulse:'<path d="M3 12h4l2.5-6 5 12L17 12h4"/>',
+ mouse:'<rect x="6.5" y="3" width="11" height="18" rx="5.5"/><path d="M12 7v3"/>',
+ lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
+ list:'<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.5" cy="7" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="17" r="1" fill="currentColor"/>',
+ queue:'<path d="M3 6h12M3 12h12M3 18h7"/><path d="M17 15v6M14 18h6"/>',
+ plist:'<path d="M3 6h12M3 12h12M3 18h7"/><path d="M19 15V6l2.5 1"/><circle cx="17" cy="16" r="2"/>',
+ plad:'<path d="M3 6h12M3 12h8M3 18h5"/><path d="M17 12v8M13 16h8"/>',
+ key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8.5-8.5M16 7l2.5 2.5"/>',
+ bksp:'<path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/><path d="M12 9.5l5 5M17 9.5l-5 5"/>',
+ trash:'<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+ sweep:'<path d="M4 7h11M4 12h8M4 17h5"/><path d="M15 15l5 5M20 15l-5 5"/>',
+ bkadd:'<path d="M7 4h10v16l-5-3.5L7 20z"/><path d="M12 8v5M9.5 10.5h5"/>',
+ edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+ drag:'<path d="M5 9h14M5 15h14"/>',
+ eq:'<path d="M6 20v-8M12 20V6M18 20v-12"/>',
+ eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+ info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+ radar:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/>',
+ kbd:'<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
+ palette:'<path d="M12 4a8 8 0 1 0 0 16c1.4 0 2-1 1.5-2.2-.5-1.3.2-2.3 1.5-2.3H17a3 3 0 0 0 3-3A8 8 0 0 0 12 4z"/><circle cx="8" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="8" r="1" fill="currentColor"/><circle cx="16" cy="11" r="1" fill="currentColor"/>',
+ tvoff:'<rect x="3" y="5" width="18" height="12.5" rx="2.6"/><path d="M8.5 20.5h7M3 3l18 18"/>',
+ wifif:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M9 11h4M11 9v4"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
+ sync:'<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
+ sort2:'<path d="M3 6h13M3 12h9M3 18h5"/><path d="M18 9v11M15 17l3 3 3-3"/>',
+ minw:'<path d="M5 12h14"/>',maxw:'<rect x="5" y="5" width="14" height="14" rx="1"/>',
+};
+const ic=(n,s=18,w=1.6)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
+const circ=(n,s=36,i=18,cls='',st='')=>`<div class="circ ${cls}" style="width:${s}px;height:${s}px;${st}">${ic(n,i)}</div>`;
+const chip=(t,o='')=>`<span class="chip ${o}">${t}</span>`;
+const card=(inner,{title,icon,trail,pad,st=''}={})=>`<div class="card" style="${pad?`padding:${pad};`:''}${st}">${title||trail?`<div class="ch">${icon?`<span class="mu">${ic(icon,16)}</span>`:''}${title?`<b>${title}</b>`:'<span class="sp"></span>'}${trail||''}</div>`:''}${inner}</div>`;
+const big=(v,s=38,u='')=>`<div class="big" style="font-size:${s}px">${v}${u?`<small>${u}</small>`:''}</div>`;
+const scene=`<svg class="sc" viewBox="0 0 100 100" preserveAspectRatio="none"><circle cx="72" cy="28" r="9" fill="rgba(255,255,255,.55)"/><path d="M0 78 28 46l18 20 14-14 40 40V100H0z" fill="rgba(255,255,255,.28)"/><path d="M0 88 34 62l22 18 16-10 28 22v8H0z" fill="rgba(0,0,0,.16)"/></svg>`;
+
+/* ═════════ dados ═════════ */
+const DEVS=[
+ {n:'TV da Sala',ic:'tv',ip:'192.168.1.42',b:'LG webOS',def:1},
+ {n:'Quarto',ic:'tv2',ip:'192.168.1.57',b:'Samsung Tizen'},
+ {n:'Escritório',ic:'castc',ip:'192.168.1.80',b:'Chromecast'}];
+const ACTIVE={lg:0,gtv:2};
+const APPS=[['Netflix','N',1],['YouTube','Y',1],['Prime Video','P',0],['Globoplay','G',1],['Disney+','D',0],['Max','M',0],['Spotify','S',0],['Plex','Px',0],['Apple TV','A',0],['Pluto TV','Pl',0],['Navegador','W',0],['Galeria','Ga',0],['Twitch','T',0],['Kodi','K',0],['Música','Mu',0],['Ajustes','Aj',0]];
+
+/* ═════════ peças do app ═════════ */
+const sbar=()=>`<div class="sbar"><span>21:47</span><div class="r">${ic('wifi',15,1.8)}<svg width="24" height="12" viewBox="0 0 24 12"><rect x=".5" y=".5" width="20" height="11" rx="3" fill="none" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="14" height="8" rx="1.8" fill="currentColor"/><rect x="21.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></div></div>`;
+const hdr=(dev,{narrow=false,pip=false,on=true}={})=>{const c=narrow?32:36,d=DEVS[dev];
+ return `<div class="hdr ${narrow?'nr':''}"><div class="lg"><img src="../../../assets/icons/SixF_Logo_01.png" alt="" onerror="this.remove()">6F</div>
+  <div class="ht"><div class="s1"><b>SixF</b>Remote</div><div class="s2"><i class="led ok"></i><span class="ell">${d.n}</span></div></div>
+  ${pip?`<div class="c">${circ('pip',c,18)}</div>`:''}
+  <div class="c">${circ('power',c,18,'','color:#F44336')}</div>
+  <div class="c">${circ('tv',c,18,'','color:#38BC37')}</div>
+  <div class="c">${circ('moon',c,18)}</div>
+  <div class="c">${circ('tune',c,18)}</div></div>`};
+const dsel=(act)=>`<div class="dsel">${DEVS.map((d,i)=>`<div class="dp ${i===act?'a':''}"><i class="led ${i===act?'ok':''}"></i>${ic(d.ic,15)}${d.n}${d.def?`<span style="color:var(--tx2)">${ic('starf',12)}</span>`:''}</div>`).join('')}<div class="dp add">${ic('plus',16)}Novo</div></div>`;
+const TABS=[['ctl','Controle','tv'],['med','Mídia','media'],['trk','Trackpad','pointer'],['key','Teclas','dial'],['app','Apps','grid']];
+const navbar=(tab,lg)=>`<div class="nav">${TABS.filter(t=>lg||t[0]!=='trk').map(([k,l,i])=>`<div class="it ${k===tab?'on':''}"><span class="ib">${ic(i,18)}</span>${l}</div>`).join('')}</div>`;
+const rail=(tab,lg)=>`<div class="rail">${TABS.filter(t=>lg||t[0]!=='trk').map(([k,l,i])=>`<div class="it ${k===tab?'on':''}"><span class="circ">${ic(i,18)}</span>${l}</div>`).join('')}</div>`;
+
+/* Shell vertical */
+function shP(tab,body,{dev=0,lg=true,hd=true,nav=true}={}){
+ return `<div class="cl" style="height:100%">${sbar()}
+  ${hd?`<div style="padding:4px 16px 0">${hdr(dev,{narrow:false})}</div><div style="padding:0 16px">${dsel(dev)}</div>`:''}
+  <div style="flex:1;min-height:0;position:relative;overflow:hidden">${body}</div>
+  ${nav?`<div style="height:88px;flex:none"></div>${navbar(tab,lg)}`:''}</div>`;
+}
+/* Shell horizontal (celular deitado) */
+function shL(tab,body,{dev=0,lg=true,hd=true}={}){
+ return `<div class="rw" style="height:100%;padding-left:28px">${rail(tab,lg)}
+  <div class="cl" style="flex:1;min-width:0;height:100%">
+   ${hd?`<div class="rw" style="padding:6px 16px 0 12px;gap:12px"><div style="flex:5;min-width:0">${hdr(dev,{narrow:true})}</div><div style="flex:6;min-width:0">${dsel(dev)}</div></div>`:''}
+   <div style="flex:1;min-height:0;position:relative;overflow:hidden">${body}</div></div></div>`;
+}
+/* Shell Windows */
+function shD(tab,body,{dev=0,lg=true,title,action='',hd=true}={}){
+ const t={ctl:'Controle',key:'Teclas',trk:'Trackpad',med:'Mídia',app:'Apps'}[tab];
+ return `<div class="cl" style="height:100%"><div class="win-t"><span>SixF Remote</span><div class="w"><span>${ic('minw',14)}</span><span>${ic('maxw',12)}</span><span>${ic('x',14)}</span></div></div>
+  <div class="rw" style="flex:1;min-height:0">${rail(tab,lg)}
+   <div class="cl" style="flex:1;min-width:0;height:100%;padding:12px 24px 20px 4px">
+    ${hd?`${hdr(dev,{pip:true})}<div class="rw" style="height:56px;gap:24px"><span style="font-size:17px;letter-spacing:-.2px">${title||t}</span><div class="sp">${dsel(dev)}</div>${action}</div>`:''}
+    <div style="flex:1;min-height:0;position:relative">${body}</div></div></div></div>`;
+}
+const pill=(ico,txt)=>`<span class="btn act" style="height:34px;padding:0 16px;font-size:12px">${ic(ico,15)}${txt}</span>`;
+
+/* ── Controle ── */
+const slotTop=[['home','HOME'],['menu','MENU'],['input','INPUT'],['exit','EXIT']];
+const slotBot=[['Netflix','N'],['YouTube','Y'],['Prime Video','P'],null];
+const strip=(g,sm)=>`<div class="strip ${sm?'sm':''}">${g==='top'?slotTop.map(([i,l])=>`<div class="slot">${ic(i,18)}${l}</div>`).join(''):slotBot.map(s=>s?`<div class="slot"><span class="ap">${s[1]}</span>${s[0]}</div>`:`<div class="slot empty">${ic('plus',16)}</div>`).join('')}</div>`;
+function vpill(kind,h){const w=Math.max(64,Math.min(90,h*.41)),b=w-16;
+ return `<div class="vp" style="width:${w}px;height:${h}px"><div class="bg" style="width:${b}px;height:${b}px">${ic(kind==='v'?'plus':'up',b*.5,1.7)}</div>
+  <div class="v">${big(kind==='v'?'24':'7',30)}<small>${kind==='v'?'VOL':'CH'}</small></div>
+  <div class="bg" style="width:${b}px;height:${b}px">${ic(kind==='v'?'minus':'down',b*.5,1.7)}</div></div>`}
+function volch(h){const r=Math.max(42,Math.min(56,h*.26));
+ return `<div class="rw" style="justify-content:center;gap:22px">${vpill('v',h)}<div class="vmid"><div class="circ" style="width:${r}px;height:${r}px;color:var(--mu)">${ic('mute',r*.44)}</div><div style="height:${Math.max(12,Math.min(26,h*.12))}px"></div><div class="circ act" style="width:${r}px;height:${r}px">${ic('mic',r*.44)}</div></div>${vpill('c',h)}</div>`}
+function dpad(size,{back=true}={}){const b=size*.28,c=size*.36,e=8;
+ return `<div class="dpr"><div class="sidebtn" style="height:64px">${ic('undo',22)}VOLTAR</div>
+  <div class="wheel" style="width:${size}px;height:${size}px"><div class="ring"></div>
+   <div class="ar" style="top:${e}px;left:50%;width:${b*1.5}px;height:${b}px;margin-left:-${b*.75}px">${ic('up',28)}</div>
+   <div class="ar" style="bottom:${e}px;left:50%;width:${b*1.5}px;height:${b}px;margin-left:-${b*.75}px">${ic('down',28)}</div>
+   <div class="ar" style="left:${e}px;top:50%;height:${b*1.5}px;width:${b}px;margin-top:-${b*.75}px">${ic('left',28)}</div>
+   <div class="ar" style="right:${e}px;top:50%;height:${b*1.5}px;width:${b}px;margin-top:-${b*.75}px">${ic('right',28)}</div>
+   <div class="okb act" style="width:${c}px;height:${c}px">OK</div></div>
+  <div class="cl" style="gap:8px"><div class="sidebtn" style="height:52px;font-size:9px">${ic('antenna',20)}TV Digital</div><div class="sidebtn" style="height:52px">${ic('hdmi',20)}HDMI 1</div></div></div>`}
+const ctlP=()=>shP('ctl',`<div class="cl" style="padding:8px 16px 0;gap:10px">${strip('top')}
+ <div class="card" style="padding:14px 10px;height:430px;display:flex;flex-direction:column;justify-content:space-between">${volch(178)}${dpad(190)}</div>${strip('bot')}</div>`);
+const ctlL=()=>shL('ctl',`<div class="rw" style="height:100%;padding:6px 16px 8px;gap:0"><div class="cl" style="flex:1;gap:8px;justify-content:center;padding:0 8px">${strip('top',1)}${volch(120)}${strip('bot',1)}</div>
+ <div style="width:1px;height:62%;background:var(--ln)"></div><div style="flex:1;display:grid;place-items:center">${dpad(176)}</div></div>`);
+const activeCard=(d)=>{const dv=DEVS[d];return card(`<div style="height:150px;border-radius:18px;padding:16px 18px;position:relative;background:linear-gradient(135deg,#F4F4F2,#DADAD6 32%,#8E8E89 66%,#414140);box-shadow:0 14px 30px -14px rgba(40,40,38,.5);color:#2a2a29"><span style="position:absolute;right:16px;top:14px">${ic('tv',22)}</span>
+  <div class="rw" style="gap:6px;font-size:11px"><i class="led ok"></i>Conectado</div><div style="font-size:18px;margin-top:8px;letter-spacing:-.2px">${dv.n}</div><div style="font-size:11px;opacity:.75;margin-top:3px">${dv.b} · ${dv.ip}</div><b style="position:absolute;right:18px;bottom:14px;color:#fff;font-weight:600;letter-spacing:.04em;font-size:15px">${dv.b.split(' ')[0]}</b></div>
+  <div class="rw" style="margin-top:12px">${[['pulse','Diagnóstico'],['wifif','Buscar'],['more','Opções'],['power','Desligar']].map(([i,l])=>`<div class="cl sp" style="align-items:center;gap:6px;font-size:10px;color:var(--mu)">${circ(i,36,17)}${l}</div>`).join('')}</div>`,{title:'Aparelho ativo'})};
+const shortcuts=()=>card(['Setas ↑ ↓ ← →|Navegar D-Pad','Enter / Espaço|Confirmar (OK)','0 – 9|Digitar Canais','+ / − / M|Controle de Áudio','Backspace / Esc|Voltar (Back)'].map(s=>{const[k,d]=s.split('|');return `<div class="srow"><span>${d}</span><kbd>${k}</kbd></div>`}).join(''),{title:'Atalhos do teclado físico',icon:'kbd'});
+const ctlD=()=>shD('ctl',`<div class="rw" style="height:100%;gap:16px;align-items:stretch"><div class="cl" style="flex:21;gap:14px;min-width:0">${strip('top')}
+ <div class="card rw" style="flex:1;padding:16px;gap:0;align-items:center"><div style="flex:1">${volch(250)}</div><div style="width:1px;margin:24px 12px;align-self:stretch;background:var(--ln)"></div><div style="flex:1">${dpad(250)}</div></div>${strip('bot')}</div>
+ <div class="cl" style="flex:10;gap:14px;min-width:0">${activeCard(0)}${shortcuts()}</div></div>`,{action:pill('cast','Buscar TVs')});
+
+/* ── Teclas ── */
+const keypad=(h=46,gap=9)=>`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:${gap}px">${['1','2','3','4','5','6','7','8','9'].map(k=>`<div class="key" style="height:${h}px">${k}</div>`).join('')}<div class="key ac" style="height:${h}px">—</div><div class="key" style="height:${h}px">0</div><div class="key ac" style="height:${h}px">${ic('bksp',20)}</div></div>`;
+const colors2=(c)=>`<div style="display:grid;grid-template-columns:repeat(${c},1fr);gap:8px">${[['VERMELHO','#F44336'],['VERDE','#38BC37'],['AMARELO','#E8B931'],['AZUL','#3D7FE0']].map(([l,k])=>`<div class="cbtn"><i style="background:${k}"></i>${l}</div>`).join('')}</div>`;
+const keyP=()=>shP('key',`<div class="cl" style="padding:8px 16px 0;gap:12px">${card(keypad(46),{title:'Digitar canal',trail:chip('Canal 7','acc')})}${card(colors2(2),{title:'Botões coloridos'})}</div>`);
+const keyL=()=>shL('key',`<div class="cl cut" style="padding:6px 16px 0;gap:12px;height:100%;overflow:hidden">${card(keypad(46),{title:'Digitar canal',trail:chip('Canal 7','acc')})}${card(colors2(2),{title:'Botões coloridos'})}</div>`);
+const keyD=()=>shD('key',`<div class="rw" style="height:100%;gap:16px;align-items:stretch">
+ <div class="sp" style="flex:10">${card(`<div class="mu" style="font-size:11px">Canal atual</div><div style="margin:6px 0">${big('7',50)}</div><div class="mu" style="font-size:11px;margin-bottom:18px">Use — para subcanal · 0–9 no teclado</div>${keypad(60,9)}`,{title:'Digitar canal',icon:'dial',trail:chip('CH 7','acc'),st:'height:100%'})}</div>
+ <div class="cl" style="flex:11;min-width:0">${card(colors2(2),{title:'Botões coloridos',icon:'palette'})}</div>
+ <div class="cl" style="flex:10;min-width:0">${card(volch(200),{title:'Volume e canal',icon:'vol'})}</div></div>`);
+
+/* ── Trackpad ── */
+const tpad=()=>`<div class="gl" style="height:100%;position:relative;overflow:hidden;background-image:radial-gradient(circle,var(--trk) 1px,transparent 1.4px),var(--glass);background-size:18px 18px,auto">
+ <div style="position:absolute;top:14px;left:16px"><div style="font-size:13px;font-weight:500">Magic Trackpad</div><div class="mu" style="font-size:11px">Arraste para mover o cursor • Toque para clicar</div></div>
+ <div style="position:absolute;left:58%;top:52%;width:120px;height:120px;margin:-60px;border-radius:50%;background:radial-gradient(circle,var(--trk),transparent 70%)"></div>
+ <div class="circ act" style="position:absolute;left:58%;top:52%;width:34px;height:34px;margin:-17px"></div></div>`;
+const tbtns=`<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;margin-top:12px;flex:none">
+ <div class="btn" style="height:50px;border-radius:14px;gap:8px;font-size:11.5px;letter-spacing:.03em">${ic('undo',18)}VOLTAR</div>
+ <div class="btn act" style="height:50px;border-radius:14px;font-size:11.5px;letter-spacing:.03em">${ic('mouse',20)}CLIQUE / OK</div>
+ <div class="btn" style="height:50px;border-radius:14px;font-size:11.5px;letter-spacing:.03em">${ic('home',18)}HOME</div></div>`;
+const trkBody=`<div class="cl" style="height:100%;padding:6px 16px 12px"><div style="flex:1;min-height:0">${tpad()}</div>${tbtns}</div>`;
+const trkP=()=>shP('trk',trkBody),trkL=()=>shL('trk',trkBody),trkD=()=>shD('trk',trkBody);
+
+/* ── Apps ── */
+const appTile=([n,m,f],i,sm)=>`<div class="tile" style="${sm?'padding:4px;border-radius:12px;':''}">${f?`<span class="st">${ic('starf',sm?13:15)}</span>`:`<span class="st mu2">${ic('star',sm?13:15)}</span>`}<div class="ib" style="${sm?'width:36px;height:36px;font-size:17px;border-radius:10px':''}">${m}</div><span style="${sm?'font-size:10px':''}">${n}</span></div>`;
+const appsHead=(o={})=>`<div class="rw" style="align-items:flex-end"><div class="sp"><div class="rw" style="gap:8px;font-size:13px;font-weight:500"><span class="mu">${ic('grid',16)}</span>${o.title||'Aplicativos & Atalhos'}</div>
+ <div style="margin-top:10px">${o.note?`<span class="mu" style="font-size:12px">${o.note}</span>`:big(o.n||16,o.sm?28:34,o.unit||'aplicativos · LG webOS')}</div></div>${circ('refresh',36,18)}</div>`;
+const appsSearch=(h=42)=>`<div class="field" style="height:${h}px;margin-top:12px">${ic('search',17)}Buscar aplicativo na TV...</div><div class="rw" style="gap:6px;margin-top:10px">${chip('Todos','sel')}${chip(ic('star',13)+'Favoritos')}</div>`;
+const appsP=()=>shP('app',`<div class="cl" style="padding:8px 16px 0;height:100%">${card(appsHead()+appsSearch(),{})}
+ <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px">${APPS.map((a,i)=>appTile(a,i)).join('')}</div></div>`);
+const appsL=()=>shL('app',`<div class="cl cut" style="padding:6px 16px 0;height:100%;overflow:hidden">${card(appsHead()+appsSearch(40),{})}
+ <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:10px;margin-top:10px">${APPS.map((a,i)=>appTile(a,i)).join('')}</div></div>`);
+const appsD=()=>shD('app',`<div class="rw" style="height:100%;gap:16px;align-items:stretch"><div class="card cl" style="flex:26;min-width:0;padding:10px 12px">${appsHead({sm:1})}${appsSearch(36)}
+ <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-top:12px">${APPS.concat(APPS.slice(0,8)).map((a,i)=>appTile(a,i,1)).join('')}</div></div>
+ <div class="cl" style="flex:10;min-width:0">${activeCard(0)}</div></div>`,{action:pill('refresh','Recarregar aplicativos')});
+/* Apps · Chromecast sem ADB (painel passo a passo dentro da aba) */
+const adbPanel=(step2)=>`<div class="card" style="padding:14px;background:var(--acsoft);border-color:var(--tx2)">
+ <div class="rw" style="gap:8px;font-size:14px;font-weight:700"><span style="color:var(--tx2)">${ic(step2?'check':'unlink',19)}</span>${step2?'Pareado com a TV':'Mostrar os aplicativos do Chromecast'}</div>
+ <div class="mu" style="font-size:12px;margin:4px 0 10px">${step2?'Falta só um número: o SixF não achou a porta de conexão sozinho.':'Faça isto uma vez no Chromecast:'}</div>
+ ${step2?`<div class="step"><span class="no">1</span><span>Na TV, volte para a tela <b>Depuração por Wi-Fi</b> (feche a janela do código).</span></div><div class="step"><span class="no">2</span><span>Em <b>Endereço IP e porta</b>, digite aqui o número depois dos “:”.</span></div>
+  <div class="tx" style="margin-top:14px"><label>Porta de conexão</label><span class="mu">ex.: 46761</span></div>
+  <div class="rw" style="gap:8px;margin-top:12px"><div class="btn act sp" style="height:42px">${ic('link',17)}Conectar</div><span style="font-size:13px;font-weight:600;padding:0 8px">Parear de novo</span></div>`
+ :`<div class="step"><span class="no">1</span><span>Abra <b>Configurações › Sistema › Opções do desenvolvedor</b> e ative <b>Depuração por Wi-Fi</b>.</span></div>
+  <div class="step"><span class="no">2</span><span>Entre em <b>Depuração por Wi-Fi</b> e toque em <b>Parear o dispositivo com um código de pareamento</b>.</span></div>
+  <div class="step"><span class="no">3</span><span>A TV abre uma janela com o <b>código de 6 dígitos</b> e um <b>Endereço IP e porta</b>. Digite aqui a <b>porta dessa janela</b> e o código.</span></div>
+  <div class="rw" style="gap:8px;margin-top:8px"><div class="tx sp" style="height:42px"><label>Porta do código</label><span class="mu">ex.: 37123</span></div><div class="tx sp" style="height:42px"><label>Código</label><span class="mu">6 dígitos</span></div></div>
+  <div class="btn act" style="width:100%;height:42px;margin-top:12px">${ic('link',17)}Conectar</div>`}</div>`;
+const appsAdbP=()=>shP('app',`<div class="cl" style="padding:8px 16px 0;gap:12px">${card(appsHead({title:'Atalhos do Chromecast',note:'Configure ADB para listar os apps instalados'}),{})}${adbPanel(false)}
+ <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${APPS.slice(0,4).map((a,i)=>appTile(a,i)).join('')}</div></div>`,{dev:2,lg:false});
+const appsAdbL=()=>shL('app',`<div class="rw" style="padding:6px 16px 0;gap:12px;height:100%"><div class="cl" style="flex:1;gap:10px">${card(appsHead({title:'Atalhos do Chromecast',note:'Configure ADB para listar os apps instalados'}),{})}<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${APPS.slice(0,4).map((a,i)=>appTile(a,i)).join('')}</div></div><div class="cut" style="flex:1;overflow:hidden">${adbPanel(true)}</div></div>`,{dev:2,lg:false});
+
+/* ── Mídia: peças ── */
+const libHeader=(q)=>`<div class="rw" style="padding:6px 16px 6px;gap:12px"><div class="circ" style="width:36px;height:36px;border-radius:10px">${ic('media',20)}</div>
+ <div class="sp"><div style="font-size:15px;font-weight:700" class="ell">Biblioteca de mídia · TV da Sala</div><div class="rw" style="gap:6px;font-size:11px;color:var(--tx2)"><i class="led ok"></i>Destino ativo: TV da Sala</div></div>${q?`<span class="bad">${ic('sweep',18)}</span>`:''}</div>`;
+const secSel=(on,q,pad=16)=>`<div class="seg3" style="padding:6px ${pad}px">${[['Arquivos','folder'],['Playlists','plist'],[q?`Fila (${q})`:'Fila','queue']].map(([l,i])=>`<div class="${l===on?'on':''}">${ic(i,16)}${l}</div>`).join('')}</div>`;
+const crumbs=(parts)=>`<div class="rw" style="gap:2px;overflow:hidden">${parts.map((p,i)=>`${i?`<span class="mu">${ic('right',16)}</span>`:''}<span class="crumb ${i===parts.length-1?'cur':''}">${i===0?ic('cloud',13):''}${p}</span>`).join('')}</div>`;
+const fileTile=(n,kind,ex,s,sel)=>`<div class="th ${['','v2','v3'][s%3]} ${kind==='v'?'vv':''} ${sel?'sel':''}" style="aspect-ratio:1">${kind==='i'?scene:''}${kind==='v'?`<span class="pl">${ic('play',13)}</span>`:''}<span class="nm">${n}</span>${kind==='v'?`<span class="ex">${ex}</span>`:''}<span class="sc2 ${sel?'on':''}">${sel?ic('check',12,3):''}</span></div>`;
+const fcard=n=>`<div class="fcard"><span class="fi">${ic('folder',19)}</span><b class="sp" style="line-height:1.2">${n}</b></div>`;
+function folderView({cols=3,fcols=2,list=false,sel=0,compact=false}={}){
+ const files=[['Abertura.mp4','v','MP4'],['Tema.mp4','v','MP4'],['Fundo.jpg','i'],['Capa.jpg','i'],['Trailer.mp4','v','MP4'],['Elenco.jpg','i'],['Cena_01.jpg','i'],['Vila.jpg','i'],['Cena_03.jpg','i'],['Cartaz.jpg','i']];
+ return `<div class="cl" style="height:100%"><div style="flex:1;min-height:0;overflow:hidden" class="cut"><div class="rw" style="padding:4px 16px 0;gap:8px"><div>${circ('back',34,16)}</div><div class="sp">${crumbs(['Google Drive','Mídia','Séries'])}</div>${circ('refresh',34,16)}</div>
+  <div style="padding:10px 18px 0"><div style="font-size:24px;font-weight:300;line-height:1.1;letter-spacing:-.5px">Séries</div><div class="mu" style="font-size:11px;margin-top:3px">2 pastas · 6 vídeos · 9 fotos</div></div>
+  <div class="rw" style="padding:10px 16px 0;gap:8px"><div class="field sp" style="height:40px">${ic('search',18)}Buscar nesta pasta</div>${circ('grid',36,18,'act')}${circ('list'==='x'?'x':'sort2',36,18)}</div>
+  <div class="rw" style="padding:9px 16px 4px;gap:6px">${chip('Tudo','sel')}${chip(ic('folder',13)+'Pastas 2')}${chip(ic('film',13)+'Vídeos 6')}${chip(ic('image',13)+'Fotos 9')}</div>
+  <div style="padding:6px 16px 0"><div style="display:grid;grid-template-columns:repeat(${fcols},1fr);gap:8px">${fcard('Chaves')}${fcard('Chapolin')}</div><div style="height:12px"></div>
+  ${list?files.slice(0,6).map(([n,k,e],i)=>`<div class="fcard" style="margin-bottom:7px;padding:6px 4px 6px 8px;${i<sel?'background:var(--acsoft);border-color:transparent':''}"><span class="th ${i<sel?'act':''}" style="width:22px;height:22px;border-radius:50%;border:1.6px solid ${i<sel?'transparent':'var(--mu)'};background:${i<sel?'':'transparent'};display:grid;place-items:center">${i<sel?ic('check',13,3):''}</span><span class="th ${k==='v'?'vv':'v2'}" style="width:42px;height:42px;border-radius:10px">${k==='i'?scene:`<span class="pl">${ic('play',11)}</span>`}</span><div class="sp"><b style="font-size:12.5px">${n}</b><div class="mu" style="font-size:10.5px">${e||'JPG'} · ${(2+i*.4).toFixed(1)} MB</div></div><span class="ib2">${ic(k==='v'?'play':'cast',20)}</span></div>`).join('')
+  :`<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px">${files.map(([n,k,e],i)=>fileTile(n,k,e,i,i<sel)).join('')}</div>`}</div></div>
+  ${sel?`<div style="padding:4px 16px 10px;flex:none"><div class="selbar"><b>${sel} selecionados</b><div class="rw" style="gap:6px;flex-wrap:wrap"><span class="a">${ic('plad',15)}Playlist</span><span class="a">${ic('queue',15)}Fila</span><span class="a w">${ic('cast',15)}Tocar na TV</span></div></div></div>`:''}</div>`;
+}
+const sourcesRoot=(full)=>`<div class="cl" style="padding:4px 16px 0;height:100%;overflow:hidden"><div class="sec">Fontes</div>
+ <div class="srcrow"><div class="circ" style="width:40px;height:40px;border-radius:12px">${ic('cloud',22)}</div><div class="sp"><div class="tt">Google Drive</div><div class="st"><i class="led ok"></i>Sessão salva · Login automático ativado</div></div><span class="mu">${ic('x',16)}</span><span class="mu">${ic('right',18)}</span></div>
+ <div class="srcrow"><div class="circ" style="width:40px;height:40px;border-radius:12px">${ic('cloud',22)}</div><div class="sp"><div class="tt">OneDrive</div><div class="st">Toque para entrar na conta</div></div><span class="mu">${ic('right',18)}</span></div>
+ <div class="sec" style="margin-top:6px">Neste aparelho</div>
+ <div class="srcrow"><span style="color:var(--tx2)">${ic('folder',22)}</span><div class="sp"><div class="tt">Séries</div><div class="st">Pasta salva</div></div><span class="mu">${ic('right',18)}</span></div>
+ <div class="srcrow dash"><span style="color:var(--tx2)">${ic('folderp',22)}</span><div class="tt sp">Adicionar pasta deste aparelho</div></div>
+ <div class="rw"><div class="sec sp">Abertas recentemente</div><span style="font-size:12px;color:var(--tx2)" class="rw">${ic('trash',15)}&nbsp;Limpar</span></div>
+ <div class="srcrow"><span style="color:var(--tx2)">${ic('refresh',20)}</span><div class="sp"><div class="tt">Séries</div><div class="st">Google Drive › Mídia › Séries</div></div><span class="mu">${ic('right',18)}</span></div>
+ ${full?`<div class="srcrow"><span style="color:var(--tx2)">${ic('refresh',20)}</span><div class="sp"><div class="tt">Ilustrações</div><div class="st">Google Drive › Mídia › Ilustrações</div></div><span class="mu">${ic('right',18)}</span></div>`:''}</div>`;
+
+/* viewer (vídeo na TV) */
+const ctrlGlass=(inner,pd='6px 10px')=>`<div style="padding:${pd};border-radius:12px;background:var(--well);border:1px solid var(--ln)">${inner}</div>`;
+const transport=()=>`<div class="rw" style="justify-content:center;gap:2px">${circ('r10',34,20,'','background:none;border:0;box-shadow:none')}${circ('play',40,20,'act')}${circ('pause',40,20,'','background:var(--acsoft);border:0;box-shadow:none')}${circ('f10',34,20,'','background:none;border:0;box-shadow:none')}${circ('stop',34,18,'','background:none;border:0;box-shadow:none')}<span style="width:6px"></span>${circ('repeat',34,18,'act')}${circ('shuffle',34,18,'','background:none;border:0;box-shadow:none')}<span style="width:6px"></span>${circ('cc',34,18,'','background:var(--acsoft);border:0;box-shadow:none')}${circ('music',34,18,'','background:none;border:0;box-shadow:none')}</div>`;
+const timeline=(pos=.42)=>`<div style="padding:8px 14px 0"><div class="sl"><i style="width:${pos*100}%"></i><u style="left:${pos*100}%"></u></div><div class="rw mu" style="justify-content:space-between;font-size:11px;margin-top:6px"><span>9:12</span><span>21:40</span></div></div>`;
+const carousel=(n,cur,names=true)=>`<div class="rw" style="gap:8px;overflow:hidden;align-items:flex-start;height:${names?86:58}px">${Array.from({length:n},(_,i)=>`<div class="cl" style="align-items:center;width:62px;flex:none;gap:2px"><div class="th ${['','v2','v3'][i%3]} ${i%2?'':'vv'} ${i===cur?'cur':''}" style="width:52px;height:52px;border-radius:10px">${i%2?scene:`<span class="pl">${ic('play',10)}</span>`}</div>${names?`<span style="font-size:10px;${i===cur?'font-weight:700':'color:var(--tx2)'};max-width:60px" class="ell">${['T02E01','T02E02','T02E03','T02E04','T02E05','T02E06','T02E07','T02E08'][i%8]}</span>`:''}</div>`).join('')}</div>`;
+const vHead=()=>`<div class="rw" style="gap:8px"><span style="color:var(--tx2)">${ic('film',18)}</span><div class="sp"><div style="font-size:13px;font-weight:700" class="ell">Chaves - T02E05.mkv</div><div style="font-size:11px;color:var(--tx2)" class="ell">Vídeo 5 de 6 · Pasta · Na TV</div></div>
+ <span class="tg tv">${ic('tv',13)}Na TV</span><span class="ib2" style="width:26px;color:var(--tx)">${ic('castc',18)}</span><span class="ib2" style="width:26px">${ic('x',19)}</span></div>`;
+const preview=(h)=>`<div class="mcard" style="height:${h}px"><div style="position:absolute;inset:0;display:grid;place-items:center"><span class="circ" style="width:56px;height:56px;background:rgba(20,20,20,.5);color:#fff;border-color:rgba(255,255,255,.3)">${ic('play',24)}</span></div></div>`;
+const viewerCard=(h=196)=>`<div class="gl" style="margin:4px 16px 8px;padding:12px;border-radius:16px">${vHead()}<div style="height:8px"></div>${preview(h)}<div style="height:8px"></div>${ctrlGlass(transport()+timeline())}<div style="height:8px"></div>${carousel(6,4)}</div>`;
+/* cartão da sessão ativa (sem viewer) */
+const playCard=()=>`<div class="gl" style="margin:4px 16px 8px;padding:10px 14px;border-radius:16px"><div class="rw" style="gap:8px"><span style="color:var(--tx2)">${ic('castc',18)}</span><div class="sp ell" style="font-size:12px;font-weight:600">Chaves - T02E05.mkv</div><span class="chip acc" style="font-weight:700;font-size:10px;padding:2px 7px">Reproduzindo</span></div>
+ <div style="height:6px"></div><div class="gl rw" style="justify-content:center;gap:4px;padding:2px;border-radius:14px">${circ('prev',40,20,'','background:none;border:0;box-shadow:none')}${circ('pause',40,20,'act')}${circ('stop',40,18,'','background:none;border:0;box-shadow:none')}${circ('next',40,20,'','background:none;border:0;box-shadow:none')}${circ('repeat',40,18,'','background:none;border:0;box-shadow:none')}${circ('shuffle',40,18,'','background:none;border:0;box-shadow:none')}</div>
+ <div class="mu" style="text-align:center;font-size:11px;margin-top:4px">5 de 8 arquivos</div>${timeline(.42)}
+ <div class="rw" style="justify-content:center;gap:6px;margin-top:4px;flex-wrap:wrap"><span class="tbtn" style="border:0;background:none">${ic('r10',18)}−10 s</span><span class="tbtn sel">${ic('cc',16)}Legenda</span><span class="tbtn">${ic('music',16)}Áudio</span><span class="tbtn" style="border:0;background:none">${ic('f10',18)}+10 s</span></div></div>`;
+/* fila */
+const QUEUE=[['T02E05 · Chaves','Google Drive (Streaming)','Tocando agora'],['T02E06 · Chaves','Google Drive (Streaming)',''],['T02E07 · Chaves','Arquivo local',''],['T02E08 · Chaves','OneDrive (Streaming)','']];
+const queueView=(n=4)=>`<div style="height:100%;overflow:hidden" class="cut"><div class="gl" style="margin:6px 16px;padding:8px 6px 8px 8px;border-radius:14px"><div class="rw" style="gap:2px"><span style="color:var(--tx2);padding:0 4px">${ic('down',20)}</span><div class="sp"><div style="font-size:14px;font-weight:700" class="ell">Chaves — Temporada 2</div><div style="font-size:11px;color:var(--tx2)" class="ell">8 arquivos em sequência · Arraste para ordenar na hora</div></div>
+ <span class="ib2">${ic('grid',19)}</span><span class="ib2" style="color:var(--tx)">${ic('play',24)}</span><span class="ib2">${ic('bkadd',20)}</span><span class="ib2 bad">${ic('sweep',20)}</span></div></div>
+ <div style="padding:0 8px">${QUEUE.slice(0,n).map(([t,s,c],i)=>`<div class="rw" style="gap:4px;padding:6px 6px;${i?'border-top:1px solid var(--ln)':''}"><span class="ib2">${ic('drag',20)}</span><div class="th ${i?'v2':'vv'}" style="width:36px;height:36px;border-radius:8px"><span class="pl" style="width:50%">${ic('play',9)}</span></div>
+  <div class="sp" style="margin-left:6px"><div style="font-size:14px;${i===0?'font-weight:700':''}" class="ell">${t}</div><div class="mu ell" style="font-size:11px">${i+1}º na sequência · ${s}${c?' · '+c:''}</div></div><span class="ib2" style="color:var(--tx)">${ic(i===0?'eq':'play',20)}</span><span class="ib2">${ic('minus',20)}</span></div>`).join('')}</div></div>`;
+/* playlists */
+const plView=(opened)=>opened?`<div style="height:100%;overflow:hidden" class="cut"><div class="rw" style="padding:6px 8px 6px 6px;gap:4px"><span class="ib2" style="width:38px">${ic('back'==='x'?'x':'left',22)}</span><div class="sp"><div style="font-size:16px" class="ell">Chaves — Temporada 2</div><div class="mu" style="font-size:12px">8 itens · Arraste para ordenar</div></div><span class="ib2">${ic('edit',18)}</span><span class="ib2">${ic('trash',19)}</span><span class="ib2">${ic('queue',20)}</span><span class="ib2" style="color:var(--tx)">${ic('play',24)}</span></div>
+ ${QUEUE.concat(QUEUE).slice(0,7).map(([t],i)=>`<div class="rw" style="padding:8px 14px;gap:8px;${i?'border-top:1px solid var(--ln)':''}"><span class="ib2">${ic('drag',20)}</span><div class="sp ell" style="font-size:14px">${t.replace('T02E0'+(5+i%4),'T02E0'+(1+i))}</div><span class="ib2">${ic('minus',20)}</span></div>`).join('')}
+ <div style="padding:10px 16px;font-size:13px;font-weight:500;color:var(--tx2)" class="rw">${ic('plus',16)}&nbsp;Escolher mais episódios</div></div>`
+:`<div style="height:100%;overflow:hidden"><div class="rw" style="padding:8px 16px"><div class="sp" style="font-size:13px;font-weight:700;color:var(--tx2)">Playlists Salvas (2)</div><span class="rw" style="font-size:13px;color:var(--tx);font-weight:500;gap:4px">${ic('plus',16)}Nova playlist</span></div>
+ ${[['Chaves — Temporada 2','8 itens',1],['Chapolin — Especiais','12 itens',0]].map(([n,s,f])=>`<div class="rw" style="padding:8px 14px;gap:12px;border-top:1px solid var(--ln)"><span style="color:var(--tx2)">${ic(f?'starf':'plist',22)}</span><div class="sp"><div style="font-size:15px">${n}</div><div class="mu" style="font-size:12px">${s}</div></div><span class="ib2">${ic('play',22)}</span><span class="ib2">${ic(f?'starf':'star',20)}</span><span class="ib2">${ic('edit',18)}</span><span class="ib2">${ic('trash',19)}</span></div>`).join('')}</div>`;
+
+/* telas de mídia por formato */
+const medRootP=()=>shP('med',`<div class="cl" style="height:100%">${libHeader(0)}${secSel('Arquivos',0)}<div style="flex:1;min-height:0">${sourcesRoot(1)}</div></div>`);
+const medRootL=()=>shL('med',`<div class="cl" style="height:100%">${secSel('Arquivos',0)}<div style="flex:1;min-height:0" class="cut">${sourcesRoot(0)}</div></div>`);
+const treeNodes=(cur)=>[['Google Drive',0,'cloud',1],['Meu Drive',1],['Mídia',2],['Google Earth',3],['HQs',3],['Ilustrações',3],['Livros',3],['Séries',3,0,0,1],['Chaves',4],['Chapolin',4],['OneDrive',0,'cloud',1,0,'Entrar'],['Séries',0,'folder',1]];
+const tree=()=>`<div style="width:236px;flex:none;border-right:1px solid var(--ln);padding:12px 10px;overflow:hidden"><div class="sec">Fontes e pastas</div>${treeNodes().map(([n,d,ico,src,cur,tr])=>`<div class="rw" style="gap:8px;padding:7px 9px;margin:${src?'6px':'0'} 0 2px ${d*14}px;border-radius:12px;font-size:12px;${cur?'background:var(--ac);color:var(--aci);font-weight:600':src?'font-weight:600':'color:var(--tx2)'}"><span style="${cur?'':'color:var(--mu)'}">${ic(ico||'folder',16)}</span><span class="sp ell">${n}</span>${tr?`<span style="font-size:10.5px;font-weight:600">${tr}</span>`:''}</div>`).join('')}<div class="btn" style="width:100%;height:36px;margin-top:10px;font-size:12px;border-radius:12px;box-shadow:none">${ic('folderp',16)}Adicionar pasta</div></div>`;
+const medFolderP=(o={})=>shP('med',`<div class="cl" style="height:100%">${libHeader(0)}${secSel('Arquivos',0)}<div style="flex:1;min-height:0">${folderView(o)}</div></div>`);
+const medFolderL=(o={})=>shL('med',`<div class="cl" style="height:100%">${secSel('Arquivos',0)}<div style="flex:1;min-height:0">${folderView({cols:7,fcols:4,...o})}</div></div>`);
+const matCard=(inner,st='')=>`<div class="card" style="padding:0;height:100%;overflow:hidden;${st}">${inner}</div>`;
+const medFolderD=(o={})=>shD('med',matCard(`<div class="rw" style="height:100%">${tree()}<div class="cl" style="flex:1;min-width:0;height:100%">${libHeader(0)}${secSel('Arquivos',0)}<div style="flex:1;min-height:0">${folderView({cols:6,fcols:3,...o})}</div></div></div>`));
+const medRootD=()=>shD('med',matCard(`<div class="cl" style="height:100%">${libHeader(0)}${secSel('Arquivos',0)}<div style="flex:1;min-height:0">${sourcesRoot(1)}</div></div>`));
+const medPlayP=()=>shP('med',`<div class="cl" style="height:100%">${libHeader(1)}${secSel('Arquivos',4)}${playCard()}<div style="flex:1;min-height:0">${folderView({sel:0})}</div></div>`);
+const medPlayL=()=>shL('med',`<div class="cl" style="height:100%">${secSel('Arquivos',4)}${playCard()}<div style="flex:1;min-height:0">${folderView({cols:7,fcols:4})}</div></div>`);
+const medPlayD=()=>shD('med',matCard(`<div class="rw" style="height:100%">${tree()}<div class="cl" style="flex:1;min-width:0;height:100%">${libHeader(1)}${secSel('Arquivos',4)}${playCard()}<div style="flex:1;min-height:0">${folderView({cols:6,fcols:3})}</div></div></div>`));
+const medViewerP=()=>shP('med',`<div class="cl" style="height:100%">${libHeader(1)}${secSel('Arquivos',4)}<div style="flex:1;min-height:0;overflow:hidden" class="cut">${viewerCard(180)}${sourcesRoot(0).replace('height:100%','')}</div></div>`);
+/* viewer largo: card do viewer à esquerda + coluna lateral à direita (cabeçalho do app migra para a coluna) */
+const wideViewer=(w2)=>`<div class="rw" style="height:100%;align-items:stretch">
+ <div class="gl" style="flex:6;margin:4px 6px 12px 16px;border-radius:16px;position:relative"><div class="mcard" style="position:absolute;inset:8px"><div style="position:absolute;inset:0;display:grid;place-items:center"><span class="circ" style="width:56px;height:56px;background:rgba(20,20,20,.5);color:#fff;border-color:rgba(255,255,255,.3)">${ic('play',24)}</span></div></div></div>
+ <div class="gl cl" style="flex:5;margin:4px 16px 12px 6px;padding:8px 10px 4px;border-radius:16px;overflow:hidden;min-width:0">
+  ${w2?hdr(0,{narrow:true,pip:true})+dsel(0):hdr(0,{narrow:true})}
+  <div style="height:4px"></div>${vHead()}<div style="height:6px"></div>${ctrlGlass(transport()+timeline(),'4px 8px')}<div style="height:6px"></div>${carousel(5,3,false)}
+  ${secSel('Arquivos',4,0)}<div style="flex:1;min-height:0;overflow:hidden" class="cut">${folderView({fcols:2,cols:4})}</div></div></div>`;
+const medViewerL=()=>shL('med',wideViewer(0),{hd:false});
+const medViewerD=()=>shD('med',matCard(`<div class="rw" style="height:100%">${tree()}<div class="sp" style="height:100%">${wideViewer(1)}</div></div>`),{hd:false});
+const medQueueP=()=>shP('med',`<div class="cl" style="height:100%">${libHeader(1)}${secSel('Fila',4)}${playCard()}<div style="flex:1;min-height:0">${queueView(3)}</div></div>`);
+const medQueueL=()=>shL('med',`<div class="cl" style="height:100%">${secSel('Fila',4)}<div style="flex:1;min-height:0">${queueView(4)}</div></div>`);
+const medQueueD=()=>shD('med',matCard(`<div class="cl" style="height:100%">${libHeader(1)}${secSel('Fila',4)}<div style="flex:1;min-height:0">${queueView(4)}</div></div>`));
+const medPlP=()=>shP('med',`<div class="cl" style="height:100%">${libHeader(0)}${secSel('Playlists',0)}<div style="flex:1;min-height:0">${plView(0)}</div></div>`);
+const medPlL=()=>shL('med',`<div class="cl" style="height:100%">${secSel('Playlists',0)}<div style="flex:1;min-height:0">${plView(1)}</div></div>`);
+const medPlD=()=>shD('med',matCard(`<div class="cl" style="height:100%">${libHeader(0)}${secSel('Playlists',0)}<div style="flex:1;min-height:0">${plView(1)}</div></div>`));
+
+/* ── Overlays (gaveta e diálogos) ── */
+const over=(base,fn)=>`<div class="base">${base}</div><div class="scrim"></div>${fn}`;
+const switchRow=(ico,t,s,on)=>`<div class="rw" style="gap:12px;padding:8px 14px;border-radius:12px;background:var(--well);border:1px solid var(--ln)"><div class="circ" style="width:32px;height:32px;border-radius:8px;box-shadow:none">${ic(ico,17)}</div><div class="sp"><div style="font-size:13px;font-weight:600">${t}</div>${s?`<div style="font-size:11px;color:var(--tx2)">${s}</div>`:''}</div><div class="tog ${on?'on':''}"></div></div>`;
+const savedDev=(d,act,on)=>`<div class="rw" style="gap:8px;padding:8px;margin-bottom:8px;border-radius:12px;background:${act?'var(--acsoft)':'var(--well)'};border:${act?'1.5px solid var(--tx2)':'1px solid var(--ln)'}"><i class="led ${on?'ok':''}"></i><span style="color:${act?'var(--tx)':'var(--tx2)'}">${ic(d.ic==='tv'?'tv':'tv2',18)}</span><div class="sp"><div class="rw" style="gap:4px;font-size:12px;font-weight:${act?700:600}">${d.n}${d.def?`<span style="color:var(--tx2)">${ic('starf',12)}</span>`:''}</div><div class="mu" style="font-size:10px">${d.b} • ${d.ip}</div></div><span class="ib2 ${on?'bad':'ok'}" style="width:30px">${ic(on?'unlink':'link',18)}</span><span class="ib2" style="width:26px">${ic('morev',18)}</span></div>`;
+function drawerBody(w){return `
+ <div class="rw" style="gap:12px"><div class="circ" style="width:40px;height:40px;border-radius:10px">${ic('gear',22)}</div><div class="sp"><div style="font-size:16px;font-weight:700">Configurações</div><div style="font-size:12px;color:var(--tx2)">LG webOS</div></div><span class="ib2">${ic('x',20)}</span></div>
+ <div style="height:1px;background:var(--ln);margin:14px 0"></div>
+ ${switchRow('moon','Modo Claro (Light)','',0)}
+ <div class="card" style="padding:12px;margin-top:12px;border-radius:12px"><div style="font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:8px">Marca / Plataforma da TV</div><div class="rw" style="gap:4px">${['LG webOS','Samsung Tizen','Google TV'].map((b,i)=>`<div class="sp" style="text-align:center;padding:8px 2px;border-radius:8px;font-size:11px;border:${i?'1px solid var(--ln)':'1.5px solid var(--tx2)'};${i?'color:var(--tx2)':'font-weight:700;background:var(--acsoft)'}">${b}</div>`).join('')}</div></div>
+ <div class="card rw" style="padding:14px;margin-top:12px;border-radius:12px;gap:12px"><i class="led ok" style="width:12px;height:12px"></i><div><div style="font-size:13px;font-weight:600">Conectada: TV da Sala</div><div class="mu" style="font-size:11px">IP: 192.168.1.42 • Porta: 3000/3001</div></div></div>
+ <div class="rw" style="margin:16px 0 8px"><div class="sp" style="font-size:13px;font-weight:700">Dispositivos Salvos (3)</div><span style="font-size:11px;font-weight:500">Conectar Todos</span></div>
+ ${savedDev(DEVS[0],1,1)}${savedDev(DEVS[1],0,0)}${savedDev(DEVS[2],0,0)}
+ <div class="rw" style="gap:12px;padding:12px;border-radius:12px;background:var(--well);border:1px solid var(--tx2);margin-top:4px"><span style="color:var(--tx)">${ic('radar',22)}</span><div class="sp"><div style="font-size:13px;font-weight:700">Buscar TVs na Rede</div><div style="font-size:11px;color:var(--tx2)">Ver lista de dispositivos compatíveis</div></div><span class="mu">${ic('right',14)}</span></div>
+ ${w?`<div class="rw" style="margin:16px 0 4px"><div class="sp" style="font-size:13px;font-weight:600;color:var(--tx2)">Endereço IP da TV</div><span style="font-size:11px;font-weight:600" class="rw">${ic('radar',15)}&nbsp;Auto-Detectar</span></div>
+ <div class="field sq" style="height:46px"><span class="mu">${ic('wifi',20)}</span><b>192.168.1.42</b></div>
+ <div style="font-size:13px;font-weight:600;color:var(--tx2);margin:14px 0 6px">MAC Address</div><div class="field sq" style="height:46px"><span class="mu">${ic('info',20)}</span><b>A4:77:33:B2:9C:10</b></div>
+ <div class="rw" style="gap:10px;margin-top:18px"><div class="btn ok2 sp" style="height:44px;border-radius:8px">${ic('link',18)}Conectar</div><div class="btn bad2 sp" style="height:44px;border-radius:8px">${ic('unlink',18)}Desconectar</div></div>
+ <div style="margin-top:16px">${switchRow('vibe','Vibração nos Botões','Feedback tátil ao pressionar (Android)',1)}</div>
+ <div class="rw" style="gap:10px;margin-top:16px;padding:12px;border-radius:10px;background:var(--well);border:1px solid var(--ln);font-size:11px;color:var(--tx2);line-height:1.3">${ic('info',18)}A Smart TV LG e o computador devem estar na mesma rede local Wi-Fi ou cabo.</div>`:''}`}
+const setP=()=>over(ctlP(),`<div class="sheet cut" style="right:0;top:0;bottom:0;width:352px;border-radius:30px 0 0 30px;padding:46px 18px 0;overflow:hidden">${drawerBody(1)}</div>`);
+const setL=()=>over(ctlL(),`<div class="sheet" style="right:0;top:0;bottom:0;width:380px;border-radius:30px 0 0 30px;padding:18px 18px 0;overflow:hidden"><div class="cut" style="height:100%;overflow:hidden">${drawerBody(0)}</div></div>`);
+const setD=()=>over(ctlD(),`<div class="sheet" style="right:0;top:34px;bottom:0;width:400px;padding:22px 20px 0;overflow:hidden;border-radius:24px 0 0 0"><div class="cut" style="height:100%;overflow:hidden">${drawerBody(1)}</div></div>`);
+
+const foundRow=(n,ip,st)=>`<div class="rw" style="gap:14px;padding:14px;border-radius:14px;margin-bottom:10px;background:${st==='ok'?'rgba(56,188,55,.1)':'var(--well)'};border:${st==='ok'?'1.5px solid #38BC37':'1px solid var(--ln)'}"><div class="circ" style="width:44px;height:44px;border-radius:10px;box-shadow:none;${st==='ok'?'color:#38BC37':''}">${ic(n.includes('Chrome')?'castc':'tv',24)}</div>
+ <div class="sp"><div style="font-size:15px;font-weight:700" class="ell">${n}</div><div class="rw" style="gap:6px;margin-top:4px"><span class="chip" style="font-size:10px">${ip}</span>${n.includes('Chrome')?'<span class="chip" style="font-size:10px">Google TV</span>':n.includes('LG')?'<span class="chip" style="font-size:10px">webOS</span>':'<span class="chip" style="font-size:10px">Tizen</span>'}</div></div>
+ ${st==='ok'?`<div class="btn bad2" style="height:36px;font-size:12px;padding:0 12px">${ic('unlink',16)}Desconectar</div>`:st==='wait'?`<span class="chip" style="border-style:dashed">Aguardando</span>`:`<div class="btn act" style="height:36px;font-size:12px;padding:0 14px">Conectar</div>`}</div>`;
+const discInner=()=>`<div class="rw" style="gap:14px;margin-bottom:16px"><div class="circ" style="width:44px;height:44px;border-radius:12px">${ic('tv',24)}</div><div class="sp"><div style="font-size:17px;font-weight:700">Dispositivos na Rede</div><div style="font-size:12px;color:var(--tx2)">Aparelhos compatíveis</div></div><span class="ib2">${ic('x',20)}</span></div>
+ <div class="rw" style="gap:12px;padding:10px 14px;border-radius:12px;background:var(--well);border:1px solid var(--ln);margin-bottom:14px"><span style="color:var(--tx)">${ic('wifif',20)}</span><div class="sp" style="font-size:13px;font-weight:600">3 dispositivo(s) encontrado(s)</div><span class="tbtn" style="border-radius:8px">${ic('refresh',15)}Buscar</span></div>
+ ${foundRow('LG OLED C3 55"','192.168.1.42','ok')}${foundRow('Samsung QN90B','192.168.1.57','')}${foundRow('Chromecast com Google TV','192.168.1.80','wait')}
+ <div class="mu" style="font-size:11.5px;margin:0 0 12px 58px">Digite no SixF o código de 6 caracteres exibido no Google TV.</div>
+ <div style="font-size:13px;font-weight:600;margin-bottom:8px">Conectar digitando o IP manualmente</div><div class="rw" style="gap:8px"><div class="field sq sp" style="height:46px">Ex: 192.168.1.150</div><div class="btn act" style="height:46px;border-radius:12px">Conectar</div></div>`;
+const discP=()=>over(ctlP(),`<div class="sheet cut" style="left:0;right:0;bottom:0;top:96px;border-radius:30px 30px 36px 36px;padding:6px 18px 0;overflow:hidden"><div class="grab"></div>${discInner()}</div>`);
+const discL=()=>over(ctlL(),`<div class="sheet" style="left:50%;top:14px;bottom:14px;width:540px;margin-left:-250px;border-radius:26px;padding:16px 20px 0;overflow:hidden"><div class="cut" style="height:100%;overflow:hidden">${discInner()}</div></div>`);
+const discD=()=>over(ctlD(),`<div class="sheet" style="left:50%;top:60px;width:560px;margin-left:-280px;border-radius:26px;padding:20px 22px 22px">${discInner()}</div>`);
+
+const pairInner=(err)=>`<h4>Parear Google TV</h4><div style="font-size:14px;color:var(--tx2);margin-bottom:16px">Digite o código de 6 caracteres exibido na tela da TV.</div>
+ <div class="codebox"><div>A</div><div>7</div><div>3</div><div>F</div><div class="cur">9</div><div></div></div>
+ <div class="rw" style="justify-content:space-between;font-size:11px;color:var(--tx2);margin:6px 4px 0"><span>Código da TV</span><span>5/6</span></div>
+ <div class="acts"><span class="btn" style="box-shadow:none;background:none;border:0">Cancelar</span><span class="btn act">Parear</span></div>`;
+const pinP=()=>over(ctlP().replace('sh','sh'),`<div class="sheet alert" style="left:26px;right:26px;top:260px">${pairInner()}</div>`);
+const pinL=()=>over(ctlL(),`<div class="sheet alert" style="left:50%;top:50%;width:420px;margin:-130px 0 0 -210px">${pairInner()}</div>`);
+const pinD=()=>over(ctlD(),`<div class="sheet alert" style="left:50%;top:50%;width:440px;margin:-140px 0 0 -220px">${pairInner()}</div>`);
+
+const voiceInner=()=>`<h4>Microfone do Google TV</h4><div class="sl" style="height:6px;margin:6px 0 14px"><i style="width:58%;background:var(--ac)"></i></div><div style="font-size:14px;color:var(--tx2)">Microfone captando. Aguardando reconhecimento na TV.</div><div class="acts"><span class="btn" style="box-shadow:none;background:none;border:0">Encerrar</span></div>`;
+const voiceP=()=>over(ctlP(),`<div class="sheet alert" style="left:26px;right:26px;top:300px">${voiceInner()}</div>`);
+const voiceL=()=>over(ctlL(),`<div class="sheet alert" style="left:50%;top:50%;width:420px;margin:-100px 0 0 -210px">${voiceInner()}</div>`);
+const voiceD=()=>over(ctlD(),`<div class="sheet alert" style="left:50%;top:50%;width:440px;margin:-100px 0 0 -220px">${voiceInner()}</div>`);
+
+const trkPick=()=>`<h4>Legendas</h4><div style="display:flex;flex-direction:column;gap:2px">${[['Padrão / Desativado','',0],['Português (Brasil)','Codec: subrip',1],['English','Codec: subrip',0],['Español','Codec: ass',0]].map(([t,d,s])=>`<div class="rw" style="gap:12px;padding:8px 0"><span style="width:20px;height:20px;border-radius:50%;border:2px solid ${s?'var(--tx)':'var(--mu)'};display:grid;place-items:center;flex:none">${s?'<i style="width:10px;height:10px;border-radius:50%;background:var(--tx)"></i>':''}</span><div><div style="font-size:15px">${t}</div>${d?`<div class="mu" style="font-size:11px">${d}</div>`:''}</div></div>`).join('')}</div>
+ <div class="acts"><span class="btn" style="box-shadow:none;background:none;border:0">Cancelar</span><span class="btn act">Confirmar</span></div>`;
+const trkPickP=()=>over(medViewerP(),`<div class="sheet alert" style="left:26px;right:26px;top:230px">${trkPick()}</div>`);
+const trkPickL=()=>over(medViewerL(),`<div class="sheet alert" style="left:50%;top:50%;width:400px;margin:-170px 0 0 -200px">${trkPick()}</div>`);
+const trkPickD=()=>over(medViewerD(),`<div class="sheet alert" style="left:50%;top:50%;width:420px;margin:-170px 0 0 -210px">${trkPick()}</div>`);
+
+const diagInner=()=>`<h4>TV da Sala</h4><div style="font-size:14px;line-height:1.7">Conectado<br><br>LG webOS · 192.168.1.42<br><br><span class="mu">Conexão estável. Se algo falhar, confira se a TV e o aparelho estão na mesma rede Wi-Fi.</span></div><div class="acts"><span class="btn" style="box-shadow:none;background:none;border:0">Fechar</span></div>`;
+const diagP=()=>over(ctlP(),`<div class="sheet alert" style="left:26px;right:26px;top:280px">${diagInner()}</div>`);
+const diagL=()=>over(ctlL(),`<div class="sheet alert" style="left:50%;top:50%;width:420px;margin:-130px 0 0 -210px">${diagInner()}</div>`);
+const diagD=()=>over(ctlD(),`<div class="sheet alert" style="left:50%;top:50%;width:440px;margin:-130px 0 0 -220px">${diagInner()}</div>`);
+
+const gd='gdk';
+const fsP=()=>`<div class="photo" style="background:#000"></div><div style="position:absolute;inset:0;background:#000"><div class="photo" style="inset:140px 0 140px"></div></div>
+ <div style="position:absolute;left:0;right:0;top:0;padding:46px 8px 22px;background:linear-gradient(rgba(0,0,0,.85),transparent);color:#fff" class="rw"><span class="ib2" style="color:#fff">${ic('fullx',22)}</span><div class="sp ell" style="font-size:14px;font-weight:600;margin-left:4px">Serra da Mantiqueira.jpg</div><span style="font-size:12px;opacity:.7;margin-right:10px">3 de 24</span></div>
+ <div class="circ ${gd}" style="position:absolute;left:10px;top:50%;width:40px;height:40px">${ic('left',22)}</div><div class="circ ${gd}" style="position:absolute;right:10px;top:50%;width:40px;height:40px">${ic('right',22)}</div>`;
+const fsL=()=>`<div style="position:absolute;inset:0;background:#000"><div class="photo" style="inset:0 120px"></div></div>
+ <div style="position:absolute;left:0;right:0;top:0;padding:10px 8px 18px 36px;background:linear-gradient(rgba(0,0,0,.85),transparent);color:#fff" class="rw"><span class="ib2" style="color:#fff">${ic('fullx',22)}</span><div class="sp ell" style="font-size:14px;font-weight:600;margin-left:4px">Serra da Mantiqueira.jpg</div><span style="font-size:12px;opacity:.7;margin-right:10px">3 de 24</span></div>
+ <div class="circ ${gd}" style="position:absolute;left:40px;top:50%;width:40px;height:40px">${ic('left',22)}</div><div class="circ ${gd}" style="position:absolute;right:12px;top:50%;width:40px;height:40px">${ic('right',22)}</div>`;
+const fsD=()=>`<div style="position:absolute;inset:0;background:#000"><div class="photo" style="inset:0 220px"></div></div>
+ <div style="position:absolute;left:0;right:0;top:0;padding:10px 14px 24px;background:linear-gradient(rgba(0,0,0,.85),transparent);color:#fff" class="rw"><span class="ib2" style="color:#fff">${ic('fullx',22)}</span><div class="sp ell" style="font-size:14px;font-weight:600;margin-left:4px">Serra da Mantiqueira.jpg</div><span style="font-size:12px;opacity:.7;margin-right:10px">3 de 24 · Esc para sair</span></div>
+ <div class="circ ${gd}" style="position:absolute;left:14px;top:50%;width:44px;height:44px">${ic('left',24)}</div><div class="circ ${gd}" style="position:absolute;right:14px;top:50%;width:44px;height:44px">${ic('right',24)}</div>`;
+
+/* ═════════ catálogo ═════════ */
+const S=[
+ {id:'ctl',t:'Controle',f:'remote_view.dart · volume_channel_controls.dart · dpad_widget.dart',d:'Faixa de slots de cima (HOME, MENU, INPUT, EXIT) → card único com Volume e Canal em pílulas altas (Mudo em cima e Voz embaixo, no meio) e o D-pad com VOLTAR de um lado e TV Digital + HDMI 1 do outro → faixa de slots de baixo (apps). No Windows o card divide Volume/Canal | D-pad e a coluna direita traz “Aparelho ativo” e “Atalhos do teclado físico”.',p:ctlP,l:ctlL,d_:ctlD},
+ {id:'key',t:'Teclas',f:'numeric_keypad.dart · color_buttons_row.dart',d:'“Digitar canal” com o canal atual e o teclado (1–9, —, 0, apagar), e “Botões coloridos” em grade 2×2 com ponto colorido. No Windows são três colunas, com “Volume e canal” à direita.',p:keyP,l:keyL,d_:keyD},
+ {id:'trk',t:'Trackpad',f:'trackpad_widget.dart · remote_view.dart',d:'Superfície que ocupa todo o espaço, com o texto de ajuda, e a linha de ações no rodapé: VOLTAR, CLIQUE / OK (maior, em destaque) e HOME. Só existe em aparelhos LG.',p:trkP,l:trkL,d_:trkD},
+ {id:'app',t:'Apps',f:'app_drawer_widget.dart · active_device_card.dart',d:'Card de cabeçalho com título, contagem em destaque, atualizar, busca e filtros Todos/Favoritos; abaixo, grade de apps com estrela de favorito. No Windows o cartão “Aparelho ativo” fica à direita.',p:appsP,l:appsL,d_:appsD},
+ {id:'adb',t:'Apps · Chromecast sem ADB',f:'app_drawer_widget.dart · google_tv_adb_dialog.dart',d:'No Chromecast, o painel do ADB aparece dentro da própria aba Apps (não é um diálogo), em duas etapas: pareamento (porta e código) e conexão (porta). O controle continua funcionando sem ele.',p:appsAdbP,l:appsAdbL},
+ {id:'mr',t:'Mídia · Fontes (raiz)',f:'media_library.dart · _buildSourcesRoot',d:'Cabeçalho “Biblioteca de mídia”, seletor Arquivos | Playlists | Fila e, na raiz, Fontes (Google Drive e OneDrive com status da conta), Neste aparelho (pastas salvas e “Adicionar pasta”) e Abertas recentemente.',p:medRootP,l:medRootL,d_:medRootD},
+ {id:'mf',t:'Mídia · Pasta com seleção',f:'media_library.dart · filesView · selectionBar',d:'Voltar + caminho clicável + recarregar, nome da pasta em destaque com a contagem, busca, alternar grade/lista e ordenação, filtros por tipo com contagem, subpastas em cards e miniaturas com extensão e círculo de seleção. A barra de ações aparece ao selecionar. No Windows, a árvore de fontes e pastas fica à esquerda.',p:()=>medFolderP({sel:3}),l:()=>medFolderL({sel:3}),d_:()=>medFolderD({sel:3})},
+ {id:'ml',t:'Mídia · Pasta em lista',f:'media_library.dart · _fileRow',d:'Mesma pasta no modo detalhado em lista: círculo de seleção, miniatura, nome, tipo e tamanho, e o botão de reproduzir ou espelhar na TV.',p:()=>medFolderP({list:1,sel:2})},
+ {id:'mv',t:'Mídia · Visualizador de vídeo',f:'media_library.dart · _buildPhotoViewerCard',d:'Card do visualizador: título com “Vídeo 5 de 6 · Pasta · Na TV”, seletor de destino, reenviar à TV e fechar; prévia 16:9; linha de transporte (−10, play, pausa, +10, parar, repetir, aleatório e, só com ícone, Legenda e Áudio — Repetir/Aleatório ligados ficam num círculo grafite); linha do tempo; carrossel com nomes. Em paisagem e no Windows, o visualizador ocupa a altura toda à esquerda e o cabeçalho do app migra para a coluna direita.',p:medViewerP,l:medViewerL,d_:medViewerD},
+ {id:'mp',t:'Mídia · Sessão ativa na TV',f:'media_library.dart · _buildActivePlaybackCard · media_session_controls.dart',d:'Com a transmissão rodando e sem visualizador aberto, a biblioteca ganha o cartão da sessão: nome do arquivo e estado, transporte (anterior, pausa, parar, próximo, repetir, aleatório), “N de M arquivos”, linha do tempo e −10 s / Legenda / Áudio / +10 s. O cabeçalho mostra o botão vermelho de limpar fila.',p:medPlayP,l:medPlayL,d_:medPlayD},
+ {id:'mq',t:'Mídia · Fila',f:'media_library.dart · queueView',d:'Cabeçalho retrátil da fila (título, contagem, alternar miniaturas, tocar tudo, salvar como playlist, limpar) e a lista reordenável: alça de arrastar, miniatura, “Nº na sequência · origem · Tocando agora”, tocar e remover.',p:medQueueP,l:medQueueL,d_:medQueueD},
+ {id:'mpl',t:'Mídia · Playlists',f:'media_library.dart · playlistView',d:'Lista “Playlists Salvas” com nova playlist, tocar, favoritar, renomear e excluir. Ao abrir uma, aparecem voltar, ações (renomear, excluir, carregar na fila, reproduzir) e a lista reordenável.',p:medPlP,l:medPlL,d_:medPlD},
+ {id:'cfg',t:'Configurações (gaveta)',f:'network_drawer.dart',d:'Gaveta lateral: modo claro/escuro, marca/plataforma da TV, status da conexão, dispositivos salvos (conectar, desconectar e menu), “Buscar TVs na Rede”, IP e MAC com Auto-Detectar, Conectar/Desconectar e vibração dos botões.',p:setP,l:setL,d_:setD},
+ {id:'dis',t:'Dispositivos na Rede',f:'device_discovery_dialog.dart',d:'Diálogo com a varredura, a lista de aparelhos (conectado, conectar, aguardando código do Google TV) e a conexão manual por IP.',p:discP,l:discL,d_:discD},
+ {id:'pin',t:'Parear Google TV',f:'google_tv_pairing_dialog.dart',d:'Alerta com o código de 6 caracteres hexadecimais (campo “Código da TV”), Cancelar e Parear.',p:pinP,l:pinL,d_:pinD},
+ {id:'voz',t:'Microfone do Google TV',f:'voice_listening_dialog.dart',d:'Alerta do Chromecast: barra do nível do microfone, mensagem de estado e Encerrar. (Nos demais aparelhos o diálogo é o de escuta com transcrição, não incluído aqui.)',p:voiceP,l:voiceL,d_:voiceD},
+ {id:'trp',t:'Escolha de Legenda / Áudio',f:'media_session_controls.dart · showTrackPickerDialog',d:'Lista de faixas com seleção e confirmação em Cancelar / Confirmar. Serve para legendas e para faixas de áudio.',p:trkPickP,l:trkPickL,d_:trkPickD},
+ {id:'dia',t:'Diagnóstico de conexão',f:'connection_diagnostic.dart',d:'Alerta simples com o nome da TV, estado, marca e IP e a orientação; “Tentar novamente” aparece quando desconectado.',p:diagP,l:diagL,d_:diagD},
+ {id:'fs',t:'Foto em tela cheia',f:'image_fullscreen_viewer.dart',d:'Fundo preto, título e posição no topo, setas laterais e zoom por pinça/duplo toque. Os controles em vidro escuro valem para os dois temas.',p:fsP,l:fsL,d_:fsD},
+];
+
+/* ═════════ render ═════════ */
+const st={theme:'light',ori:'all',scr:'all'};
+const root=document.getElementById('root');
+function frame(kind,theme,html){const lbl={p:'Vertical',l:'Horizontal',d:'Windows'}[kind];
+ return `<div class="fitw" data-k="${kind}"><div class="cap"><i></i>${lbl} · ${theme==='light'?'Claro':'Escuro'}</div><div class="dev ${kind}"><div class="ui ${theme}">${html}</div></div></div>`}
+function render(){
+ const themes=st.theme==='both'?['light','dark']:[st.theme];
+ const oris=st.ori==='all'?['p','l','d']:[st.ori];
+ root.innerHTML=S.filter(s=>st.scr==='all'||st.scr===s.id).map(s=>{
+  const fmts=oris.filter(o=>o==='d'?s.d_:true);
+  return `<section class="scr"><header><span class="n">${String(S.indexOf(s)+1).padStart(2,'0')}</span><h2>${s.t}</h2><code>${s.f}</code></header><p class="desc">${s.d}</p>
+  ${themes.map(t=>`<div class="row">${fmts.map(o=>frame(o,t,(o==='d'?s.d_:s[o])())).join('')}</div>`).join('')}</section>`}).join('');
+ fit();
+}
+function fit(){document.querySelectorAll('.fitw').forEach(el=>{const dev=el.querySelector('.dev');const w={p:410,l:935,d:1200}[el.dataset.k];
+ const avail=el.parentElement.clientWidth;const z=Math.min(1,avail/w);dev.style.zoom=z<1?z:'';});}
+addEventListener('resize',fit);
+function bind(id,key){const el=document.getElementById(id);el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));st[key]=b.dataset.v;
+ if(key==='theme')document.documentElement.dataset.theme=st.theme==='dark'?'dark':'light';
+ try{localStorage.setItem('sixf-zixo2',JSON.stringify(st))}catch(_){}render();});}
+document.getElementById('fScr').innerHTML=`<button data-v="all" class="on">Todas</button>`+S.map(s=>`<button data-v="${s.id}">${s.t}</button>`).join('');
+bind('fTheme','theme');bind('fOri','ori');bind('fScr','scr');
+try{const sv=JSON.parse(localStorage.getItem('sixf-zixo2')||'null');if(sv)Object.assign(st,sv);}catch(_){}
+const q=new URLSearchParams(location.search);['theme','ori','scr'].forEach(k=>{if(q.get(k))st[k]=q.get(k)});
+[['fTheme','theme'],['fOri','ori'],['fScr','scr']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===st[k])));
+document.documentElement.dataset.theme=st.theme==='dark'?'dark':'light';
+render();
+</script>
+</body>
+</html>

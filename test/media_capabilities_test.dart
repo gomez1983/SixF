@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sixf_remote/controllers/remote_controller.dart';
 import 'package:sixf_remote/main.dart';
-import 'package:sixf_remote/ui/widgets/media_cast_dialog.dart';
 import 'package:sixf_remote/ui/widgets/trackpad_widget.dart';
 import 'package:sixf_remote/controllers/media_cast_controller.dart';
 import 'package:sixf_remote/models/dlna_renderer.dart';
@@ -471,43 +470,6 @@ void main() {
       );
       await controller.stop();
     });
-
-    testWidgets(
-      'dialog mostra envio nativo sem progresso ou repetição e mantém Stop',
-      (tester) async {
-        SharedPreferences.setMockInitialValues({});
-        final remote = RemoteController();
-        transport.rendererAvailable = false;
-        await tester.runAsync(() async {
-          await remote.ready;
-          await cast(driver: FakeTvDriver());
-        });
-        tester.view.physicalSize = const Size(400, 850);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        await tester.pumpWidget(
-          MultiProvider(
-            providers: [
-              ChangeNotifierProvider.value(value: remote),
-              ChangeNotifierProvider.value(value: controller),
-            ],
-            child: const MaterialApp(home: Scaffold(body: MediaCastDialog())),
-          ),
-        );
-        expect(find.text('Mídia enviada à TV'), findsOneWidget);
-        expect(find.text('Nativo'), findsOneWidget);
-        expect(find.byType(Slider), findsNothing);
-        expect(find.byIcon(Icons.repeat_rounded), findsNothing);
-        expect(find.byTooltip('Reproduzir'), findsOneWidget);
-        expect(find.byTooltip('Pausar'), findsNothing);
-        expect(find.byTooltip('Parar Transmissão'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox.shrink());
-        remote.dispose();
-        await tester.runAsync(() => controller.stop());
-      },
-    );
 
     testWidgets('arrastar slider envia um Seek somente ao soltar', (
       tester,

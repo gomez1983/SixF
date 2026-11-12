@@ -76,4 +76,5 @@ graphify-out/
 /.local-secrets/
 /client_secret_*.json
 
-
+# Referências visuais de terceiros (ZIXO): só locais, não publicar
+/docs/design/referencias/
