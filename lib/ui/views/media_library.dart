@@ -2038,19 +2038,35 @@ class _MediaLibraryState extends State<MediaLibrary> {
   /// (faixa amarela e preta). Em alturas menores, as barras encolhem para
   /// caber; em tela cheia e em alturas folgadas nada muda.
   Widget _withCompactVideoControls(double height, Widget video) {
-    final sizes = compactVideoControlSizes(height);
-    if (sizes == null) return video;
+    // Controles de toque (Android): a linha do tempo padrão do media_kit fica
+    // colada na borda inferior e tem só 2,4 px. Aqui ela sobe ([lift]) e
+    // engrossa; a barra de botões sobe junto para continuar acima dela.
+    final lift = touchSeekBarLift(height);
+    final sizes = compactVideoControlSizes(height - lift);
     final touch = MaterialVideoControlsThemeData(
-      buttonBarHeight: sizes.bar,
-      seekBarContainerHeight: sizes.seek,
+      buttonBarHeight: sizes?.bar ?? 56,
+      seekBarContainerHeight: sizes?.seek ?? 36,
+      seekBarHeight: 4.5,
+      seekBarThumbSize: 15,
+      seekBarMargin: EdgeInsets.only(left: 14, right: 14, bottom: lift),
+      bottomButtonBarMargin: EdgeInsets.only(left: 16, right: 8, bottom: lift),
     );
-    final desktop = MaterialDesktopVideoControlsThemeData(
-      buttonBarHeight: sizes.bar,
-      seekBarContainerHeight: sizes.seek,
+    // Tela cheia: sobe mais, para sair de cima da barra de gestos do sistema.
+    const touchFullscreen = MaterialVideoControlsThemeData(
+      seekBarHeight: 4.5,
+      seekBarThumbSize: 15,
+      seekBarMargin: EdgeInsets.only(left: 16, right: 16, bottom: 42),
+      bottomButtonBarMargin: EdgeInsets.only(left: 16, right: 8, bottom: 42),
     );
+    final desktop = sizes == null
+        ? const MaterialDesktopVideoControlsThemeData()
+        : MaterialDesktopVideoControlsThemeData(
+            buttonBarHeight: sizes.bar,
+            seekBarContainerHeight: sizes.seek,
+          );
     return MaterialVideoControlsTheme(
       normal: touch,
-      fullscreen: const MaterialVideoControlsThemeData(),
+      fullscreen: touchFullscreen,
       child: MaterialDesktopVideoControlsTheme(
         normal: desktop,
         fullscreen: const MaterialDesktopVideoControlsThemeData(),
@@ -2438,7 +2454,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
               current,
               highlight,
             ),
-            if (isTv && cast != null && isStreamingToTarget && cast.hasProgress)
+            _buildLocalTrackButtons(current),
+            if (isTv && cast != null && isStreamingToTarget)
               MediaSessionControls(
                 controller: cast,
                 enabled: true,
@@ -2472,7 +2489,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildTransportRow(tv, cast, isStreamingToTarget, current, highlight),
-          if (isTv && cast != null && isStreamingToTarget && cast.hasProgress)
+          _buildLocalTrackButtons(current),
+          if (isTv && cast != null && isStreamingToTarget)
             MediaSessionControls(
               controller: cast,
               enabled: true,
@@ -2597,6 +2615,108 @@ class _MediaLibraryState extends State<MediaLibrary> {
           mode('Repetir vídeo', Icons.repeat_rounded, repeatOn, onRepeat),
           mode('Ordem aleatória', Icons.shuffle_rounded, shuffleOn, onShuffle),
         ],
+      ),
+    );
+  }
+
+  // --- Player local: legendas e faixas de áudio --------------------------
+
+  static String _localTrackLabel(String id, String? title, String? language) {
+    final t = title?.trim() ?? '';
+    final l = language?.trim() ?? '';
+    if (t.isNotEmpty && l.isNotEmpty && t.toLowerCase() != l.toLowerCase()) {
+      return '$t ($l)';
+    }
+    if (t.isNotEmpty) return t;
+    if (l.isNotEmpty) return l;
+    return 'Faixa $id';
+  }
+
+  static bool _isRealTrack(String id) => id != 'auto' && id != 'no';
+
+  /// Botões "Legenda" e "Áudio" do vídeo que toca neste aparelho. Mesmo
+  /// padrão da transmissão para a TV: abre a lista, seleciona e confirma.
+  /// Só aparecem para vídeo carregado no player embutido.
+  Widget _buildLocalTrackButtons(LibraryEntry current) {
+    final player = _localPlayer;
+    if (player == null || !current.isVideo || !_isPlayingHere(current)) {
+      return const SizedBox.shrink();
+    }
+    // Reconstrói quando o arquivo termina de abrir (faixas disponíveis) e
+    // quando a faixa ativa muda.
+    return StreamBuilder<Tracks>(
+      stream: player.stream.tracks,
+      builder: (context, _) => StreamBuilder<Track>(
+        stream: player.stream.track,
+        builder: (context, _) {
+          final subs = player.state.tracks.subtitle
+              .where((t) => _isRealTrack(t.id))
+              .toList();
+          final audios = player.state.tracks.audio
+              .where((t) => _isRealTrack(t.id))
+              .toList();
+          final curSub = player.state.track.subtitle;
+          final curAudio = player.state.track.audio;
+          final selSub = subs.where((t) => t.id == curSub.id).firstOrNull;
+          final selAudio = audios.where((t) => t.id == curAudio.id).firstOrNull;
+          return Padding(
+            key: const ValueKey('local-track-buttons'),
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                MediaTrackButton(
+                  icon: Icons.subtitles_outlined,
+                  activeIcon: Icons.subtitles_rounded,
+                  label: 'Legenda',
+                  selectedTitle: selSub == null
+                      ? null
+                      : _localTrackLabel(
+                          selSub.id,
+                          selSub.title,
+                          selSub.language,
+                        ),
+                  tooltip: 'Legendas embutidas',
+                  onPressed: () => showTrackPickerDialog<SubtitleTrack>(
+                    context,
+                    title: 'Legendas',
+                    tracks: subs,
+                    selected: selSub,
+                    labelOf: (t) => _localTrackLabel(t.id, t.title, t.language),
+                    detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+                    onConfirm: (t) =>
+                        player.setSubtitleTrack(t ?? SubtitleTrack.no()),
+                  ),
+                ),
+                MediaTrackButton(
+                  icon: Icons.audiotrack_outlined,
+                  activeIcon: Icons.audiotrack_rounded,
+                  label: 'Áudio',
+                  selectedTitle: selAudio == null
+                      ? null
+                      : _localTrackLabel(
+                          selAudio.id,
+                          selAudio.title,
+                          selAudio.language,
+                        ),
+                  tooltip: 'Faixa de áudio',
+                  onPressed: () => showTrackPickerDialog<AudioTrack>(
+                    context,
+                    title: 'Faixas de Áudio',
+                    tracks: audios,
+                    selected: selAudio,
+                    labelOf: (t) => _localTrackLabel(t.id, t.title, t.language),
+                    detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+                    onConfirm: (t) =>
+                        player.setAudioTrack(t ?? AudioTrack.auto()),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -2785,10 +2905,8 @@ class _MediaLibraryState extends State<MediaLibrary> {
                     current,
                     highlight,
                   ),
-                  if (isTv &&
-                      cast != null &&
-                      isStreamingToTarget &&
-                      cast.hasProgress)
+                  _buildLocalTrackButtons(current),
+                  if (isTv && cast != null && isStreamingToTarget)
                     MediaSessionControls(
                       controller: cast,
                       enabled: true,
@@ -4434,30 +4552,42 @@ class _MediaLibraryState extends State<MediaLibrary> {
                               color: AppColors.borderSubtleOf(context),
                             ),
                           ),
-                          child: TextField(
-                            controller: search,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textPrimaryOf(context),
-                            ),
-                            decoration: InputDecoration(
-                              prefixIcon: Icon(
+                          // Ícone e texto numa linha centralizada: o campo
+                          // "colapsado" não herda a altura mínima de 48 px do
+                          // prefixIcon, que empurrava o texto para baixo no
+                          // Android.
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Icon(
                                 Icons.search_rounded,
                                 size: 18,
                                 color: AppColors.textMutedOf(context),
                               ),
-                              hintText: 'Buscar nesta pasta',
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              filled: false,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 11,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: search,
+                                  textAlignVertical: TextAlignVertical.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.2,
+                                    color: AppColors.textPrimaryOf(context),
+                                  ),
+                                  decoration: InputDecoration.collapsed(
+                                    hintText: 'Buscar nesta pasta',
+                                    hintStyle: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.2,
+                                      color: AppColors.textMutedOf(context),
+                                    ),
+                                  ),
+                                  onChanged: (v) =>
+                                      setState(() => filter = v.toLowerCase()),
+                                ),
                               ),
-                            ),
-                            onChanged: (v) =>
-                                setState(() => filter = v.toLowerCase()),
+                            ],
                           ),
                         ),
                       ),
@@ -5215,6 +5345,13 @@ class _DriveLogoPainter extends CustomPainter {
 /// Alturas das barras dos controles do vídeo para um card de [height] px, ou
 /// `null` se a altura padrão (56 + 56 + 36) já cabe com folga. Sempre
 /// `bar * 2 + seek + 4 <= height` enquanto `height >= 88`.
+/// Quanto a linha do tempo dos controles de toque sobe em relação à borda
+/// inferior do vídeo, para um card de [height] px. Em cards baixos sobe
+/// menos, para as barras continuarem cabendo.
+@visibleForTesting
+double touchSeekBarLift(double height) =>
+    height >= 200 ? 14 : (height >= 120 ? 8 : 0);
+
 @visibleForTesting
 ({double bar, double seek})? compactVideoControlSizes(double height) {
   if (height >= 200) return null;

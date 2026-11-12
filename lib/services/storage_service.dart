@@ -49,6 +49,25 @@ class StorageService {
   Future<void> setVolumeTarget(String deviceId, String targetId) async {
     await init(); await _prefs!.setString('volume_target_$deviceId',targetId);
   }
+  /// Slots configuráveis da aba Controle (uma lista por faixa e aparelho).
+  /// `null` = o usuário ainda não personalizou; vale o padrão.
+  List<String>? getControlSlots(String deviceKey, String group) =>
+      _prefs?.getStringList('pref_control_slots_${group}_$deviceKey');
+
+  Future<void> setControlSlots(
+    String deviceKey,
+    String group,
+    List<String>? slots,
+  ) async {
+    await init();
+    final key = 'pref_control_slots_${group}_$deviceKey';
+    if (slots == null) {
+      await _prefs!.remove(key);
+    } else {
+      await _prefs!.setStringList(key, slots);
+    }
+  }
+
   Set<String> getFavoriteApps(String deviceId, TvBrand brand) =>
       (_prefs?.getStringList('pref_favorites_${brand.id}_$deviceId') ?? []).toSet();
 

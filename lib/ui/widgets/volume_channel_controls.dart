@@ -3,191 +3,207 @@ import 'package:provider/provider.dart';
 import '../../controllers/remote_controller.dart';
 import '../../services/haptic_service.dart';
 import '../theme/app_colors.dart';
-import 'payno.dart';
 import 'remote_button.dart';
 import 'voice_listening_dialog.dart';
 
-/// Volume e Canal no padrão Payno: dois cards com o valor em destaque, barra
-/// hachurada do volume, botões −/+ (com repetição ao segurar), Mudo e Voz.
+/// Volume e Canal em duas "pílulas" altas com botões grandes (como nas
+/// primeiras versões do app): volume à esquerda (+ / valor / −) e canal à
+/// direita (∧ / número / ∨). Entre elas, Mudo em cima e Microfone embaixo.
+///
+/// Não desenha card próprio: fica dentro do card único da aba Controle, junto
+/// com o D-pad. Se a largura for menor que o conjunto, tudo encolhe junto.
 class VolumeChannelControls extends StatelessWidget {
-  /// Altura mínima de cada card. O card nunca fica menor que o conteúdo:
-  /// se a fonte do sistema for maior, ele cresce em vez de estourar.
-  final double? height;
+  /// Altura das pílulas. Os botões grandes acompanham a largura.
+  final double height;
 
-  /// [Axis.horizontal]: cards lado a lado (celular). [Axis.vertical]: um
-  /// sobre o outro (coluna do desktop).
-  final Axis axis;
-
-  const VolumeChannelControls({
-    super.key,
-    this.height,
-    this.axis = Axis.horizontal,
-  });
+  const VolumeChannelControls({super.key, this.height = 210});
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<RemoteController>();
     final isMuted = controller.isMuted;
-    final volumeLevel = controller.volumeLevel;
     final repeat = controller.isConnected;
-    // Mesmo diâmetro dos círculos de "Ações rápidas" (HOME, MENU...).
-    const circle = 48.0;
     final token = controller.driver;
 
-    // −/+ e ∨/∧ no mesmo padrão dos círculos de "Ações rápidas": fundo
-    // branco com sombra suave, ícone escuro.
-    Widget step(IconData icon, String tooltip, VoidCallback onTap) => Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: RemoteButton(
-        width: 44,
-        height: 44,
-        isCircular: true,
-        foregroundColor: AppColors.textPrimaryOf(context),
-        icon: icon,
-        iconSize: 22,
-        tooltip: tooltip,
-        onPressed: onTap,
-        repeatOnHold: repeat,
-        repeatToken: token,
+    final pillHeight = height.clamp(132.0, 260.0).toDouble();
+    // Pílula mais baixa → mais estreita, para os dois botões e o valor
+    // continuarem cabendo.
+    final pillWidth = (pillHeight * 0.41).clamp(64.0, 90.0).toDouble();
+    final big = pillWidth - 16;
+    final round = (pillHeight * 0.26).clamp(42.0, 56.0).toDouble();
+
+    Widget bigButton(IconData icon, String tooltip, VoidCallback onTap) =>
+        RemoteButton(
+          width: big,
+          height: big,
+          isCircular: true,
+          foregroundColor: AppColors.textPrimaryOf(context),
+          icon: icon,
+          iconSize: big * 0.5,
+          tooltip: tooltip,
+          onPressed: onTap,
+          repeatOnHold: repeat,
+          repeatToken: token,
+        );
+
+    Widget pill({
+      required Key key,
+      required String caption,
+      required String value,
+      required Color valueColor,
+      required Widget up,
+      required Widget down,
+    }) => Container(
+      key: key,
+      width: pillWidth,
+      height: pillHeight,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInteractiveOf(context),
+        borderRadius: BorderRadius.circular(pillWidth / 2),
+        border: Border.all(color: AppColors.borderSubtleOf(context)),
       ),
-    );
-
-    Widget card({
-      required IconData icon,
-      required String title,
-      required Widget action,
-      required Widget value,
-      required Widget middle,
-      required List<Widget> buttons,
-    }) {
-      // Altura sempre >= conteúdo (IntrinsicHeight + minHeight): o espaço
-      // extra fica entre o valor e os botões, nunca falta.
-      return IntrinsicHeight(
-        child: Container(
-          constraints: BoxConstraints(minHeight: height ?? 0),
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          decoration: AppColors.paynoCardDecoration(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              PaynoCardHeader(icon: icon, title: title, trailing: action),
-              const SizedBox(height: 8),
-              value,
-              const SizedBox(height: 10),
-              middle,
-              const Spacer(),
-              const SizedBox(height: 12),
-              Row(children: buttons),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final volumeCard = card(
-      icon: Icons.volume_up_outlined,
-      title: 'VOL',
-      action: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          RemoteButton(
-            width: circle,
-            height: circle,
-            isCircular: true,
-            backgroundColor: isMuted
-                ? AppColors.powerRed.withValues(alpha: 0.16)
-                : null,
-            foregroundColor: isMuted
-                ? AppColors.powerRed
-                : AppColors.textMutedOf(context),
-            icon: isMuted ? Icons.volume_off_rounded : Icons.volume_off_outlined,
-            iconSize: circle * 0.42,
-            tooltip: isMuted ? 'Desmutar Áudio' : 'Mutar Áudio',
-            onPressed: () => controller.muteToggle(),
-          ),
-        ],
-      ),
-      value: PaynoBigValue(
-        '$volumeLevel',
-        unit: isMuted ? 'MUTE' : '/100',
-        size: 36,
-      ),
-      middle: PaynoHatchedBar(value: volumeLevel / 100, height: 8),
-      buttons: [
-        step(Icons.remove_rounded, 'Diminuir Volume (-)', controller.volumeDown),
-        step(Icons.add_rounded, 'Aumentar Volume (+)', controller.volumeUp),
-      ],
-    );
-
-    final channelCard = card(
-      icon: Icons.tv_outlined,
-      title: 'CH',
-      action: VoicePttButton(
-        controller: controller,
-        size: circle,
-        builder: (context, pressed, locked) => Container(
-          width: circle,
-          height: circle,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.accentFillOf(context),
-            boxShadow: pressed || locked
-                ? [
-                    BoxShadow(
-                      color: AppColors.accentFillOf(context).withValues(alpha: 0.55),
-                      blurRadius: 14,
-                      spreadRadius: 2,
+          up,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(
+                      fontSize: 28,
+                      height: 1.05,
+                      fontWeight: FontWeight.w600,
+                      color: valueColor,
                     ),
-                  ]
-                : null,
-          ),
-          child: Icon(
-            locked ? Icons.lock_open_rounded : Icons.mic_rounded,
-            size: circle * 0.42,
-            color: Colors.white,
-          ),
-        ),
-      ),
-      value: PaynoBigValue('${controller.currentChannel}', unit: 'Canal', size: 36),
-      middle: Text.rich(
-        TextSpan(
-          children: [
-            const TextSpan(text: 'Segure '),
-            TextSpan(
-              text: 'VOZ',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimaryOf(context),
+                  ),
+                  Text(
+                    caption,
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMutedOf(context),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const TextSpan(text: ' para falar'),
-          ],
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 10.5, color: AppColors.textMutedOf(context)),
+          ),
+          down,
+        ],
       ),
-      buttons: [
-        step(Icons.keyboard_arrow_down_rounded, 'Voltar Canal (-)', controller.channelDown),
-        step(Icons.keyboard_arrow_up_rounded, 'Avançar Canal (+)', controller.channelUp),
-      ],
     );
 
-    if (axis == Axis.vertical) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [volumeCard, const SizedBox(height: 14), channelCard],
-      );
-    }
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: volumeCard),
-          const SizedBox(width: 12),
-          Expanded(child: channelCard),
-        ],
+    final volumePill = pill(
+      key: const Key('volume-pill'),
+      caption: 'VOL',
+      value: '${controller.volumeLevel}',
+      valueColor: isMuted
+          ? AppColors.powerRed
+          : AppColors.textPrimaryOf(context),
+      up: bigButton(
+        Icons.add_rounded,
+        'Aumentar Volume (+)',
+        controller.volumeUp,
+      ),
+      down: bigButton(
+        Icons.remove_rounded,
+        'Diminuir Volume (-)',
+        controller.volumeDown,
+      ),
+    );
+
+    final channelPill = pill(
+      key: const Key('channel-pill'),
+      caption: 'CH',
+      value: '${controller.currentChannel}',
+      valueColor: AppColors.textPrimaryOf(context),
+      up: bigButton(
+        Icons.keyboard_arrow_up_rounded,
+        'Avançar Canal (+)',
+        controller.channelUp,
+      ),
+      down: bigButton(
+        Icons.keyboard_arrow_down_rounded,
+        'Voltar Canal (-)',
+        controller.channelDown,
+      ),
+    );
+
+    final mute = RemoteButton(
+      width: round,
+      height: round,
+      isCircular: true,
+      backgroundColor: isMuted
+          ? AppColors.powerRed.withValues(alpha: 0.16)
+          : null,
+      foregroundColor: isMuted
+          ? AppColors.powerRed
+          : AppColors.textMutedOf(context),
+      icon: isMuted ? Icons.volume_off_rounded : Icons.volume_off_outlined,
+      iconSize: round * 0.44,
+      tooltip: isMuted ? 'Desmutar Áudio' : 'Mutar Áudio',
+      onPressed: () => controller.muteToggle(),
+    );
+
+    final mic = VoicePttButton(
+      controller: controller,
+      size: round,
+      builder: (context, pressed, locked) => Container(
+        width: round,
+        height: round,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.accentFillOf(context),
+          boxShadow: pressed || locked
+              ? [
+                  BoxShadow(
+                    color: AppColors.accentFillOf(
+                      context,
+                    ).withValues(alpha: 0.55),
+                    blurRadius: 14,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(
+          locked ? Icons.lock_open_rounded : Icons.mic_rounded,
+          size: round * 0.44,
+          color: Colors.white,
+        ),
+      ),
+    );
+
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            volumePill,
+            const SizedBox(width: 22),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                mute,
+                SizedBox(height: (pillHeight * 0.12).clamp(12.0, 26.0)),
+                mic,
+              ],
+            ),
+            const SizedBox(width: 22),
+            channelPill,
+          ],
+        ),
       ),
     );
   }

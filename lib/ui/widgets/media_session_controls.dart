@@ -101,206 +101,15 @@ class MediaSessionControls extends StatelessWidget {
     required List<MediaTrack> tracks,
     required MediaTrack? selected,
     required Future<void> Function(MediaTrack?) onConfirm,
-  }) {
-    MediaTrack? currentChoice = selected;
-    bool isApplying = false;
-    String? dialogError;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: !isApplying,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: tracks.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Nenhuma faixa alternativa identificada no arquivo.',
-                  ),
-                )
-              : SizedBox(
-                  width: double.maxFinite,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (dialogError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(ctx).colorScheme.errorContainer
-                                  .withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  size: 16,
-                                  color: Theme.of(ctx).colorScheme.error,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    dialogError!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(ctx).colorScheme.error,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (isApplying)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  title == 'Legendas'
-                                      ? 'Extraindo e ativando legenda...'
-                                      : 'Aplicando faixa de áudio...',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(ctx).colorScheme.secondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Flexible(
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            RadioListTile<MediaTrack?>(
-                              value: null,
-                              groupValue: currentChoice,
-                              title: const Text('Padrão / Desativado'),
-                              onChanged: isApplying
-                                  ? null
-                                  : (val) {
-                                      setDialogState(() {
-                                        currentChoice = null;
-                                        dialogError = null;
-                                      });
-                                    },
-                            ),
-                            for (final track in tracks)
-                              RadioListTile<MediaTrack?>(
-                                value: track,
-                                groupValue: currentChoice,
-                                title: Text(track.title),
-                                subtitle: track.codec != null
-                                    ? Text('Codec: ${track.codec}')
-                                    : null,
-                                onChanged: isApplying
-                                    ? null
-                                    : (val) {
-                                        setDialogState(() {
-                                          currentChoice = track;
-                                          dialogError = null;
-                                        });
-                                      },
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-          actions: [
-            TextButton(
-              onPressed: isApplying ? null : () => Navigator.pop(dialogCtx),
-              child: const Text('Cancelar'),
-            ),
-            if (tracks.isNotEmpty)
-              FilledButton.icon(
-                icon: isApplying
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_rounded, size: 18),
-                label: Text(isApplying ? 'Aplicando...' : 'Confirmar'),
-                onPressed: isApplying
-                    ? null
-                    : () async {
-                        setDialogState(() {
-                          isApplying = true;
-                          dialogError = null;
-                        });
-                        try {
-                          await onConfirm(currentChoice);
-                          if (dialogCtx.mounted) {
-                            Navigator.pop(dialogCtx);
-                          }
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context)
-                                .removeCurrentSnackBar();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  currentChoice != null
-                                      ? '$title ativada: ${currentChoice!.title}'
-                                      : '$title desativada.',
-                                ),
-                                duration: const Duration(seconds: 3),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (dialogCtx.mounted) {
-                            setDialogState(() {
-                              isApplying = false;
-                              dialogError = e
-                                  .toString()
-                                  .replaceFirst('Exception: ', '')
-                                  .replaceFirst('StateError: ', '');
-                            });
-                          }
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context)
-                                .removeCurrentSnackBar();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Falha ao ativar: $e'),
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .error,
-                                duration: const Duration(seconds: 4),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        }
-                      },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  }) => showTrackPickerDialog<MediaTrack>(
+    context,
+    title: title,
+    tracks: tracks,
+    selected: selected,
+    labelOf: (t) => t.title,
+    detailOf: (t) => t.codec != null ? 'Codec: ${t.codec}' : null,
+    onConfirm: onConfirm,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -379,28 +188,34 @@ class MediaSessionControls extends StatelessWidget {
               ),
             if (enabled && c.playlistCount > 1)
               Text('${c.playlistPosition} de ${c.playlistCount} arquivos'),
-            if (enabled && showTimeline && c.hasProgress)
+            // A linha do tempo depende do progresso informado pela TV; os
+            // botões de legenda e áudio não — aparecem durante toda a
+            // transmissão, mesmo que a TV ainda não informe a posição.
+            if (enabled && showTimeline && (c.hasProgress || c.isStreaming))
               ExcludeSemantics(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    MediaProgressSlider(
-                      key: ValueKey(c.currentFilePath),
-                      controller: c,
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(time(c.currentPosition)),
-                        Text(time(c.totalDuration)),
-                      ],
-                    ),
+                    if (c.hasProgress) ...[
+                      MediaProgressSlider(
+                        key: ValueKey(c.currentFilePath),
+                        controller: c,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(time(c.currentPosition)),
+                          Text(time(c.totalDuration)),
+                        ],
+                      ),
+                    ],
                     Wrap(
                       alignment: WrapAlignment.center,
-                      spacing: 4,
+                      spacing: 6,
+                      runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        if (showTransportControls)
+                        if (showTransportControls && c.hasProgress)
                           TextButton.icon(
                             onPressed: c.canSeek
                                 ? () => c.seekTo(
@@ -411,93 +226,42 @@ class MediaSessionControls extends StatelessWidget {
                             icon: const Icon(Icons.replay_10),
                             label: const Text('−10 s'),
                           ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: c.selectedSubtitleTrack != null
-                                  ? 'Legenda: ${c.selectedSubtitleTrack!.title}'
-                                  : 'Legendas embutidas',
-                              icon: Icon(
-                                c.selectedSubtitleTrack != null
-                                    ? Icons.subtitles_rounded
-                                    : Icons.subtitles_outlined,
-                                size: 20,
-                              ),
-                              color: c.selectedSubtitleTrack != null
-                                  ? Theme.of(context).colorScheme.secondary
-                                  : null,
-                              onPressed: enabled && c.isStreaming
-                                  ? () => _showTracksDialog(
-                                      context,
-                                      title: 'Legendas',
-                                      tracks: subtitles,
-                                      selected: c.selectedSubtitleTrack,
-                                      onConfirm: c.selectSubtitleTrack,
-                                    )
-                                  : null,
-                            ),
-                            if (c.selectedSubtitleTrack != null)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 120,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    c.selectedSubtitleTrack!.title,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                          ],
+                        MediaTrackButton(
+                          icon: Icons.subtitles_outlined,
+                          activeIcon: Icons.subtitles_rounded,
+                          label: 'Legenda',
+                          selectedTitle: c.selectedSubtitleTrack?.title,
+                          tooltip: c.selectedSubtitleTrack != null
+                              ? 'Legenda: ${c.selectedSubtitleTrack!.title}'
+                              : 'Legendas embutidas',
+                          onPressed: c.isStreaming
+                              ? () => _showTracksDialog(
+                                  context,
+                                  title: 'Legendas',
+                                  tracks: subtitles,
+                                  selected: c.selectedSubtitleTrack,
+                                  onConfirm: c.selectSubtitleTrack,
+                                )
+                              : null,
                         ),
                         if (c.selectedSubtitleTrack != null &&
                             c.transport == MediaCastTransport.cast)
                           IconButton(
                             tooltip: 'Sincronia da legenda',
                             icon: const Icon(Icons.sync_alt_rounded, size: 20),
-                            onPressed: enabled && c.canAdjustSubtitleOffset
+                            onPressed: c.canAdjustSubtitleOffset
                                 ? () => _showSubtitleSync(context)
                                 : null,
                           ),
-                        IconButton(
+                        MediaTrackButton(
+                          icon: Icons.audiotrack_outlined,
+                          activeIcon: Icons.audiotrack_rounded,
+                          label: 'Áudio',
+                          selectedTitle: c.selectedAudioTrack?.title,
                           tooltip: c.selectedAudioTrack != null
                               ? 'Áudio: ${c.selectedAudioTrack!.title}'
                               : 'Faixa de áudio',
-                          icon: Icon(
-                            c.selectedAudioTrack != null
-                                ? Icons.audiotrack_rounded
-                                : Icons.audiotrack_outlined,
-                            size: 20,
-                          ),
-                          color: c.selectedAudioTrack != null
-                              ? Theme.of(context).colorScheme.secondary
-                              : null,
-                          onPressed: enabled && c.isStreaming
+                          onPressed: c.isStreaming
                               ? () => _showTracksDialog(
                                   context,
                                   title: 'Faixas de Áudio',
@@ -507,7 +271,7 @@ class MediaSessionControls extends StatelessWidget {
                                 )
                               : null,
                         ),
-                        if (showTransportControls)
+                        if (showTransportControls && c.hasProgress)
                           TextButton.icon(
                             onPressed: c.canSeek
                                 ? () => c.seekTo(
@@ -526,6 +290,269 @@ class MediaSessionControls extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Padrão de escolha de faixa (legenda ou áudio): abre a lista, o usuário
+/// seleciona uma opção e só então aperta **Confirmar**. Usado tanto na
+/// transmissão para a TV quanto no player deste aparelho.
+void showTrackPickerDialog<T>(
+  BuildContext context, {
+  required String title,
+  required List<T> tracks,
+  required T? selected,
+  required String Function(T) labelOf,
+  String? Function(T)? detailOf,
+  required Future<void> Function(T?) onConfirm,
+}) {
+  T? currentChoice = selected;
+  bool isApplying = false;
+  String? dialogError;
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: !isApplying,
+    builder: (ctx) => StatefulBuilder(
+      builder: (dialogCtx, setDialogState) => AlertDialog(
+        title: Text(title),
+        content: tracks.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Nenhuma faixa alternativa identificada no arquivo.',
+                ),
+              )
+            : SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (dialogError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(ctx).colorScheme.errorContainer
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 16,
+                                color: Theme.of(ctx).colorScheme.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  dialogError!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(ctx).colorScheme.error,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (isApplying)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                title == 'Legendas'
+                                    ? 'Extraindo e ativando legenda...'
+                                    : 'Aplicando faixa de áudio...',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(ctx).colorScheme.secondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          RadioListTile<T?>(
+                            value: null,
+                            groupValue: currentChoice,
+                            title: const Text('Padrão / Desativado'),
+                            onChanged: isApplying
+                                ? null
+                                : (val) {
+                                    setDialogState(() {
+                                      currentChoice = null;
+                                      dialogError = null;
+                                    });
+                                  },
+                          ),
+                          for (final track in tracks)
+                            RadioListTile<T?>(
+                              value: track,
+                              groupValue: currentChoice,
+                              title: Text(labelOf(track)),
+                              subtitle: detailOf?.call(track) != null
+                                  ? Text(detailOf!(track)!)
+                                  : null,
+                              onChanged: isApplying
+                                  ? null
+                                  : (val) {
+                                      setDialogState(() {
+                                        currentChoice = track;
+                                        dialogError = null;
+                                      });
+                                    },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: isApplying ? null : () => Navigator.pop(dialogCtx),
+            child: const Text('Cancelar'),
+          ),
+          if (tracks.isNotEmpty)
+            FilledButton.icon(
+              icon: isApplying
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_rounded, size: 18),
+              label: Text(isApplying ? 'Aplicando...' : 'Confirmar'),
+              onPressed: isApplying
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        isApplying = true;
+                        dialogError = null;
+                      });
+                      try {
+                        await onConfirm(currentChoice);
+                        if (dialogCtx.mounted) {
+                          Navigator.pop(dialogCtx);
+                        }
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                currentChoice != null
+                                    ? '$title ativada: ${labelOf(currentChoice as T)}'
+                                    : '$title desativada.',
+                              ),
+                              duration: const Duration(seconds: 3),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (dialogCtx.mounted) {
+                          setDialogState(() {
+                            isApplying = false;
+                            dialogError = e
+                                .toString()
+                                .replaceFirst('Exception: ', '')
+                                .replaceFirst('StateError: ', '');
+                          });
+                        }
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Falha ao ativar: $e'),
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .error,
+                              duration: const Duration(seconds: 4),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Botão rotulado de faixa de mídia ("Legenda" / "Áudio"). Abre a lista de
+/// faixas; a escolha só vale depois de confirmada no diálogo. Com uma faixa
+/// ativa, o rótulo passa a ser o nome dela e o botão fica em destaque.
+class MediaTrackButton extends StatelessWidget {
+  const MediaTrackButton({
+    super.key,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.tooltip,
+    this.selectedTitle,
+    this.onPressed,
+  });
+
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final String tooltip;
+  final String? selectedTitle;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = selectedTitle != null;
+    final color = active
+        ? AppColors.iconHighlightOf(context)
+        : AppColors.textPrimaryOf(context);
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(active ? activeIcon : icon, size: 18),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 120),
+          child: Text(
+            selectedTitle ?? label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: const StadiumBorder(),
+          side: BorderSide(
+            color: active ? color : AppColors.borderSubtleOf(context),
+          ),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 }

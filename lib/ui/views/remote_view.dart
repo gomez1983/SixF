@@ -21,11 +21,11 @@ import '../theme/app_colors.dart';
 import '../widgets/active_device_card.dart';
 import '../widgets/app_drawer_widget.dart';
 import '../widgets/color_buttons_row.dart';
+import '../widgets/control_slots.dart';
 import '../widgets/device_discovery_dialog.dart';
 import '../widgets/device_selector_bar.dart';
 import '../widgets/dpad_widget.dart';
 import '../widgets/header_bar.dart';
-import '../widgets/multimedia_controls.dart';
 import '../widgets/network_drawer.dart';
 import '../widgets/numeric_keypad.dart';
 import '../widgets/payno.dart';
@@ -559,25 +559,38 @@ class _RemoteViewState extends State<RemoteView> {
   Widget _buildDesktopControl() {
     return _desktopGrid([
       (
-        10,
-        LayoutBuilder(
-          builder: (context, box) {
-            // Volume e Canal dividem a altura que sobra das Ações rápidas;
-            // a altura é só mínima — com mais conteúdo, o card cresce.
-            const quick = 160.0;
-            final card = ((box.maxHeight - quick - 28) / 2).clamp(0.0, 260.0);
-            return _scrollColumn([
-              VolumeChannelControls(axis: Axis.vertical, height: card),
-              const SizedBox(height: 14),
-              const PaynoCard(
-                title: 'Ações rápidas',
-                child: SystemNavigationControls(),
+        21,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSlotStripCard(ControlSlotGroup.top),
+            const SizedBox(height: 14),
+            Expanded(
+              child: Container(
+                key: const ValueKey('control-unified-card'),
+                padding: const EdgeInsets.all(16),
+                decoration: AppColors.paynoCardDecoration(context),
+                child: Row(
+                  children: [
+                    const Expanded(child: VolumeChannelControls(height: 250)),
+                    Container(
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 24,
+                      ),
+                      color: AppColors.borderSubtleOf(context),
+                    ),
+                    Expanded(child: _buildDpadArea(maxWheel: 320)),
+                  ],
+                ),
               ),
-            ]);
-          },
+            ),
+            const SizedBox(height: 14),
+            _buildSlotStripCard(ControlSlotGroup.bottom),
+          ],
         ),
       ),
-      (11, _buildNavigationCard(maxWheel: 300)),
       (
         10,
         _scrollColumn([
@@ -589,35 +602,36 @@ class _RemoteViewState extends State<RemoteView> {
     ]);
   }
 
-  /// Card "Navegação" com o D-pad do tamanho que couber (nunca estoura: em
-  /// espaço pequeno a roda encolhe junto com os botões laterais).
-  Widget _buildNavigationCard({
-    double maxWheel = 300,
-    EdgeInsetsGeometry padding = const EdgeInsets.fromLTRB(16, 14, 16, 16),
-  }) {
-    return PaynoCard(
-      title: 'Navegação',
-      padding: padding,
-      trailing: Text(
-        'D-pad',
-        style: TextStyle(fontSize: 11, color: AppColors.textMutedOf(context)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final wheel = box.maxHeight.isFinite
-              ? (box.maxHeight - 8).clamp(130.0, maxWheel).toDouble()
-              : maxWheel;
-          return Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: SizedBox(
-                width: box.maxWidth.isFinite ? box.maxWidth : null,
-                child: DPadWidget(size: wheel),
-              ),
+  /// Card baixo e sem título com uma faixa de slots configuráveis.
+  Widget _buildSlotStripCard(ControlSlotGroup group, {double slotHeight = 44}) {
+    return Container(
+      key: ValueKey('control-slots-${group.id}'),
+      padding: const EdgeInsets.all(10),
+      decoration: AppColors.paynoCardDecoration(context),
+      child: group == ControlSlotGroup.top
+          ? SystemNavigationControls(slotHeight: slotHeight)
+          : ControlSlotStrip(group: group, slotHeight: slotHeight),
+    );
+  }
+
+  /// D-pad do tamanho que couber no espaço (nunca estoura: em espaço pequeno
+  /// a roda encolhe junto com os botões laterais).
+  Widget _buildDpadArea({double maxWheel = 300}) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wheel = box.maxHeight.isFinite
+            ? (box.maxHeight - 8).clamp(130.0, maxWheel).toDouble()
+            : maxWheel;
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: box.maxWidth.isFinite ? box.maxWidth : null,
+              child: DPadWidget(size: wheel),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -668,19 +682,22 @@ class _RemoteViewState extends State<RemoteView> {
         11,
         _scrollColumn(const [
           PaynoCard(
-            title: 'Controles multimídia',
-            icon: Icons.movie_outlined,
-            child: MultimediaControls(),
-          ),
-          SizedBox(height: 14),
-          PaynoCard(
             title: 'Botões coloridos',
             icon: Icons.palette_outlined,
             child: ColorButtonsRow(columns: 2),
           ),
         ]),
       ),
-      (10, _scrollColumn(const [VolumeChannelControls(axis: Axis.vertical)])),
+      (
+        10,
+        _scrollColumn(const [
+          PaynoCard(
+            title: 'Volume e canal',
+            icon: Icons.volume_up_outlined,
+            child: VolumeChannelControls(),
+          ),
+        ]),
+      ),
     ]);
   }
 
@@ -945,9 +962,9 @@ class _RemoteViewState extends State<RemoteView> {
   }
 
   /// Aba Controle em paisagem: duas metades simétricas.
-  /// Esquerda — VOL, MUTE/VOZ e CH (mesma disposição do retrato) com a fileira
-  /// Home/Menu/Entrada/Sair logo abaixo. Direita — D-pad com VOLTAR, TV Digital
-  /// e HDMI (no Chromecast, o mesmo arranjo sem as entradas, que ele não tem).
+  /// Esquerda — faixa de slots de cima, VOL / MUDO / VOZ / CH e a faixa de
+  /// slots de baixo. Direita — D-pad com VOLTAR, TV Digital e HDMI (no
+  /// Chromecast, o mesmo arranjo sem as entradas, que ele não tem).
   /// Cada metade escala junto (FittedBox), então nada transborda em telas
   /// baixas e as proporções ficam idênticas às do controle vertical.
   Widget _buildTab1ControlLandscape() {
@@ -956,9 +973,9 @@ class _RemoteViewState extends State<RemoteView> {
         final halfWidth = (constraints.maxWidth - 32 - 1) / 2;
         final height = constraints.maxHeight;
         // D-pad: ocupa a altura disponível, sem passar do tamanho do retrato.
-        final wheel = (height - 20).clamp(130.0, 260.0);
-        final volumeHeight = (height * 0.55).clamp(130.0, 220.0);
-        const leftWidth = 300.0;
+        final wheel = (height - 20).clamp(130.0, 280.0);
+        final pill = (height - 150).clamp(132.0, 210.0);
+        const leftWidth = 320.0;
         final dpadWidth = wheel + 140;
 
         Widget half(Widget child, double naturalWidth) => SizedBox(
@@ -985,14 +1002,13 @@ class _RemoteViewState extends State<RemoteView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    VolumeChannelControls(height: volumeHeight),
-                    const SizedBox(height: 14),
-                    const PaynoCard(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      child: SystemNavigationControls(circleSize: 42),
+                    _buildSlotStripCard(ControlSlotGroup.top, slotHeight: 40),
+                    const SizedBox(height: 10),
+                    VolumeChannelControls(height: pill),
+                    const SizedBox(height: 10),
+                    _buildSlotStripCard(
+                      ControlSlotGroup.bottom,
+                      slotHeight: 40,
                     ),
                   ],
                 ),
@@ -1011,42 +1027,50 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Aba Controle (retrato), em cards: Ações rápidas (HOME/MENU/INPUT/EXIT),
-  /// Volume e Canal, e Navegação (D-pad com VOLTAR, TV Digital e HDMI 1 — as
-  /// entradas só aparecem nos aparelhos que as têm).
+  /// Aba Controle (retrato): faixa de slots de cima (HOME/MENU/INPUT/EXIT por
+  /// padrão), o card único com Volume, Canal, Mudo, Voz e o D-pad (VOLTAR,
+  /// TV Digital e HDMI 1 — as entradas só aparecem nos aparelhos que as têm)
+  /// e a faixa de slots de baixo (apps).
   Widget _buildTab1Control() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 12.0;
-        // Ações rápidas e Volume/Canal têm a altura do próprio conteúdo; o
-        // card de Navegação fica com o resto (mínimo de 220 px — abaixo
-        // disso a aba rola, nunca estoura).
-        const quick = 132.0;
-        const volume = 196.0;
+        const gap = 10.0;
+        // Cada faixa de slots: 44 de botão + 2 × 10 de respiro do card.
+        const strip = 64.0;
         final h = constraints.maxHeight - 16;
-        final navHeight = (h - quick - volume - 2 * gap).clamp(220.0, 440.0);
-        final wheel = (navHeight - 60).clamp(140.0, 300.0);
+        // O card único fica com toda a altura que sobra das duas faixas
+        // (mínimo de 350 px — abaixo disso a aba rola, nunca estoura).
+        final cardHeight = (h - 2 * strip - 2 * gap).clamp(350.0, 680.0);
+        // 28 de respiro + 2 da borda do card.
+        final inner = cardHeight - 30;
+        final pill = (inner * 0.42).clamp(140.0, 230.0);
+        final wheelArea = inner - pill - 14;
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const PaynoCard(
-                title: 'Ações rápidas',
-                padding: EdgeInsets.fromLTRB(16, 14, 16, 14),
-                child: SystemNavigationControls(),
-              ),
+              _buildSlotStripCard(ControlSlotGroup.top),
               const SizedBox(height: gap),
-              const VolumeChannelControls(),
-              const SizedBox(height: gap),
-              SizedBox(
-                height: navHeight,
-                child: _buildNavigationCard(
-                  maxWheel: wheel,
-                  padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
+              Container(
+                key: const ValueKey('control-unified-card'),
+                height: cardHeight,
+                padding: const EdgeInsets.fromLTRB(10, 14, 10, 14),
+                decoration: AppColors.paynoCardDecoration(context),
+                child: Column(
+                  children: [
+                    VolumeChannelControls(height: pill),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: wheelArea,
+                      child: _buildDpadArea(maxWheel: 320),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(height: gap),
+              _buildSlotStripCard(ControlSlotGroup.bottom),
             ],
           ),
         );
@@ -1054,7 +1078,8 @@ class _RemoteViewState extends State<RemoteView> {
     );
   }
 
-  /// Aba Teclas: teclado numérico, controles multimídia e botões coloridos.
+  /// Aba Teclas: teclado numérico e botões coloridos. As teclas de mídia da
+  /// TV (play, pausa, etc.) passaram a ser funções dos slots da aba Controle.
   Widget _buildTab2KeypadAndMedia() {
     final controller = context.watch<RemoteController>();
     return SingleChildScrollView(
@@ -1070,11 +1095,6 @@ class _RemoteViewState extends State<RemoteView> {
               accent: true,
             ),
             child: const NumericKeypad(keyHeight: 46),
-          ),
-          const SizedBox(height: 12),
-          const PaynoCard(
-            title: 'Controles multimídia',
-            child: MultimediaControls(),
           ),
           const SizedBox(height: 12),
           const PaynoCard(

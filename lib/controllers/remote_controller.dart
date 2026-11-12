@@ -161,6 +161,20 @@ class RemoteController extends ChangeNotifier {
     return device != null && storageService.getFavoriteApps(device.id, device.brand).contains(appId);
   }
 
+  // --- Slots configuráveis da aba Controle ---
+  String get _controlSlotsKey => activeDevice?.id ?? 'default';
+
+  /// Slots salvos de uma faixa para o aparelho ativo (`null` = padrão).
+  List<String>? controlSlots(String group) =>
+      storageService.getControlSlots(_controlSlotsKey, group);
+
+  /// Grava (ou, com `null`, restaura o padrão de) uma faixa de slots.
+  Future<void> saveControlSlots(String group, List<String>? slots) async {
+    final key = _controlSlotsKey;
+    await storageService.setControlSlots(key, group, slots);
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> _favoriteWrites = Future<void>.value();
   Future<void> toggleFavoriteApp(String appId) {
     final device = activeDevice;

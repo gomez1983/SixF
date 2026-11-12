@@ -106,6 +106,14 @@ Regra definida pelo desenvolvedor em 11/11/2026 para acabar com a confusão entr
    - Android: `C:\Projetos\SixF\build\app\outputs\flutter-apk\app-release.apk`
 5. **APK Release exige assinatura.** O build Android Release só compila com `android/key.properties` apontando para a chave de distribuição (ver `docs/DISTRIBUTION.md`, seção "Android release"). Se a chave não estiver configurada, o assistente **avisa o desenvolvedor e não gera APK Debug como substituto**; também não cria chave de assinatura por conta própria.
 6. Se um dos builds falhar, dizer qual falhou e por quê, em vez de entregar só o outro em silêncio.
+7. **Exceção temporária — APK Debug para teste (definida pelo desenvolvedor em 12/11/2026).** Enquanto `android/key.properties` não existir, o APK de teste do Android é o **Debug**, e isso prevalece sobre os itens 1, 2, 3 e 5 apenas para o Android:
+   ```powershell
+   flutter build apk --debug --dart-define-from-file=.local-secrets/drive-build.json
+   ```
+   - Caminho a informar: `C:\Projetos\SixF\build\app\outputs\flutter-apk\app-debug.apk`
+   - Dizer explicitamente na resposta final que o APK é Debug e avisar que os `app-*-release.apk` antigos da mesma pasta estão desatualizados.
+   - O Windows continua somente Release. O APK Debug nunca é usado para distribuição.
+   - A exceção acaba sozinha quando a chave de distribuição for configurada: a partir daí volta a valer o APK Release.
 
 ## graphify
 
